@@ -48,6 +48,7 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AnimationHandlers.h"
 #if WITH_EDITOR
 
 // -----------------------------------------------------------------------------
@@ -426,7 +427,8 @@ static void ApplyBlendSpaceConfiguration(UObject *BlendSpaceAsset,
 // retired HandleAnimationPhysicsAction dispatcher; each member replicates the
 // chain's shared response prologue/tail and its non-editor stub.
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCleanup(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCleanup(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -540,11 +542,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCleanup(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -552,7 +554,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCleanup(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendSpace(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreateBlendSpace(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -697,11 +700,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendSpace(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -709,7 +712,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendSpace(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendTree(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreateBlendTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -867,11 +871,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendTree(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -879,7 +883,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateBlendTree(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreateProceduralAnim(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1210,11 +1215,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -1222,7 +1227,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateProceduralAnim(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateStateMachine(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreateStateMachine(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1313,7 +1319,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateStateMachine(
             )
           );
           if (!InnerGraph) {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Failed to create animation state machine graph"),
               TEXT("CREATE_GRAPH_FAILED"));
             return true;
@@ -1326,7 +1332,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateStateMachine(
           // Initialize Entry Node (required for State Machines)
           const UAnimationStateMachineSchema* Schema = Cast<UAnimationStateMachineSchema>(InnerGraph->GetSchema());
           if (!Schema) {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("Animation state machine graph has an invalid schema"),
               TEXT("INVALID_SCHEMA"));
             return true;
@@ -1438,11 +1444,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateStateMachine(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -1450,7 +1456,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateStateMachine(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupIk(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysSetupIk(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1489,7 +1496,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupIk(
         FString FactoryError;
         UBlueprint *ControlRigBlueprint = nullptr;
 #if MCP_HAS_CONTROLRIG_FACTORY
-        ControlRigBlueprint = CreateControlRigBlueprint(
+        ControlRigBlueprint = S.CreateControlRigBlueprint(
             IKName, SavePath, TargetSkeleton, FactoryError);
 #else
         FactoryError =
@@ -1518,11 +1525,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupIk(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2299,7 +2306,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupPhysicsSimulation(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateAnimationAsset(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreateAnimationAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2441,11 +2449,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateAnimationAsset(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2453,7 +2461,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreateAnimationAsset(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupRetargeting(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysSetupRetargeting(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2667,11 +2676,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupRetargeting(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2679,16 +2688,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysSetupRetargeting(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysPlayMontage(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysPlayMontage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   // Dispatch to the dedicated handler, but force the action name to what it
   // expects
-  return HandlePlayAnimMontage(RequestId, TEXT("play_anim_montage"), Payload,
+  return HandlePlayAnimMontage(S, RequestId, TEXT("play_anim_montage"), Payload,
                                RequestingSocket);
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2696,7 +2706,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysPlayMontage(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreatePoseLibrary(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysCreatePoseLibrary(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2792,11 +2803,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreatePoseLibrary(
     Message = bSuccess ? TEXT("Animation/Physics action completed")
                        : TEXT("Animation/Physics action failed");
   }
-  SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess, Message, Resp,
                          ErrorCode);
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2815,7 +2826,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysCreatePoseLibrary(
 // preserves that response exactly. The orphaned HandleActivateRagdoll implementation
 // below has no call site and is the wire-up candidate — wiring it up vs
 // retiring the schema row is an open product decision (TODO.md).
-bool UMcpAutomationBridgeSubsystem::HandleAnimPhysActivateRagdoll(
+bool McpHandlers::AnimationPhysics::HandleAnimPhysActivateRagdoll(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -2825,11 +2837,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysActivateRagdoll(
       TEXT("Animation/Physics action 'activate_ragdoll' not implemented");
   Resp->SetStringField(TEXT("error"), Message);
   Resp->SetBoolField(TEXT("success"), false);
-  SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false, Message, Resp,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
 #else
-  SendAutomationResponse(
+  S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
       TEXT("Animation/Physics actions require editor build."), nullptr,
       TEXT("NOT_IMPLEMENTED"));
@@ -2868,7 +2880,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysActivateRagdoll(
  * @return true if the request was handled (a response was sent), false if the
  * handler did not claim the action.
  */
-bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
+bool McpHandlers::AnimationPhysics::HandlePlayAnimMontage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -2879,7 +2892,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("play_anim_montage payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -2888,7 +2901,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
       ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2903,7 +2916,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   if (MontagePath.IsEmpty()) {
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetStringField(TEXT("error"), TEXT("montagePath required"));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("montagePath required"), Resp,
                            TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2913,7 +2926,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   Payload->TryGetNumberField(TEXT("playRate"), PlayRate);
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -2922,7 +2935,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("EditorActorSubsystem not available"),
                         TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -2967,7 +2980,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
     Resp->SetStringField(TEXT("montagePath"), MontagePath);
     Resp->SetNumberField(TEXT("playRate"), PlayRate);
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Actor not found"), Resp,
                            TEXT("ACTOR_NOT_FOUND"));
     return true;
@@ -2976,7 +2989,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   USkeletalMeshComponent *SkelMeshComp =
       TargetActor->FindComponentByClass<USkeletalMeshComponent>();
   if (!SkelMeshComp) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Skeletal mesh component not found"),
                         TEXT("COMPONENT_NOT_FOUND"));
     return true;
@@ -2987,7 +3000,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
     Resp->SetStringField(
         TEXT("error"),
         FString::Printf(TEXT("Montage asset not found: %s"), *MontagePath));
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Montage not found"), Resp,
                            TEXT("ASSET_NOT_FOUND"));
     return true;
@@ -3003,7 +3016,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
     Resp->SetStringField(TEXT("montagePath"), MontagePath);
     Resp->SetNumberField(TEXT("playRate"), PlayRate);
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Failed to load montage"), Resp,
                            TEXT("ASSET_LOAD_FAILED"));
     return true;
@@ -3026,11 +3039,11 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
   Resp->SetNumberField(TEXT("montageLength"), MontageLength);
   Resp->SetBoolField(TEXT("playing"), true);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Animation montage playing"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("play_anim_montage requires editor build"),
                          nullptr, TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -3057,7 +3070,8 @@ bool UMcpAutomationBridgeSubsystem::HandlePlayAnimMontage(
  * @return true if this handler processed the action (either completed or sent
  * an error response); false if the action did not match "setup_ragdoll".
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
+bool McpHandlers::AnimationPhysics::HandleSetupRagdoll(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -3068,7 +3082,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("setup_ragdoll payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -3077,7 +3091,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
       ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -3092,14 +3106,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
     if (!RagdollSkeleton) {
       const FString SkelMessage =
           FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath);
-      SendAutomationError(RequestingSocket, RequestId, SkelMessage,
+      S.SendAutomationError(RequestingSocket, RequestId, SkelMessage,
                           TEXT("ASSET_NOT_FOUND"));
       return true;
     }
   }
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -3108,7 +3122,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
   UEditorActorSubsystem *ActorSS =
       GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
   if (!ActorSS) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("EditorActorSubsystem not available"),
                         TEXT("EDITOR_ACTOR_SUBSYSTEM_MISSING"));
     return true;
@@ -3150,7 +3164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
     Resp->SetStringField(TEXT("actorName"), ActorName);
     Resp->SetNumberField(TEXT("blendWeight"), BlendWeight);
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Actor not found"), Resp,
                            TEXT("ACTOR_NOT_FOUND"));
     return true;
@@ -3159,7 +3173,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
   USkeletalMeshComponent *SkelMeshComp =
       TargetActor->FindComponentByClass<USkeletalMeshComponent>();
   if (!SkelMeshComp) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Skeletal mesh component not found"),
                         TEXT("COMPONENT_NOT_FOUND"));
     return true;
@@ -3187,11 +3201,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
                          SkelMeshComp->GetPhysicsAsset()->GetPathName());
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Ragdoll setup completed"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("setup_ragdoll requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;
@@ -3211,7 +3225,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSetupRagdoll(
  * @param RequestingSocket The websocket that initiated the request (may be null).
  * @return true if this handler processed the action.
  */
-bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
+bool McpHandlers::AnimationPhysics::HandleActivateRagdoll(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
@@ -3222,7 +3237,7 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
 
 #if WITH_EDITOR
   if (!Payload.IsValid()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("activate_ragdoll payload missing"),
                         TEXT("INVALID_PAYLOAD"));
     return true;
@@ -3231,7 +3246,7 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
   FString ActorName;
   if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
       ActorName.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -3240,7 +3255,7 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
   Payload->TryGetBoolField(TEXT("activate"), bActivate);
 
   if (!GEditor || !GEditor->GetEditorWorldContext().World()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Editor world not available"),
                         TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
@@ -3267,7 +3282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
     Resp->SetStringField(TEXT("actorName"), ActorName);
     Resp->SetBoolField(TEXT("activate"), bActivate);
 
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Actor not found"), Resp,
                            TEXT("ACTOR_NOT_FOUND"));
     return true;
@@ -3276,7 +3291,7 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
   USkeletalMeshComponent *SkelMeshComp =
       TargetActor->FindComponentByClass<USkeletalMeshComponent>();
   if (!SkelMeshComp) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Skeletal mesh component not found"),
                         TEXT("COMPONENT_NOT_FOUND"));
     return true;
@@ -3309,11 +3324,11 @@ bool UMcpAutomationBridgeSubsystem::HandleActivateRagdoll(
                          SkelMeshComp->GetPhysicsAsset()->GetPathName());
   }
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Ragdoll activation state changed"), Resp, FString());
   return true;
 #else
-  SendAutomationResponse(RequestingSocket, RequestId, false,
+  S.SendAutomationResponse(RequestingSocket, RequestId, false,
                          TEXT("activate_ragdoll requires editor build"), nullptr,
                          TEXT("NOT_IMPLEMENTED"));
   return true;

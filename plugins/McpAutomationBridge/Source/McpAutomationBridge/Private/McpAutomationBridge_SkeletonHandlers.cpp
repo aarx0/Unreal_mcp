@@ -50,6 +50,7 @@
 
 // MCP Core
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_SkeletonHandlers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpResponseHelpers.h"
 #include "McpHandlerUtils.h"
@@ -324,7 +325,8 @@ static FRotator ParseRotatorFromJson(const TSharedPtr<FJsonObject>& JsonObj, con
  * Handle: get_skeleton_info
  * Get information about a skeleton (bones, sockets, etc.)
  */
-bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
+bool McpHandlers::AnimationPhysics::HandleGetSkeletonInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -350,7 +352,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
 
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -367,7 +369,7 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
     // Socket count
     Result->SetNumberField(TEXT("socketCount"), Skeleton->Sockets.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skeleton info retrieved"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Skeleton info retrieved"), Result);
     return true;
 }
 
@@ -375,7 +377,8 @@ bool UMcpAutomationBridgeSubsystem::HandleGetSkeletonInfo(
  * Handle: list_bones
  * List all bones in a skeleton
  */
-bool UMcpAutomationBridgeSubsystem::HandleListBones(
+bool McpHandlers::AnimationPhysics::HandleListBones(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -400,7 +403,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListBones(
 
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -437,7 +440,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListBones(
     Result->SetNumberField(TEXT("count"), BoneArray.Num());
     McpHandlerUtils::AddVerification(Result, Skeleton);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Bones listed"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Bones listed"), Result);
     return true;
 }
 
@@ -445,7 +448,8 @@ bool UMcpAutomationBridgeSubsystem::HandleListBones(
  * Handle: list_sockets
  * List all sockets in a skeleton/skeletal mesh
  */
-bool UMcpAutomationBridgeSubsystem::HandleListSockets(
+bool McpHandlers::AnimationPhysics::HandleListSockets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -470,7 +474,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListSockets(
 
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -495,7 +499,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListSockets(
     Result->SetArrayField(TEXT("sockets"), SocketArray);
     Result->SetNumberField(TEXT("count"), SocketArray.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sockets listed"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sockets listed"), Result);
     return true;
 }
 
@@ -503,7 +507,8 @@ bool UMcpAutomationBridgeSubsystem::HandleListSockets(
  * Handle: create_socket
  * Create a new socket on a skeleton
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
+bool McpHandlers::AnimationPhysics::HandleCreateSocket(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -523,13 +528,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
 
     if (SocketName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("socketName is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("socketName is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("attachBoneName or boneName is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("attachBoneName or boneName is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -547,7 +552,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
 
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -556,7 +561,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
     {
         if (ExistingSocket && ExistingSocket->SocketName == FName(*SocketName))
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Socket '%s' already exists"), *SocketName), 
                 TEXT("SOCKET_EXISTS"));
             return true;
@@ -567,7 +572,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
     USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(Skeleton);
     if (!NewSocket)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create socket object"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create socket object"), TEXT("CREATION_FAILED"));
         return true;
     }
     // Parse socket transform using ParseVectorFromJson helpers
@@ -592,7 +597,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
     Result->SetStringField(TEXT("boneName"), BoneName);
     Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Socket '%s' created on bone '%s'"), *SocketName, *BoneName), Result);
     return true;
 }
@@ -601,7 +606,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateSocket(
  * Handle: configure_socket
  * Modify an existing socket's properties
  */
-bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
+bool McpHandlers::AnimationPhysics::HandleConfigureSocket(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -615,7 +621,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
     FString SocketName = GetJsonStringField(Payload, TEXT("socketName"));
     if (SocketName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("socketName is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("socketName is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -633,7 +639,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
 
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -650,7 +656,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
 
     if (!Socket)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Socket '%s' not found"), *SocketName), 
             TEXT("SOCKET_NOT_FOUND"));
         return true;
@@ -723,7 +729,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
     Result->SetStringField(TEXT("socketName"), SocketName);
     Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 
-    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, RequestingSocket, RequestId, Report, Result,
         FString::Printf(TEXT("Socket '%s' configured"), *SocketName), nullptr);
 }
 
@@ -731,7 +737,8 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
  * Handle: create_virtual_bone
  * Create a virtual bone between two bones
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
+bool McpHandlers::AnimationPhysics::HandleCreateVirtualBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -743,13 +750,13 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
 
     if (SkeletonPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (SourceBone.IsEmpty() || TargetBone.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("sourceBoneName and targetBoneName are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("sourceBoneName and targetBoneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -757,7 +764,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
     USkeleton* Skeleton = LoadSkeletonFromPathSkel(SkeletonPath, Error);
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -773,7 +780,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
     
     if (!bSuccess)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Failed to create virtual bone. Check that source and target bones exist."), 
             TEXT("VIRTUAL_BONE_FAILED"));
         return true;
@@ -801,7 +808,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
     Result->SetStringField(TEXT("targetBone"), TargetBone);
     Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Virtual bone '%s' created"), *NewVirtualBoneName.ToString()), Result);
     return true;
 }
@@ -815,7 +822,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateVirtualBone(
  * Handle: create_physics_asset
  * Create a new physics asset for a skeletal mesh
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
+bool McpHandlers::AnimationPhysics::HandleCreatePhysicsAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -830,7 +838,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath (or skeletonPath) is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath (or skeletonPath) is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -838,7 +846,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
     USkeletalMesh* SkeletalMesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!SkeletalMesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -858,14 +866,14 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
     UPackage* Package = CreatePackage(*FullPackagePath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
         return true;
     }
 
     UPhysicsAsset* PhysicsAsset = NewObject<UPhysicsAsset>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics asset"), TEXT("CREATE_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics asset"), TEXT("CREATE_FAILED"));
         return true;
     }
 
@@ -889,7 +897,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
     Result->SetNumberField(TEXT("bodyCount"), PhysicsAsset->SkeletalBodySetups.Num());
     Result->SetNumberField(TEXT("constraintCount"), PhysicsAsset->ConstraintSetup.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Physics asset created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Physics asset created"), Result);
     return true;
 }
 
@@ -897,7 +905,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreatePhysicsAsset(
  * Handle: list_physics_bodies
  * List all physics bodies in a physics asset
  */
-bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
+bool McpHandlers::AnimationPhysics::HandleListPhysicsBodies(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -920,7 +929,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
 
     if (PhysicsAssetPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath or skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath or skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -928,7 +937,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
     UPhysicsAsset* PhysicsAsset = LoadPhysicsAssetFromPath(PhysicsAssetPath, Error);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -966,7 +975,7 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
     Result->SetNumberField(TEXT("count"), BodyArray.Num());
     Result->SetNumberField(TEXT("constraintCount"), PhysicsAsset->ConstraintSetup.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Physics bodies listed"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Physics bodies listed"), Result);
     return true;
 }
 
@@ -979,7 +988,8 @@ bool UMcpAutomationBridgeSubsystem::HandleListPhysicsBodies(
  * Handle: add_physics_body
  * Add a physics body to a physics asset
  */
-bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
+bool McpHandlers::AnimationPhysics::HandleAddPhysicsBody(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -990,13 +1000,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
 
     if (PhysicsAssetPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("boneName is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("boneName is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -1004,7 +1014,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
     FString SanitizedPath = SanitizeProjectRelativePath(PhysicsAssetPath);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid physics asset path '%s': contains traversal sequences or invalid characters"), *PhysicsAssetPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1015,7 +1025,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
     UPhysicsAsset* PhysicsAsset = LoadPhysicsAssetFromPath(PhysicsAssetPath, Error);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -1031,7 +1041,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
             int32 BoneIndex = RefSkeleton.FindBoneIndex(FName(*BoneName));
             if (BoneIndex == INDEX_NONE)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("Bone '%s' does not exist in skeleton"), *BoneName),
                     TEXT("BONE_NOT_FOUND"));
                 return true;
@@ -1050,7 +1060,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
         BodySetup = NewObject<USkeletalBodySetup>(PhysicsAsset, NAME_None, RF_Transactional);
         if (!BodySetup)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics body setup"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics body setup"), TEXT("CREATION_FAILED"));
             return true;
         }
         BodySetup->BoneName = FName(*BoneName);
@@ -1133,7 +1143,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
     Result->SetNumberField(TEXT("bodyIndex"), BodyIndex);
     Result->SetBoolField(TEXT("created"), bCreated);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Physics body %s for bone '%s'"), bCreated ? TEXT("created") : TEXT("modified"), *BoneName), Result);
     return true;
 }
@@ -1142,7 +1152,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsBody(
  * Handle: configure_physics_body
  * Configure properties of a physics body
  */
-bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
+bool McpHandlers::AnimationPhysics::HandleConfigurePhysicsBody(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1152,13 +1163,13 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
 
     if (PhysicsAssetPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("boneName is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("boneName is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -1166,7 +1177,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     FString SanitizedPath = SanitizeProjectRelativePath(PhysicsAssetPath);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid physics asset path '%s': contains traversal sequences or invalid characters"), *PhysicsAssetPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1177,14 +1188,14 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     UPhysicsAsset* PhysicsAsset = LoadPhysicsAssetFromPath(PhysicsAssetPath, Error);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
         return true;
     }
 
     int32 BodyIndex = PhysicsAsset->FindBodyIndex(FName(*BoneName));
     if (BodyIndex == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("No physics body found for bone '%s'"), *BoneName), 
             TEXT("BODY_NOT_FOUND"));
         return true;
@@ -1199,7 +1210,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
         // MassInKgOverride is clamped to >= 0.001 by the engine; reject non-positive input loudly.
         if (Mass < 0.001)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("mass must be >= 0.001 kg (got %f)"), Mass),
                 TEXT("UNSUPPORTED_PARAM"));
             return true;
@@ -1246,7 +1257,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
     Result->SetStringField(TEXT("boneName"), BoneName);
     Result->SetNumberField(TEXT("bodyIndex"), BodyIndex);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Physics body '%s' configured"), *BoneName), Result);
     return true;
 }
@@ -1255,7 +1266,8 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigurePhysicsBody(
  * Handle: add_physics_constraint
  * Add a constraint between two physics bodies
  */
-bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
+bool McpHandlers::AnimationPhysics::HandleAddPhysicsConstraint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1267,13 +1279,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
 
     if (PhysicsAssetPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (BodyA.IsEmpty() || BodyB.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("bodyA and bodyB are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("bodyA and bodyB are required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -1281,7 +1293,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     FString SanitizedPath = SanitizeProjectRelativePath(PhysicsAssetPath);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid physics asset path '%s': contains traversal sequences or invalid characters"), *PhysicsAssetPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1292,14 +1304,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     UPhysicsAsset* PhysicsAsset = LoadPhysicsAssetFromPath(PhysicsAssetPath, Error);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
         return true;
     }
 
     // Check that both bodies exist
     if (PhysicsAsset->FindBodyIndex(FName(*BodyA)) == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Body '%s' not found in physics asset"), *BodyA), 
             TEXT("BODY_NOT_FOUND"));
         return true;
@@ -1307,7 +1319,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
 
     if (PhysicsAsset->FindBodyIndex(FName(*BodyB)) == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Body '%s' not found in physics asset"), *BodyB), 
             TEXT("BODY_NOT_FOUND"));
         return true;
@@ -1317,7 +1329,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     UPhysicsConstraintTemplate* Constraint = NewObject<UPhysicsConstraintTemplate>(PhysicsAsset, NAME_None, RF_Transactional);
     if (!Constraint)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics constraint"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create physics constraint"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -1368,7 +1380,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
     Result->SetStringField(TEXT("bodyB"), BodyB);
     Result->SetNumberField(TEXT("constraintIndex"), PhysicsAsset->ConstraintSetup.Num() - 1);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Constraint created between '%s' and '%s'"), *BodyA, *BodyB), Result);
     return true;
 }
@@ -1377,7 +1389,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAddPhysicsConstraint(
  * Handle: configure_constraint_limits
  * Configure angular/linear limits on a constraint
  */
-bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
+bool McpHandlers::AnimationPhysics::HandleConfigureConstraintLimits(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1388,13 +1401,13 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
 
     if (PhysicsAssetPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("physicsAssetPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
     if (BodyA.IsEmpty() || BodyB.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("bodyA and bodyB are required to identify constraint"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("bodyA and bodyB are required to identify constraint"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -1402,7 +1415,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
     FString SanitizedPath = SanitizeProjectRelativePath(PhysicsAssetPath);
     if (SanitizedPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid physics asset path '%s': contains traversal sequences or invalid characters"), *PhysicsAssetPath),
             TEXT("INVALID_PATH"));
         return true;
@@ -1413,7 +1426,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
     UPhysicsAsset* PhysicsAsset = LoadPhysicsAssetFromPath(PhysicsAssetPath, Error);
     if (!PhysicsAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("PHYSICS_ASSET_NOT_FOUND"));
         return true;
     }
 
@@ -1440,7 +1453,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
 
     if (!Constraint)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("No constraint found between '%s' and '%s'"), *BodyA, *BodyB), 
             TEXT("CONSTRAINT_NOT_FOUND"));
         return true;
@@ -1501,7 +1514,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
     Result->SetStringField(TEXT("bodyA"), BodyA);
     Result->SetStringField(TEXT("bodyB"), BodyB);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Constraint limits configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Constraint limits configured"), Result);
     return true;
 }
 
@@ -1514,7 +1527,8 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureConstraintLimits(
  * Handle: rename_bone
  * Rename a bone in a skeleton (via virtual bone renaming for safety)
  */
-bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
+bool McpHandlers::AnimationPhysics::HandleRenameBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1525,7 +1539,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
 
     if (SkeletonPath.IsEmpty() || BoneName.IsEmpty() || NewBoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("skeletonPath, boneName, and newBoneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
@@ -1534,7 +1548,7 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
     USkeleton* Skeleton = LoadSkeletonFromPathSkel(SkeletonPath, Error);
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
 
@@ -1566,14 +1580,14 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
         Result->SetStringField(TEXT("newName"), NewBoneName);
         Result->SetBoolField(TEXT("isVirtualBone"), true);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Virtual bone renamed from '%s' to '%s'"), *BoneName, *NewBoneName), Result);
         return true;
     }
 
     // For regular bones, renaming is not directly supported without reimporting
     // We can rename bone mappings in animation assets though
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Renaming non-virtual bones is not supported. Only virtual bones can be renamed at runtime. To rename regular bones, reimport the skeletal mesh with updated bone names."), 
         TEXT("OPERATION_NOT_SUPPORTED"));
     return true;
@@ -1583,7 +1597,8 @@ bool UMcpAutomationBridgeSubsystem::HandleRenameBone(
  * Handle: set_bone_transform
  * Set the reference pose transform for a bone
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
+bool McpHandlers::AnimationPhysics::HandleSetBoneTransform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1598,7 +1613,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
 
     if (SkeletalMeshPath.IsEmpty() || BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("skeletalMeshPath (or skeletonPath) and boneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
@@ -1607,7 +1622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -1616,7 +1631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
     
     if (BoneIndex == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Bone '%s' not found"), *BoneName), TEXT("BONE_NOT_FOUND"));
         return true;
     }
@@ -1646,7 +1661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
     Result->SetStringField(TEXT("boneName"), BoneName);
     Result->SetNumberField(TEXT("boneIndex"), BoneIndex);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Bone '%s' transform updated"), *BoneName), Result);
     return true;
 }
@@ -1660,7 +1675,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSetBoneTransform(
  * Handle: create_morph_target
  * Create a new morph target on a skeletal mesh
  */
-bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
+bool McpHandlers::AnimationPhysics::HandleCreateMorphTarget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1670,7 +1686,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
 
     if (SkeletalMeshPath.IsEmpty() || MorphTargetName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("skeletalMeshPath and morphTargetName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
@@ -1679,7 +1695,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -1691,7 +1707,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
         Result->SetStringField(TEXT("morphTargetName"), MorphTargetName);
         Result->SetBoolField(TEXT("alreadyExists"), true);
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Morph target '%s' already exists"), *MorphTargetName), Result);
         return true;
     }
@@ -1710,7 +1726,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     {
         // No deltas provided - cannot create a valid morph target in UE 5.7+
         // Return error WITHOUT creating/registering to avoid engine ensure failure
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Morph target '%s' requires vertex deltas. Provide 'deltas' array with vertex indices and position offsets. Example: {\"deltas\": [{\"vertexIndex\": 0, \"positionDelta\": {\"x\": 1, \"y\": 0, \"z\": 0}}]}"), *MorphTargetName),
             TEXT("EMPTY_MORPH_TARGET"));
         return true;
@@ -1755,7 +1771,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     
     if (Deltas.Num() == 0)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Deltas array was provided but contained no valid delta entries. Each delta must have vertexIndex and positionDelta."),
             TEXT("INVALID_MORPH_DATA"));
         return true;
@@ -1765,7 +1781,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     UMorphTarget* NewMorphTarget = NewObject<UMorphTarget>(Mesh, FName(*MorphTargetName));
     if (!NewMorphTarget)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create morph target object"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create morph target object"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -1789,7 +1805,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     
     NewMorphTarget->PopulateDeltas(Deltas, LODIndex, Sections, false, false);
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Morph target creation with deltas requires editor"), TEXT("NOT_SUPPORTED"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Morph target creation with deltas requires editor"), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
     
@@ -1799,7 +1815,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
         // This shouldn't happen if deltas were valid, but check anyway
         NewMorphTarget->MarkAsGarbage();
         
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Morph target '%s' has no valid data after populating deltas. Check vertex indices are valid."), *MorphTargetName),
             TEXT("INVALID_MORPH_DATA"));
         return true;
@@ -1822,7 +1838,7 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
     Result->SetNumberField(TEXT("morphTargetCount"), Mesh->GetMorphTargets().Num());
     Result->SetNumberField(TEXT("deltaCount"), Deltas.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Morph target '%s' created with %d deltas"), *MorphTargetName, Deltas.Num()), Result);
     return true;
 }
@@ -1831,7 +1847,8 @@ bool UMcpAutomationBridgeSubsystem::HandleCreateMorphTarget(
  * Handle: set_morph_target_deltas
  * Set vertex deltas for a morph target
  */
-bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
+bool McpHandlers::AnimationPhysics::HandleSetMorphTargetDeltas(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1841,7 +1858,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
 
     if (SkeletalMeshPath.IsEmpty() || MorphTargetName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("skeletalMeshPath and morphTargetName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
@@ -1850,7 +1867,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -1861,7 +1878,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     const TArray<TSharedPtr<FJsonValue>>* DeltasArray = nullptr;
     if (!Payload->TryGetArrayField(TEXT("deltas"), DeltasArray) || !DeltasArray)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("deltas array is required"), TEXT("MISSING_PARAM"));
         return true;
     }
@@ -1908,7 +1925,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
         MorphTarget = NewObject<UMorphTarget>(Mesh, FName(*MorphTargetName));
         if (!MorphTarget)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create morph target object"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create morph target object"), TEXT("CREATION_FAILED"));
             return true;
         }
         MorphTarget->BaseSkelMesh = Mesh;
@@ -1923,7 +1940,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     TArray<FSkelMeshSection> EmptySections; // PopulateDeltas can work with empty sections array
     MorphTarget->PopulateDeltas(Deltas, 0, EmptySections, false, false);
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Morph target manipulation requires editor"), TEXT("NOT_SUPPORTED"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Morph target manipulation requires editor"), TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 
@@ -1932,7 +1949,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     // This prevents returning success for morph targets that trigger Engine Ensures
     if (!MorphTarget->HasValidData())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Morph target '%s' has no valid data - deltas may be empty or invalid"), *MorphTargetName),
             TEXT("INVALID_MORPH_DATA"));
         return true;
@@ -1957,7 +1974,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
     Result->SetNumberField(TEXT("deltaCount"), Deltas.Num());
     Result->SetBoolField(TEXT("created"), bCreatedMorphTarget);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Set %d deltas on morph target '%s'"), Deltas.Num(), *MorphTargetName), Result);
     return true;
 }
@@ -1966,7 +1983,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSetMorphTargetDeltas(
  * Handle: import_morph_targets
  * Import morph targets from an external file (FBX)
  */
-bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
+bool McpHandlers::AnimationPhysics::HandleImportMorphTargets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1980,7 +1998,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -1988,7 +2006,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -1997,7 +2015,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
     {
         // Note: Full FBX import for morph targets requires FbxImporter
         // This is a simplified response indicating the operation is queued
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("FBX morph target import requires using the asset import pipeline. Use manage_asset import action with the FBX file."), 
             TEXT("USE_ASSET_IMPORT"));
         return true;
@@ -2018,7 +2036,7 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
     Result->SetArrayField(TEXT("morphTargets"), MorphTargetArray);
     Result->SetNumberField(TEXT("count"), MorphTargetArray.Num());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         TEXT("Use manage_asset import to import morph targets from FBX"), Result);
     return true;
 }
@@ -2032,7 +2050,8 @@ bool UMcpAutomationBridgeSubsystem::HandleImportMorphTargets(
  * Handle: normalize_weights
  * Normalize skin weights to sum to 1.0 for each vertex
  */
-bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
+bool McpHandlers::AnimationPhysics::HandleNormalizeWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2041,7 +2060,7 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -2049,14 +2068,14 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
     // A plain Mesh->Build() does NOT renormalize skin weights; it only rebuilds
     // render data from the existing imported weights. Re-weighting requires the
     // Skeletal Mesh Editor's weight tools (no safe in-place API on UE 5.7).
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Skin weight normalization is not supported via the bridge. Use the Skeletal Mesh Editor's ")
         TEXT("Skin Weights tools (or re-import with normalization enabled). A plain rebuild does not renormalize weights."),
         TEXT("MANUAL_INTERVENTION_REQUIRED"));
@@ -2067,7 +2086,8 @@ bool UMcpAutomationBridgeSubsystem::HandleNormalizeWeights(
  * Handle: prune_weights
  * Remove bone influences below a threshold
  */
-bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
+bool McpHandlers::AnimationPhysics::HandlePruneWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2078,7 +2098,7 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -2086,14 +2106,14 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
     // The prune threshold is an import-time option; a post-import Mesh->Build()
     // does NOT drop low influences (it rebuilds render data from existing weights).
     // Pruning safely requires the editor's Skin Weights tools or a re-import.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Skin weight pruning (threshold %f) is not supported via the bridge. ")
             TEXT("Re-import the mesh with the influence threshold set, or use the Skeletal Mesh Editor. ")
             TEXT("A plain rebuild does not prune influences."), Threshold),
@@ -2110,7 +2130,8 @@ bool UMcpAutomationBridgeSubsystem::HandlePruneWeights(
  * Handle: bind_cloth_to_skeletal_mesh
  * Bind a cloth simulation asset to a skeletal mesh
  */
-bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
+bool McpHandlers::AnimationPhysics::HandleBindClothToSkeletalMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2127,7 +2148,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -2135,7 +2156,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -2168,7 +2189,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
         
         if (!TargetClothAsset)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Cloth asset '%s' not found on mesh"), *ClothAssetName), 
                 TEXT("CLOTH_NOT_FOUND"));
             return true;
@@ -2186,12 +2207,12 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
             Result->SetNumberField(TEXT("sectionIndex"), SectionIndex);
             Result->SetNumberField(TEXT("assetLodIndex"), AssetLodIndex);
             
-            SendAutomationResponse(RequestingSocket, RequestId, true, 
+            S.SendAutomationResponse(RequestingSocket, RequestId, true, 
                 FString::Printf(TEXT("Cloth asset '%s' bound to section %d"), *ClothAssetName, SectionIndex), Result);
         }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 TEXT("Failed to bind cloth asset to skeletal mesh section"), 
                 TEXT("BIND_FAILED"));
             return true;
@@ -2223,13 +2244,13 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
         Result->SetArrayField(TEXT("availableClothAssets"), ClothingArray);
         Result->SetNumberField(TEXT("clothingAssetCount"), ClothingAssets.Num());
         
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, 
             FString::Printf(TEXT("Found %d cloth assets. Provide clothAssetName to bind."), ClothingAssets.Num()), Result);
     }
     
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Cloth binding requires editor mode."), 
         TEXT("NOT_EDITOR"));
     return true;
@@ -2240,7 +2261,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBindClothToSkeletalMesh(
  * Handle: assign_cloth_asset_to_mesh
  * Assign an existing cloth asset to a skeletal mesh section
  */
-bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
+bool McpHandlers::AnimationPhysics::HandleAssignClothAssetToMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2249,7 +2271,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -2257,7 +2279,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
@@ -2283,7 +2305,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
     Result->SetNumberField(TEXT("count"), ClothingArray.Num());
 
     // Return an explicit error rather than claiming cloth assignment occurred.
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Cloth asset assignment requires using the Cloth Paint tool in Unreal Editor. ")
         TEXT("Use the Skeletal Mesh Editor's Paint Cloth tool to assign cloth assets to mesh sections."), 
         TEXT("MANUAL_INTERVENTION_REQUIRED"));
@@ -2298,175 +2320,197 @@ bool UMcpAutomationBridgeSubsystem::HandleAssignClothAssetToMesh(
 // HandleManageSkeleton dispatcher delegated to a dedicated member, verbatim
 // extractions where its branch was inline.
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonGetSkeletonInfo(
+bool McpHandlers::AnimationPhysics::HandleSkeletonGetSkeletonInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleGetSkeletonInfo(RequestId, Payload, RequestingSocket);
+    return HandleGetSkeletonInfo(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonListBones(
+bool McpHandlers::AnimationPhysics::HandleSkeletonListBones(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleListBones(RequestId, Payload, RequestingSocket);
+    return HandleListBones(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonListSockets(
+bool McpHandlers::AnimationPhysics::HandleSkeletonListSockets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleListSockets(RequestId, Payload, RequestingSocket);
+    return HandleListSockets(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSocket(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCreateSocket(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateSocket(RequestId, Payload, RequestingSocket);
+    return HandleCreateSocket(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonConfigureSocket(
+bool McpHandlers::AnimationPhysics::HandleSkeletonConfigureSocket(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleConfigureSocket(RequestId, Payload, RequestingSocket);
+    return HandleConfigureSocket(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateVirtualBone(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCreateVirtualBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateVirtualBone(RequestId, Payload, RequestingSocket);
+    return HandleCreateVirtualBone(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreatePhysicsAsset(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCreatePhysicsAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreatePhysicsAsset(RequestId, Payload, RequestingSocket);
+    return HandleCreatePhysicsAsset(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonListPhysicsBodies(
+bool McpHandlers::AnimationPhysics::HandleSkeletonListPhysicsBodies(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleListPhysicsBodies(RequestId, Payload, RequestingSocket);
+    return HandleListPhysicsBodies(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddPhysicsBody(
+bool McpHandlers::AnimationPhysics::HandleSkeletonAddPhysicsBody(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleAddPhysicsBody(RequestId, Payload, RequestingSocket);
+    return HandleAddPhysicsBody(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonConfigurePhysicsBody(
+bool McpHandlers::AnimationPhysics::HandleSkeletonConfigurePhysicsBody(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleConfigurePhysicsBody(RequestId, Payload, RequestingSocket);
+    return HandleConfigurePhysicsBody(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddPhysicsConstraint(
+bool McpHandlers::AnimationPhysics::HandleSkeletonAddPhysicsConstraint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleAddPhysicsConstraint(RequestId, Payload, RequestingSocket);
+    return HandleAddPhysicsConstraint(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonConfigureConstraintLimits(
+bool McpHandlers::AnimationPhysics::HandleSkeletonConfigureConstraintLimits(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleConfigureConstraintLimits(RequestId, Payload, RequestingSocket);
+    return HandleConfigureConstraintLimits(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonRenameBone(
+bool McpHandlers::AnimationPhysics::HandleSkeletonRenameBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleRenameBone(RequestId, Payload, RequestingSocket);
+    return HandleRenameBone(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneTransform(
+bool McpHandlers::AnimationPhysics::HandleSkeletonSetBoneTransform(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleSetBoneTransform(RequestId, Payload, RequestingSocket);
+    return HandleSetBoneTransform(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateMorphTarget(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCreateMorphTarget(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateMorphTarget(RequestId, Payload, RequestingSocket);
+    return HandleCreateMorphTarget(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetMorphTargetDeltas(
+bool McpHandlers::AnimationPhysics::HandleSkeletonSetMorphTargetDeltas(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleSetMorphTargetDeltas(RequestId, Payload, RequestingSocket);
+    return HandleSetMorphTargetDeltas(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonImportMorphTargets(
+bool McpHandlers::AnimationPhysics::HandleSkeletonImportMorphTargets(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleImportMorphTargets(RequestId, Payload, RequestingSocket);
+    return HandleImportMorphTargets(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonNormalizeWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonNormalizeWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleNormalizeWeights(RequestId, Payload, RequestingSocket);
+    return HandleNormalizeWeights(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonPruneWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonPruneWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandlePruneWeights(RequestId, Payload, RequestingSocket);
+    return HandlePruneWeights(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonBindClothToSkeletalMesh(
+bool McpHandlers::AnimationPhysics::HandleSkeletonBindClothToSkeletalMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleBindClothToSkeletalMesh(RequestId, Payload, RequestingSocket);
+    return HandleBindClothToSkeletalMesh(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonAssignClothAssetToMesh(
+bool McpHandlers::AnimationPhysics::HandleSkeletonAssignClothAssetToMesh(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleAssignClothAssetToMesh(RequestId, Payload, RequestingSocket);
+    return HandleAssignClothAssetToMesh(S, RequestId, Payload, RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCreateSkeleton(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2484,7 +2528,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     
     if (SkeletonPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("path or skeletonPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("path or skeletonPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2492,7 +2536,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     // Ensure path starts with /Game/ and contains no traversal sequences
     if (!SkeletonPath.StartsWith(TEXT("/Game/")) && !SkeletonPath.StartsWith(TEXT("/Engine/")) && !SkeletonPath.StartsWith(TEXT("/Temp/")))
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Invalid path. Path must start with /Game/, /Engine/, or /Temp/"), TEXT("INVALID_PATH"));
         return true;
     }
@@ -2500,7 +2544,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     // Check for path traversal attempts
     if (SkeletonPath.Contains(TEXT("..")) || SkeletonPath.Contains(TEXT("//")) || SkeletonPath.Contains(TEXT("\\")))
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Invalid path. Path contains illegal characters or traversal sequences"), TEXT("INVALID_PATH"));
         return true;
     }
@@ -2510,7 +2554,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     if (!FPackageName::IsValidLongPackageName(SkeletonPath, false, &ErrorCode))
     {
         FString ErrorMsg = FPackageName::FormatErrorAsString(SkeletonPath, ErrorCode);
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Invalid package path: %s"), *ErrorMsg), TEXT("INVALID_PATH"));
         return true;
     }
@@ -2524,7 +2568,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     UPackage* Package = CreatePackage(*FullPackagePath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create package"), TEXT("PACKAGE_ERROR"));
         return true;
     }
     
@@ -2532,7 +2576,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     USkeleton* NewSkeleton = NewObject<USkeleton>(Package, *SkeletonName, RF_Public | RF_Standalone);
     if (!NewSkeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create skeleton object"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create skeleton object"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -2558,12 +2602,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCreateSkeleton(
     Result->SetStringField(TEXT("rootBoneName"), RootBoneName);
     Result->SetNumberField(TEXT("boneCount"), 1);
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Skeleton created with root bone '%s'"), *RootBoneName), Result);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
+bool McpHandlers::AnimationPhysics::HandleSkeletonAddBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2578,7 +2623,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
     
     if (SkeletonPath.IsEmpty() || BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2586,7 +2631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
     USkeleton* Skeleton = LoadSkeletonFromPathSkel(SkeletonPath, Error);
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
     
@@ -2595,7 +2640,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
     // Check if bone already exists
     if (RefSkeleton.FindBoneIndex(FName(*BoneName)) != INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Bone '%s' already exists"), *BoneName), TEXT("BONE_EXISTS"));
         return true;
     }
@@ -2607,7 +2652,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
         ParentIndex = RefSkeleton.FindBoneIndex(FName(*ParentName));
         if (ParentIndex == INDEX_NONE)
         {
-            SendAutomationError(RequestingSocket, RequestId, 
+            S.SendAutomationError(RequestingSocket, RequestId, 
                 FString::Printf(TEXT("Parent bone '%s' not found"), *ParentName), TEXT("PARENT_NOT_FOUND"));
             return true;
         }
@@ -2615,7 +2660,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
     else if (RefSkeleton.GetRawBoneNum() > 0)
     {
         // Cannot add a root bone if the skeleton already has bones - need to specify a parent
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Cannot add root bone; Skeleton already has bones. Specify parentBone."), TEXT("PARENT_REQUIRED"));
         return true;
     }
@@ -2651,12 +2696,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAddBone(
     Result->SetStringField(TEXT("parentBone"), ParentName);
     Result->SetNumberField(TEXT("boneCount"), Skeleton->GetReferenceSkeleton().GetRawBoneNum());
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Bone '%s' added to skeleton"), *BoneName), Result);
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
+bool McpHandlers::AnimationPhysics::HandleSkeletonRemoveBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2668,7 +2714,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
     
     if (SkeletonPath.IsEmpty() || BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2676,7 +2722,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
     USkeleton* Skeleton = LoadSkeletonFromPathSkel(SkeletonPath, Error);
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
     
@@ -2685,7 +2731,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
     
     if (BoneIndex == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Bone '%s' not found"), *BoneName), TEXT("BONE_NOT_FOUND"));
         return true;
     }
@@ -2693,7 +2739,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
     // Check if it's the root bone
     if (BoneIndex == 0)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Cannot remove root bone"), TEXT("CANNOT_REMOVE_ROOT"));
         return true;
     }
@@ -2709,19 +2755,20 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonRemoveBone(
     Result->SetBoolField(TEXT("childrenRemoved"), bRemoveChildren);
     Result->SetNumberField(TEXT("boneCount"), Skeleton->GetReferenceSkeleton().GetRawBoneNum());
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Bone '%s' removed from skeleton"), *BoneName), Result);
     return true;
 #else
     // UE 5.0-5.2: FReferenceSkeletonModifier doesn't have Remove() method
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("remove_bone is not supported in UE 5.0-5.2. Please use UE 5.3 or later."),
         TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
+bool McpHandlers::AnimationPhysics::HandleSkeletonSetBoneParent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2736,7 +2783,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
     
     if (SkeletonPath.IsEmpty() || BoneName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletonPath and boneName are required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2744,7 +2791,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
     USkeleton* Skeleton = LoadSkeletonFromPathSkel(SkeletonPath, Error);
     if (!Skeleton)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("SKELETON_NOT_FOUND"));
         return true;
     }
     
@@ -2753,7 +2800,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
     
     if (BoneIndex == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Bone '%s' not found"), *BoneName), TEXT("BONE_NOT_FOUND"));
         return true;
     }
@@ -2767,7 +2814,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
     
     if (NewBoneIndex == INDEX_NONE)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Failed to set parent. New parent '%s' may not exist or operation invalid."), *NewParentName), 
             TEXT("SET_PARENT_FAILED"));
         return true;
@@ -2780,19 +2827,20 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetBoneParent(
     Result->SetStringField(TEXT("newParent"), NewParentName.IsEmpty() ? TEXT("(none - root)") : NewParentName);
     Result->SetNumberField(TEXT("newBoneIndex"), NewBoneIndex);
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Bone '%s' parent changed to '%s'"), *BoneName, NewParentName.IsEmpty() ? TEXT("(none)") : *NewParentName), Result);
     return true;
 #else
     // UE 5.0-5.2: FReferenceSkeletonModifier doesn't have SetParent() method
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("set_bone_parent is not supported in UE 5.0-5.2. Please use UE 5.3 or later."), 
         TEXT("NOT_SUPPORTED"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonSetVertexWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2806,7 +2854,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2814,7 +2862,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
     
@@ -2822,7 +2870,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     const TArray<TSharedPtr<FJsonValue>>* WeightsArray = nullptr;
     if (!Payload->TryGetArrayField(TEXT("weights"), WeightsArray) || !WeightsArray)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("weights array is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("weights array is required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2831,7 +2879,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     FSkeletalMeshModel* ImportedModel = Mesh->GetImportedModel();
     if (!ImportedModel || ImportedModel->LODModels.Num() == 0)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Mesh has no LOD models"), TEXT("NO_LOD_MODELS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Mesh has no LOD models"), TEXT("NO_LOD_MODELS"));
         return true;
     }
     
@@ -2840,7 +2888,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     
     if (LODIndex >= ImportedModel->LODModels.Num())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("LOD index %d out of range (max: %d)"), LODIndex, ImportedModel->LODModels.Num() - 1), 
             TEXT("INVALID_LOD"));
         return true;
@@ -2928,16 +2976,17 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonSetVertexWeights(
     Result->SetNumberField(TEXT("verticesModified"), WeightsSet);
     Result->SetNumberField(TEXT("lodIndex"), LODIndex);
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Set weights for %d vertices in profile '%s'"), WeightsSet, *ProfileName), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("set_vertex_weights requires editor mode"), TEXT("NOT_EDITOR"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("set_vertex_weights requires editor mode"), TEXT("NOT_EDITOR"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonAutoSkinWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonAutoSkinWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2946,7 +2995,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAutoSkinWeights(
 
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
 
@@ -2954,14 +3003,14 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAutoSkinWeights(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
 
     // Mesh->Build() rebuilds render data from existing weights; it does NOT compute
     // auto/heat-map skin weights from bone positions. Auto-skinning lives in the
     // DCC import pipeline / editor tools, with no safe in-place API on UE 5.7.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Automatic skin weight computation is not supported via the bridge. Auto-skinning is an ")
         TEXT("import-time / DCC operation; re-import the mesh with auto weights, or bind weights in the ")
         TEXT("Skeletal Mesh Editor. A plain rebuild does not compute new weights."),
@@ -2969,7 +3018,8 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonAutoSkinWeights(
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonCopyWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -2986,7 +3036,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
     
     if (SourceMeshPath.IsEmpty() || TargetMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("sourceMeshPath and targetMeshPath are required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("sourceMeshPath and targetMeshPath are required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -2998,7 +3048,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
         FString SanitizedExtraPath = SanitizeProjectRelativePath(ExtraSkeletalMeshPath);
         if (SanitizedExtraPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Invalid skeletalMeshPath parameter '%s': contains traversal sequences or invalid characters"), *ExtraSkeletalMeshPath),
                 TEXT("INVALID_PATH"));
             return true;
@@ -3007,7 +3057,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
         UObject* ExtraMeshAsset = StaticLoadObject(USkeletalMesh::StaticClass(), nullptr, *ExtraSkeletalMeshPath);
         if (!ExtraMeshAsset)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("skeletalMeshPath parameter '%s' does not exist"), *ExtraSkeletalMeshPath),
                 TEXT("MESH_NOT_FOUND"));
             return true;
@@ -3018,7 +3068,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
     USkeletalMesh* SourceMesh = LoadSkeletalMeshFromPathSkel(SourceMeshPath, Error);
     if (!SourceMesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Source mesh not found: %s"), *Error), TEXT("SOURCE_NOT_FOUND"));
         return true;
     }
@@ -3026,7 +3076,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
     USkeletalMesh* TargetMesh = LoadSkeletalMeshFromPathSkel(TargetMeshPath, Error);
     if (!TargetMesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             FString::Printf(TEXT("Target mesh not found: %s"), *Error), TEXT("TARGET_NOT_FOUND"));
         return true;
     }
@@ -3039,7 +3089,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
         LODIndex >= SourceModel->LODModels.Num() || 
         LODIndex >= TargetModel->LODModels.Num())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid LOD models"), TEXT("INVALID_LOD"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Invalid LOD models"), TEXT("INVALID_LOD"));
         return true;
     }
     
@@ -3047,7 +3097,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
     // topology (closest-point / barycentric) and the SkeletalMeshUtilitiesCommon
     // transfer API. Creating an empty profile and zeroing every influence is NOT
     // a copy, so report an honest error instead of fabricating one.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Skin weight transfer from '%s' to '%s' is not supported via the bridge. ")
             TEXT("Use the Skeletal Mesh Editor's 'Transfer Skin Weights' tool (or a DCC weight-transfer) ")
             TEXT("for a correct mapping; the bridge will not write an empty profile and call it copied."),
@@ -3055,12 +3105,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonCopyWeights(
         TEXT("MANUAL_INTERVENTION_REQUIRED"));
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("copy_weights requires editor mode"), TEXT("NOT_EDITOR"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("copy_weights requires editor mode"), TEXT("NOT_EDITOR"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSkeletonMirrorWeights(
+bool McpHandlers::AnimationPhysics::HandleSkeletonMirrorWeights(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
@@ -3079,7 +3130,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonMirrorWeights(
     
     if (SkeletalMeshPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("skeletalMeshPath is required"), TEXT("MISSING_PARAM"));
         return true;
     }
     
@@ -3087,7 +3138,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonMirrorWeights(
     USkeletalMesh* Mesh = LoadSkeletalMeshFromPathSkel(SkeletalMeshPath, Error);
     if (!Mesh)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("MESH_NOT_FOUND"));
         return true;
     }
     
@@ -3095,7 +3146,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonMirrorWeights(
     FSkeletalMeshModel* ImportedModel = Mesh->GetImportedModel();
     if (!ImportedModel || ImportedModel->LODModels.Num() == 0)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Mesh has no LOD models"), TEXT("NO_LOD_MODELS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Mesh has no LOD models"), TEXT("NO_LOD_MODELS"));
         return true;
     }
     
@@ -3129,11 +3180,11 @@ bool UMcpAutomationBridgeSubsystem::HandleSkeletonMirrorWeights(
     Result->SetNumberField(TEXT("lodIndex"), LODIndex);
     Result->SetStringField(TEXT("note"), TEXT("Skin weight profile created. Use Skeletal Mesh Editor for precise mirroring with bone name mapping."));
     
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         FString::Printf(TEXT("Skin weight profile '%s' created for mirroring along %s axis"), *ProfileName, *Axis), Result);
     return true;
 #else
-    SendAutomationError(RequestingSocket, RequestId, TEXT("mirror_weights requires editor mode"), TEXT("NOT_EDITOR"));
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("mirror_weights requires editor mode"), TEXT("NOT_EDITOR"));
     return true;
 #endif
 }

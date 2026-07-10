@@ -42,6 +42,7 @@
 
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AnimationAuthoringHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "Misc/EngineVersionComparison.h"
@@ -4347,298 +4348,340 @@ static bool SendAnimAuthoringResult(UMcpAutomationBridgeSubsystem* Self,
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAnimationSequence(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateAnimationSequence(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAnimationSequence(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateAnimationSequence(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetSequenceLength(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetSequenceLength(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetSequenceLength(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetSequenceLength(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBoneTrack(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddBoneTrack(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBoneTrack(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddBoneTrack(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBoneKey(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetBoneKey(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBoneKey(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetBoneKey(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetCurveKey(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetCurveKey(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetCurveKey(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetCurveKey(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddNotify(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddNotify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddNotify(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddNotify(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddNotifyState(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddNotifyState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddNotifyState(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddNotifyState(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddSyncMarker(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddSyncMarker(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddSyncMarker(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddSyncMarker(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetRootMotionSettings(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetRootMotionSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetRootMotionSettings(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetRootMotionSettings(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAdditiveSettings(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetAdditiveSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAdditiveSettings(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetAdditiveSettings(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateMontage(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateMontage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateMontage(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateMontage(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageSection(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddMontageSection(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageSection(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddMontageSection(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageSlot(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddMontageSlot(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageSlot(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddMontageSlot(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetSectionTiming(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetSectionTiming(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetSectionTiming(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetSectionTiming(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddMontageNotify(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddMontageNotify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddMontageNotify(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddMontageNotify(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBlendIn(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetBlendIn(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/true), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/true), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetBlendOut(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetBlendOut(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/false), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetBlend(Payload, /*bBlendIn=*/false), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringLinkSections(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringLinkSections(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringLinkSections(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringLinkSections(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateBlendSpace1D(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateBlendSpace1D(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateBlendSpace1D(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateBlendSpace1D(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateBlendSpace2D(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateBlendSpace2D(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateBlendSpace2D(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateBlendSpace2D(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBlendSample(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddBlendSample(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBlendSample(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddBlendSample(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringForceRebuildBlendSpace(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringForceRebuildBlendSpace(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringForceRebuildBlendSpace(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringForceRebuildBlendSpace(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAxisSettings(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetAxisSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAxisSettings(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetAxisSettings(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetInterpolationSettings(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetInterpolationSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetInterpolationSettings(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetInterpolationSettings(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAimOffset(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateAimOffset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAimOffset(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateAimOffset(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddAimOffsetSample(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddAimOffsetSample(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddAimOffsetSample(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddAimOffsetSample(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateAnimBlueprint(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateAnimBlueprint(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateAnimBlueprint(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateAnimBlueprint(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddStateMachine(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddStateMachine(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddStateMachine(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddStateMachine(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddState(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddState(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddState(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddTransition(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddTransition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddTransition(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddTransition(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetTransitionRules(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetTransitionRules(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetTransitionRules(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetTransitionRules(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddBlendNode(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddBlendNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddBlendNode(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddBlendNode(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddCachedPose(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddCachedPose(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddCachedPose(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddCachedPose(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddSlotNode(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddSlotNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddSlotNode(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddSlotNode(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringAddLayeredBlendPerBone(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringAddLayeredBlendPerBone(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringAddLayeredBlendPerBone(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringAddLayeredBlendPerBone(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetAnimGraphNodeValue(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetAnimGraphNodeValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetAnimGraphNodeValue(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetAnimGraphNodeValue(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateControlRig(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateControlRig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateControlRig(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateControlRig(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateIkRig(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateIkRig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateIkRig(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateIkRig(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringCreateIkRetargeter(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringCreateIkRetargeter(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringCreateIkRetargeter(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringCreateIkRetargeter(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringSetRetargetChainMapping(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringSetRetargetChainMapping(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringSetRetargetChainMapping(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringSetRetargetChainMapping(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringGetAnimationInfo(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringGetAnimationInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringGetAnimationInfo(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringGetAnimationInfo(Payload), RequestingSocket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAnimAuthoringBindAnimNotify(
+bool McpHandlers::AnimationPhysics::HandleAnimAuthoringBindAnimNotify(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return SendAnimAuthoringResult(this, RequestId, AnimAuthoringBindAnimNotify(Payload), RequestingSocket);
+    return SendAnimAuthoringResult(&S, RequestId, AnimAuthoringBindAnimNotify(Payload), RequestingSocket);
 }
 
 #undef ANIM_ERROR_RESPONSE
