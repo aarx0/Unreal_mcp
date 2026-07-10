@@ -239,12 +239,9 @@ bool McpHandlers::ControlActor::HandleControlActorSpawn(
   // spawns (no actorName) keep their create-each-call behavior.
   if (!ActorName.IsEmpty()) {
     if (AActor *Existing = S.FindActorByName(ActorName, /*bExactMatchOnly*/ true)) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
-          FString::Printf(
-              TEXT("An actor named '%s' already exists (%s); not spawning a "
-                   "duplicate. Re-query state to confirm the prior spawn landed."),
-              *ActorName, *Existing->GetPathName()));
+      S.SendAutomationError(Socket, RequestId,
+                            FString::Printf(TEXT("An actor named '%s' already exists (%s); not spawning a " "duplicate. Re-query state to confirm the prior spawn landed."), *ActorName, *Existing->GetPathName()),
+                            TEXT("ACTOR_ALREADY_EXISTS"));
       return true;
     }
   }
@@ -321,18 +318,16 @@ bool McpHandlers::ControlActor::HandleControlActorSpawn(
     if (ClassPath.IsEmpty()) {
       // Distinguish "you sent nothing" from "couldn't resolve what you sent" —
       // the old message printed "Class not found: ." here.
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-          TEXT("No class specified: pass classPath, className, or actorClass "
-               "(or meshPath for a static/skeletal mesh actor)."));
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("No class specified: pass classPath, className, or actorClass " "(or meshPath for a static/skeletal mesh actor)."),
+                            TEXT("INVALID_ARGUMENT"));
       return true;
     }
     const FString ErrorMsg =
         FString::Printf(TEXT("Class not found: %s. Verify plugin is enabled if "
                              "using a plugin class."),
                         *ClassPath);
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CLASS_NOT_FOUND"),
-                              ErrorMsg);
+    S.SendAutomationError(Socket, RequestId, ErrorMsg, TEXT("CLASS_NOT_FOUND"));
     return true;
   }
 
@@ -349,8 +344,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawn(
   }
 
   if (!TargetWorld) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("WORLD_NOT_FOUND"),
-                              TEXT("Editor world not available"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor world not available"),
+                          TEXT("WORLD_NOT_FOUND"));
     return true;
   }
 
@@ -403,8 +398,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawn(
   }
 
   if (!Spawned) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SPAWN_FAILED"),
-                              TEXT("Failed to spawn actor"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to spawn actor"),
+                          TEXT("SPAWN_FAILED"));
 
     return true;
   }
@@ -493,8 +488,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawnBlueprint(
   FString BlueprintPath;
   Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
   if (BlueprintPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("Blueprint path required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint path required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -509,12 +504,9 @@ bool McpHandlers::ControlActor::HandleControlActorSpawnBlueprint(
   // retry. On a retry ACTOR_ALREADY_EXISTS confirms the prior spawn landed.
   if (!ActorName.IsEmpty()) {
     if (AActor *Existing = S.FindActorByName(ActorName, /*bExactMatchOnly*/ true)) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
-          FString::Printf(
-              TEXT("An actor named '%s' already exists (%s); not spawning a "
-                   "duplicate. Re-query state to confirm the prior spawn landed."),
-              *ActorName, *Existing->GetPathName()));
+      S.SendAutomationError(Socket, RequestId,
+                            FString::Printf(TEXT("An actor named '%s' already exists (%s); not spawning a " "duplicate. Re-query state to confirm the prior spawn landed."), *ActorName, *Existing->GetPathName()),
+                            TEXT("ACTOR_ALREADY_EXISTS"));
       return true;
     }
   }
@@ -556,8 +548,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawnBlueprint(
     ResolvedClass = ResolveClassByName(BlueprintPath);
 
   if (!ResolvedClass) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CLASS_NOT_FOUND"),
-                              TEXT("Blueprint class not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Blueprint class not found"),
+                          TEXT("CLASS_NOT_FOUND"));
     return true;
   }
 
@@ -570,8 +562,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawnBlueprint(
   }
 
   if (!TargetWorld) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("WORLD_NOT_FOUND"),
-                              TEXT("Editor world not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor world not available"),
+                          TEXT("WORLD_NOT_FOUND"));
     return true;
   }
 
@@ -592,8 +584,8 @@ bool McpHandlers::ControlActor::HandleControlActorSpawnBlueprint(
   }
 
   if (!Spawned) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SPAWN_FAILED"),
-                              TEXT("Failed to spawn blueprint"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to spawn blueprint"),
+                          TEXT("SPAWN_FAILED"));
     return true;
   }
 
@@ -663,8 +655,9 @@ bool McpHandlers::ControlActor::HandleControlActorDelete(
   }
 
   if (Targets.Num() == 0) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName or actorNames required"));
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("actorName or actorNames required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -722,9 +715,9 @@ bool McpHandlers::ControlActor::HandleControlActorDelete(
   Resp->SetStringField(TEXT("action"), TEXT("control_actor:deleted"));
 
   if (!bAllDeleted && Missing.Num() > 0 && !bAnyDeleted) {
-    SendStandardErrorResponse(&S, Socket, RequestId, ErrorCode, Message);
+    S.SendAutomationError(Socket, RequestId, Message, ErrorCode);
   } else {
-    SendStandardSuccessResponse(&S, Socket, RequestId, Message, Resp);
+    S.SendAutomationResponse(Socket, RequestId, true, Message, Resp);
   }
   return true;
 #else
@@ -744,8 +737,8 @@ bool McpHandlers::ControlActor::HandleControlActorApplyForce(
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -758,8 +751,9 @@ bool McpHandlers::ControlActor::HandleControlActorApplyForce(
   }
 
   if (!Prim) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_COMPONENT"),
-                              TEXT("No component to apply force"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No component to apply force"),
+                          TEXT("NO_COMPONENT"));
     return true;
   }
 
@@ -775,16 +769,15 @@ bool McpHandlers::ControlActor::HandleControlActorApplyForce(
   // StaticMeshActors)
   if (UStaticMeshComponent *SMC = Cast<UStaticMeshComponent>(Prim)) {
     if (!SMC->GetStaticMesh()) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("PHYSICS_FAILED"),
-          TEXT("StaticMeshComponent has no StaticMesh assigned."), nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("StaticMeshComponent has no StaticMesh assigned."),
+                            TEXT("PHYSICS_FAILED"));
       return true;
     }
     if (!SMC->GetStaticMesh()->GetBodySetup()) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("PHYSICS_FAILED"),
-          TEXT("StaticMesh has no collision geometry (BodySetup is null)."),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("StaticMesh has no collision geometry (BodySetup is null)."),
+                            TEXT("PHYSICS_FAILED"));
       return true;
     }
   }
@@ -819,8 +812,8 @@ bool McpHandlers::ControlActor::HandleControlActorApplyForce(
     } else if (Prim->Mobility != EComponentMobility::Movable) {
       FailureReason += TEXT(" Component is not Movable.");
     }
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("PHYSICS_FAILED"),
-                              FailureReason, Data);
+    S.SendAutomationResponse(Socket, RequestId, false, FailureReason, Data,
+                             TEXT("PHYSICS_FAILED"));
     return true;
   }
 
@@ -842,15 +835,15 @@ bool McpHandlers::ControlActor::HandleControlActorSetTransform(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -860,9 +853,9 @@ bool McpHandlers::ControlActor::HandleControlActorSetTransform(
   const bool bHasRotation = Payload->HasField(TEXT("rotation"));
   const bool bHasScale = Payload->HasField(TEXT("scale"));
   if (!bHasLocation && !bHasRotation && !bHasScale) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-                              TEXT("set_transform needs at least one of location, rotation, scale"),
-                              nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("set_transform needs at least one of location, rotation, scale"),
+                          TEXT("NO_CHANGES_REQUESTED"));
     return true;
   }
 
@@ -919,15 +912,15 @@ bool McpHandlers::ControlActor::HandleControlActorGetTransform(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"));
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"));
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -954,8 +947,8 @@ bool McpHandlers::ControlActor::HandleControlActorGetTransform(
   Data->SetArrayField(TEXT("rotation"), RotArray);
   Data->SetArrayField(TEXT("scale"), MakeArray(Scale));
 
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Actor transform retrieved"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Actor transform retrieved"), Data);
   return true;
 #else
   return false;
@@ -970,15 +963,15 @@ bool McpHandlers::ControlActor::HandleControlActorSetVisibility(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   // visible must be explicitly requested — never silently apply the default.
   if (!Payload->HasField(TEXT("visible"))) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-                              TEXT("visible is required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("visible is required"),
+                          TEXT("NO_CHANGES_REQUESTED"));
     return true;
   }
   bool bVisible = true;
@@ -986,8 +979,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetVisibility(
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -1013,9 +1006,9 @@ bool McpHandlers::ControlActor::HandleControlActorSetVisibility(
   Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
 
   if (bIsHidden != !bVisible) {
-    SendStandardErrorResponse(&S, Socket, RequestId,
-                              TEXT("VISIBILITY_MISMATCH"),
-                              TEXT("Failed to set actor visibility"), Data);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Failed to set actor visibility"), Data,
+                             TEXT("VISIBILITY_MISMATCH"));
     return true;
   }
 
@@ -1039,16 +1032,16 @@ bool McpHandlers::ControlActor::HandleControlActorAddComponent(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   FString ComponentType;
   Payload->TryGetStringField(TEXT("componentType"), ComponentType);
   if (ComponentType.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("componentType required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("componentType required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1057,16 +1050,16 @@ bool McpHandlers::ControlActor::HandleControlActorAddComponent(
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
   UClass *ComponentClass = ResolveClassByName(ComponentType);
   if (!ComponentClass ||
       !ComponentClass->IsChildOf(UActorComponent::StaticClass())) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CLASS_NOT_FOUND"),
-                              TEXT("Component class not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Component class not found"),
+                          TEXT("CLASS_NOT_FOUND"));
     return true;
   }
 
@@ -1078,8 +1071,8 @@ bool McpHandlers::ControlActor::HandleControlActorAddComponent(
   UActorComponent *NewComponent = NewObject<UActorComponent>(
       Found, ComponentClass, DesiredName, RF_Transactional);
   if (!NewComponent) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CREATE_COMPONENT_FAILED"),
-                              TEXT("Failed to create component"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to create component"),
+                          TEXT("CREATE_COMPONENT_FAILED"));
     return true;
   }
 
@@ -1146,16 +1139,16 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   FString ComponentName;
   Payload->TryGetStringField(TEXT("componentName"), ComponentName);
   if (ComponentName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("componentName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("componentName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1164,8 +1157,9 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   if (PropertyName.IsEmpty())
     Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
   if (PropertyName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("propertyName (or propertyPath) required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("propertyName (or propertyPath) required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1196,37 +1190,33 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   }
 
   if (Present.Num() == 0) {
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-        TEXT("set exactly one typed value field: boolValue, intValue, "
-             "floatValue, stringValue, or vectorValue"),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("set exactly one typed value field: boolValue, intValue, " "floatValue, stringValue, or vectorValue"),
+                          TEXT("NO_CHANGES_REQUESTED"));
     return true;
   }
   if (Present.Num() > 1) {
     TArray<FString> Names;
     for (const FTypedValue &V : Present)
       Names.Add(V.Field);
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("AMBIGUOUS_VALUE"),
-        *FString::Printf(TEXT("set exactly one typed value field, got %d: %s"),
-                         Present.Num(), *FString::Join(Names, TEXT(", "))),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("set exactly one typed value field, got %d: %s"), Present.Num(), *FString::Join(Names, TEXT(", "))),
+                          TEXT("AMBIGUOUS_VALUE"));
     return true;
   }
   const FTypedValue &Value = Present[0];
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
   UActorComponent *TargetComponent = McpHandlerUtils::FindActorComponentByName(Found, ComponentName);
   if (!TargetComponent) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("COMPONENT_NOT_FOUND"),
-                              TEXT("Component not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Component not found"),
+                          TEXT("COMPONENT_NOT_FOUND"));
     return true;
   }
 
@@ -1263,10 +1253,9 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
       PropertyName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase)) {
     UPrimitiveComponent *Prim = Cast<UPrimitiveComponent>(TargetComponent);
     if (!Prim || ValueKind != TEXT("bool")) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
-          TEXT("SimulatePhysics expects boolValue on a primitive component"),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("SimulatePhysics expects boolValue on a primitive component"),
+                            TEXT("VALUE_TYPE_MISMATCH"));
       return true;
     }
     bool bSim = false;
@@ -1276,23 +1265,18 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   } else if (PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase)) {
     USceneComponent *SC = Cast<USceneComponent>(TargetComponent);
     if (!SC || ValueKind != TEXT("string")) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
-          TEXT("Mobility expects stringValue (Static, Stationary, or Movable) on "
-               "a scene component"),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("Mobility expects stringValue (Static, Stationary, or Movable) on " "a scene component"),
+                            TEXT("VALUE_TYPE_MISMATCH"));
       return true;
     }
     const int64 MobVal =
         StaticEnum<EComponentMobility::Type>()->GetValueByNameString(
             Value.Json->AsString());
     if (MobVal == INDEX_NONE) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
-          *FString::Printf(TEXT("Mobility: '%s' is not valid (Static, Stationary, "
-                                "Movable)"),
-                           *Value.Json->AsString()),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            *FString::Printf(TEXT("Mobility: '%s' is not valid (Static, Stationary, " "Movable)"), *Value.Json->AsString()),
+                            TEXT("VALUE_TYPE_MISMATCH"));
       return true;
     }
     SC->SetMobility((EComponentMobility::Type)MobVal);
@@ -1304,27 +1288,23 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
     FProperty *Property =
         TargetComponent->GetClass()->FindPropertyByName(*PropertyName);
     if (!Property) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("PROPERTY_NOT_FOUND"),
-          *FString::Printf(TEXT("Property not found: %s"), *PropertyName), nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            *FString::Printf(TEXT("Property not found: %s"), *PropertyName),
+                            TEXT("PROPERTY_NOT_FOUND"));
       return true;
     }
     if (!MatchesKind(Property, ValueKind)) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
-          *FString::Printf(
-              TEXT("%s: you sent %sValue but the property type is '%s'"),
-              *PropertyName, Value.Kind, *Property->GetCPPType()),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            *FString::Printf(TEXT("%s: you sent %sValue but the property type is '%s'"), *PropertyName, Value.Kind, *Property->GetCPPType()),
+                            TEXT("VALUE_TYPE_MISMATCH"));
       return true;
     }
     FString ApplyError;
     if (!ApplyJsonValueToProperty(TargetComponent, Property, Value.Json,
                                   ApplyError)) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
-          *FString::Printf(TEXT("Failed to set %s: %s"), *PropertyName, *ApplyError),
-          nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            *FString::Printf(TEXT("Failed to set %s: %s"), *PropertyName, *ApplyError),
+                            TEXT("PROPERTY_WRITE_FAILED"));
       return true;
     }
   }
@@ -1364,8 +1344,9 @@ bool McpHandlers::ControlActor::HandleControlActorGetComponents(
   }
 
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName or objectPath required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("actorName or objectPath required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1385,8 +1366,9 @@ bool McpHandlers::ControlActor::HandleControlActorGetComponents(
   }
 
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor or Blueprint not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Actor or Blueprint not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -1451,15 +1433,15 @@ bool McpHandlers::ControlActor::HandleControlActorDuplicate(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -1470,12 +1452,9 @@ bool McpHandlers::ControlActor::HandleControlActorDuplicate(
   Payload->TryGetStringField(TEXT("newName"), NewName);
   if (!NewName.TrimStartAndEnd().IsEmpty()) {
     if (AActor *ExistingDup = S.FindActorByName(NewName, /*bExactMatchOnly*/ true)) {
-      SendStandardErrorResponse(
-          &S, Socket, RequestId, TEXT("ACTOR_ALREADY_EXISTS"),
-          FString::Printf(
-              TEXT("An actor named '%s' already exists (%s); not creating a "
-                   "duplicate. Re-query state to confirm the prior duplicate landed."),
-              *NewName, *ExistingDup->GetPathName()));
+      S.SendAutomationError(Socket, RequestId,
+                            FString::Printf(TEXT("An actor named '%s' already exists (%s); not creating a " "duplicate. Re-query state to confirm the prior duplicate landed."), *NewName, *ExistingDup->GetPathName()),
+                            TEXT("ACTOR_ALREADY_EXISTS"));
       return true;
     }
   }
@@ -1487,8 +1466,8 @@ bool McpHandlers::ControlActor::HandleControlActorDuplicate(
   AActor *Duplicated =
       ActorSS->DuplicateActor(Found, Found->GetWorld(), Offset);
   if (!Duplicated) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("DUPLICATE_FAILED"),
-                              TEXT("Failed to duplicate actor"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to duplicate actor"),
+                          TEXT("DUPLICATE_FAILED"));
     return true;
   }
 
@@ -1509,8 +1488,8 @@ bool McpHandlers::ControlActor::HandleControlActorDuplicate(
   OffsetArray.Add(MakeShared<FJsonValueNumber>(Offset.Z));
   Data->SetArrayField(TEXT("offset"), OffsetArray);
 
-	SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Actor duplicated"),
-                              Data);
+	S.SendAutomationResponse(Socket, RequestId, true, TEXT("Actor duplicated"),
+                          Data);
   return true;
 #else
   return false;
@@ -1527,30 +1506,34 @@ bool McpHandlers::ControlActor::HandleControlActorAttach(
   FString ParentName;
   Payload->TryGetStringField(TEXT("parentActor"), ParentName);
   if (ChildName.IsEmpty() || ParentName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("childActor and parentActor required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("childActor and parentActor required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Child = S.FindActorByName(ChildName);
   AActor *Parent = S.FindActorByName(ParentName);
   if (!Child || !Parent) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Child or parent actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Child or parent actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
   if (Child == Parent) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CYCLE_DETECTED"),
-                              TEXT("Cannot attach actor to itself"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Cannot attach actor to itself"),
+                          TEXT("CYCLE_DETECTED"));
     return true;
   }
 
   USceneComponent *ChildRoot = Child->GetRootComponent();
   USceneComponent *ParentRoot = Parent->GetRootComponent();
   if (!ChildRoot || !ParentRoot) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ROOT_MISSING"),
-                              TEXT("Actor missing root component"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Actor missing root component"),
+                          TEXT("ROOT_MISSING"));
     return true;
   }
 
@@ -1575,8 +1558,9 @@ bool McpHandlers::ControlActor::HandleControlActorAttach(
   Data->SetBoolField(TEXT("attached"), bAttached);
 
   if (!bAttached) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ATTACH_FAILED"),
-                              TEXT("Failed to attach actor"), Data);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Failed to attach actor"), Data,
+                             TEXT("ATTACH_FAILED"));
     return true;
   }
 
@@ -1602,15 +1586,16 @@ bool McpHandlers::ControlActor::HandleControlActorDetach(
   if (TargetName.IsEmpty())
     Payload->TryGetStringField(TEXT("childActor"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName (or childActor) required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("actorName (or childActor) required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -1639,8 +1624,9 @@ bool McpHandlers::ControlActor::HandleControlActorDetach(
   Data->SetBoolField(TEXT("detached"), bDetached);
 
   if (!bDetached) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("DETACH_FAILED"),
-                              TEXT("Failed to detach actor"), Data);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Failed to detach actor"), Data,
+                             TEXT("DETACH_FAILED"));
     return true;
   }
 
@@ -1662,15 +1648,16 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
   if (TagValue.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("tag required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("tag required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   // Security: Validate tag format - reject path traversal attempts
   if (TagValue.Contains(TEXT("..")) || TagValue.Contains(TEXT("\\")) || TagValue.Contains(TEXT("/"))) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              FString::Printf(TEXT("Invalid tag: '%s'. Path separators and traversal characters are not allowed."), *TagValue), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Invalid tag: '%s'. Path separators and traversal characters are not allowed."), *TagValue),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1731,8 +1718,7 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetNumberField(TEXT("count"), Matches.Num());
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Actors found"),
-                              Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Actors found"), Data);
   return true;
 #else
   return false;
@@ -1749,15 +1735,15 @@ bool McpHandlers::ControlActor::HandleControlActorAddTag(
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
   if (TargetName.IsEmpty() || TagValue.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName and tag required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName and tag required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -1791,15 +1777,16 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
   FString Query;
   Payload->TryGetStringField(TEXT("name"), Query);
   if (Query.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("name required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("name required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   // Security: Validate query format - reject path traversal attempts
   if (Query.Contains(TEXT("..")) || Query.Contains(TEXT("\\")) || Query.Contains(TEXT("/"))) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              FString::Printf(TEXT("Invalid name query: '%s'. Path separators and traversal characters are not allowed."), *Query), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Invalid name query: '%s'. Path separators and traversal characters are not allowed."), *Query),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1832,8 +1819,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
   Data->SetNumberField(TEXT("count"), Matches.Num());
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetStringField(TEXT("query"), Query);
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Actor query executed"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Actor query executed"), Data);
   return true;
 #else
   return false;
@@ -1848,8 +1835,8 @@ bool McpHandlers::ControlActor::HandleControlActorDeleteByTag(
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
   if (TagValue.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("tag required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("tag required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1881,8 +1868,8 @@ bool McpHandlers::ControlActor::HandleControlActorDeleteByTag(
   Data->SetBoolField(TEXT("existsAfter"), false);
   Data->SetStringField(TEXT("action"), TEXT("control_actor:deleted"));
 
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Actors deleted by tag"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Actors deleted by tag"), Data);
   return true;
 #else
   return false;
@@ -1897,8 +1884,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1907,8 +1894,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables(
   if (VariableName.IsEmpty())
     Payload->TryGetStringField(TEXT("propertyName"), VariableName);
   if (VariableName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("variableName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("variableName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -1918,18 +1905,14 @@ bool McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables(
   FString Detail;
   switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, Value, Detail)) {
   case McpPropertyReflection::EMcpTypedValueParse::None:
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("NO_CHANGES_REQUESTED"),
-        TEXT("set exactly one typed value field: boolValue, intValue, "
-             "floatValue, stringValue, or vectorValue"),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("set exactly one typed value field: boolValue, intValue, " "floatValue, stringValue, or vectorValue"),
+                          TEXT("NO_CHANGES_REQUESTED"));
     return true;
   case McpPropertyReflection::EMcpTypedValueParse::Ambiguous:
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("AMBIGUOUS_VALUE"),
-        *FString::Printf(TEXT("set exactly one typed value field, got: %s"),
-                         *Detail),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("set exactly one typed value field, got: %s"), *Detail),
+                          TEXT("AMBIGUOUS_VALUE"));
     return true;
   case McpPropertyReflection::EMcpTypedValueParse::Ok:
     break;
@@ -1937,34 +1920,31 @@ bool McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables(
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
   FProperty *Property = Found->GetClass()->FindPropertyByName(*VariableName);
   if (!Property) {
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("PROPERTY_NOT_FOUND"),
-        *FString::Printf(TEXT("Variable not found: %s"), *VariableName), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("Variable not found: %s"), *VariableName),
+                          TEXT("PROPERTY_NOT_FOUND"));
     return true;
   }
   if (!McpPropertyReflection::PropertyMatchesValueKind(Property, Value.Kind)) {
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("VALUE_TYPE_MISMATCH"),
-        *FString::Printf(TEXT("%s: you sent %sValue but the variable type is '%s'"),
-                         *VariableName, *Value.Kind, *Property->GetCPPType()),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("%s: you sent %sValue but the variable type is '%s'"), *VariableName, *Value.Kind, *Property->GetCPPType()),
+                          TEXT("VALUE_TYPE_MISMATCH"));
     return true;
   }
 
   Found->Modify();
   FString ApplyError;
   if (!ApplyJsonValueToProperty(Found, Property, Value.Json, ApplyError)) {
-    SendStandardErrorResponse(
-        &S, Socket, RequestId, TEXT("PROPERTY_WRITE_FAILED"),
-        *FString::Printf(TEXT("Failed to set %s: %s"), *VariableName, *ApplyError),
-        nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("Failed to set %s: %s"), *VariableName, *ApplyError),
+                          TEXT("PROPERTY_WRITE_FAILED"));
     return true;
   }
   Found->MarkComponentsRenderStateDirty();
@@ -1991,23 +1971,23 @@ bool McpHandlers::ControlActor::HandleControlActorCreateSnapshot(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   FString SnapshotName;
   Payload->TryGetStringField(TEXT("snapshotName"), SnapshotName);
   if (SnapshotName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("snapshotName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("snapshotName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2018,8 +1998,8 @@ bool McpHandlers::ControlActor::HandleControlActorCreateSnapshot(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("snapshotName"), SnapshotName);
   Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Snapshot created"),
-                              Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Snapshot created"),
+                           Data);
   return true;
 #else
   return false;
@@ -2034,31 +2014,31 @@ bool McpHandlers::ControlActor::HandleControlActorRestoreSnapshot(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   FString SnapshotName;
   Payload->TryGetStringField(TEXT("snapshotName"), SnapshotName);
   if (SnapshotName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("snapshotName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("snapshotName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
   const FString SnapshotKey =
       FString::Printf(TEXT("%s::%s"), *Found->GetPathName(), *SnapshotName);
   if (!S.CachedActorSnapshots.Contains(SnapshotKey)) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SNAPSHOT_NOT_FOUND"),
-                              TEXT("Snapshot not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Snapshot not found"),
+                          TEXT("SNAPSHOT_NOT_FOUND"));
     return true;
   }
 
@@ -2071,8 +2051,8 @@ bool McpHandlers::ControlActor::HandleControlActorRestoreSnapshot(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("snapshotName"), SnapshotName);
   Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Snapshot restored"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Snapshot restored"),
+                           Data);
   return true;
 #else
   return false;
@@ -2087,15 +2067,15 @@ bool McpHandlers::ControlActor::HandleControlActorExport(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2107,8 +2087,8 @@ bool McpHandlers::ControlActor::HandleControlActorExport(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetStringField(TEXT("t3d"), OutputString);
   Data->SetStringField(TEXT("actorName"), Found->GetActorLabel());
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Actor exported"),
-                              Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Actor exported"),
+                           Data);
   return true;
 #else
   return false;
@@ -2123,15 +2103,15 @@ bool McpHandlers::ControlActor::HandleControlActorGetBoundingBox(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2199,8 +2179,8 @@ bool McpHandlers::ControlActor::HandleControlActorGetBoundingBox(
 
   Data->SetArrayField(TEXT("origin"), MakeArray(Origin));
   Data->SetArrayField(TEXT("extent"), MakeArray(BoxExtent));
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Bounding box retrieved"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Bounding box retrieved"), Data);
   return true;
 #else
   return false;
@@ -2215,15 +2195,15 @@ bool McpHandlers::ControlActor::HandleControlActorGetMetadata(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2251,8 +2231,8 @@ bool McpHandlers::ControlActor::HandleControlActorGetMetadata(
   };
   Data->SetArrayField(TEXT("location"), MakeArray(Current.GetLocation()));
 
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              TEXT("Metadata retrieved"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Metadata retrieved"),
+                           Data);
   return true;
 #else
   return false;
@@ -2269,15 +2249,15 @@ bool McpHandlers::ControlActor::HandleControlActorRemoveTag(
   FString TagValue;
   Payload->TryGetStringField(TEXT("tag"), TagValue);
   if (TargetName.IsEmpty() || TagValue.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName and tag required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName and tag required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2331,8 +2311,9 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   }
 
   if (ClassName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("className or class is required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("className or class is required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -2340,8 +2321,9 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   // Valid formats: "/Script/Module.ClassName", "/Game/Path/ClassName.ClassName", "ClassName"
   // Invalid: Contains "..", "\" (Windows paths), or other traversal patterns
   if (ClassName.Contains(TEXT("..")) || ClassName.Contains(TEXT("\\"))) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              FString::Printf(TEXT("Invalid class name format: '%s'. Path traversal characters are not allowed."), *ClassName), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Invalid class name format: '%s'. Path traversal characters are not allowed."), *ClassName),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -2353,14 +2335,25 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
         ClassName.Contains(TEXT("/var/")) || ClassName.Contains(TEXT("/home/")) ||
         ClassName.Contains(TEXT("/root/")) || ClassName.Contains(TEXT("/tmp/")) ||
         ClassName.Contains(TEXT("C:\\")) || ClassName.Contains(TEXT("D:\\"))) {
-      SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              FString::Printf(TEXT("Invalid class name format: '%s'. Filesystem paths are not allowed."), *ClassName), nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            FString::Printf(TEXT("Invalid class name format: '%s'. Filesystem paths are not allowed."), *ClassName),
+                            TEXT("INVALID_ARGUMENT"));
       return true;
+    }
+  }
+
+  int32 Limit = 50;
+  {
+    double LimitNum = 0.0;
+    if (Payload->TryGetNumberField(TEXT("limit"), LimitNum)) {
+      Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
     }
   }
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> ActorsArray;
+  int32 Matched = 0;
+  bool bTruncated = false;
 
   // Prefer the PIE world when active, matching HandleControlActorList and
   // FindActorByName — otherwise by-class enumeration misses every PIE actor
@@ -2389,6 +2382,11 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
     if (ClassToFind) {
       for (TActorIterator<AActor> It(World, ClassToFind); It; ++It) {
         if (AActor* Actor = *It) {
+          ++Matched;
+          if (ActorsArray.Num() >= Limit) {
+            bTruncated = true;
+            continue;
+          }
           TSharedPtr<FJsonObject> ActorObj = McpHandlerUtils::CreateResultObject();
           ActorObj->SetStringField(TEXT("name"), Actor->GetActorLabel());
           ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
@@ -2404,6 +2402,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
 
   Data->SetArrayField(TEXT("actors"), ActorsArray);
   Data->SetNumberField(TEXT("count"), ActorsArray.Num());
+  Data->SetNumberField(TEXT("matched"), Matched);
+  Data->SetBoolField(TEXT("truncated"), bTruncated);
   // Derived from the SAME resolution as World so the flag and worldName can
   // never disagree. worldPackage exposes the UEDPIE_<instance>_ prefix and
   // hasBegunPlay flags the brief post-OpenLevel window — together they make
@@ -2415,8 +2415,9 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
     Data->SetStringField(TEXT("worldPackage"), World->GetOutermost()->GetName());
     Data->SetBoolField(TEXT("hasBegunPlay"), World->HasBegunPlay());
   }
-  SendStandardSuccessResponse(&S, Socket, RequestId,
-                              FString::Printf(TEXT("Found %d actors"), ActorsArray.Num()), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           FString::Printf(TEXT("Found %d actors"), ActorsArray.Num()),
+                           Data);
   return true;
 #else
   return false;
@@ -2469,7 +2470,8 @@ bool McpHandlers::ControlActor::HandleControlActorRemoveComponent(
     Data->SetBoolField(TEXT("existsAfter"), false);
     Data->SetStringField(TEXT("action"), TEXT("control_actor:deleted"));
 
-    SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Component removed"), Data);
+    S.SendAutomationResponse(Socket, RequestId, true, TEXT("Component removed"),
+                             Data);
     return true;
   }
   
@@ -2538,7 +2540,8 @@ bool McpHandlers::ControlActor::HandleControlActorGetComponentProperty(
     Data->SetStringField(TEXT("value"), TEXT("<unsupported property type>"));
   }
   
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Property retrieved"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Property retrieved"),
+                           Data);
   return true;
 #else
   return false;
@@ -2610,7 +2613,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetCollision(
   Data->SetArrayField(TEXT("appliedProperties"), AppliedProperties);
   Data->SetBoolField(TEXT("collisionEnabled"), bCollisionEnabled);
   Data->SetNumberField(TEXT("componentsModified"), PrimComps.Num());
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Collision setting updated"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true,
+                           TEXT("Collision setting updated"), Data);
   return true;
 #else
   return false;
@@ -2727,7 +2731,8 @@ bool McpHandlers::ControlActor::HandleControlActorCallFunction(
   }
   Data->SetStringField(TEXT("functionName"), FunctionName);
   Data->SetNumberField(TEXT("argumentsApplied"), Arguments.Num());
-  SendStandardSuccessResponse(&S, Socket, RequestId, TEXT("Function called"), Data);
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Function called"),
+                           Data);
   return true;
 #else
   return false;
@@ -2809,8 +2814,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorEject(
   if (!GEditor->PlayWorld) {
     TSharedPtr<FJsonObject> ErrorDetails = McpHandlerUtils::CreateResultObject();
     ErrorDetails->SetBoolField(TEXT("notInPIE"), true);
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_ACTIVE_SESSION"),
-                              TEXT("Cannot eject: Play session not active"), ErrorDetails);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Cannot eject: Play session not active"),
+                             ErrorDetails, TEXT("NO_ACTIVE_SESSION"));
     return true;
   }
 
@@ -2842,15 +2848,16 @@ bool McpHandlers::ControlEditor::HandleControlEditorPossess(
     Payload->TryGetStringField(TEXT("objectPath"), ActorName);
 
   if (ActorName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AActor *Found = S.FindActorByName(ActorName);
   if (!Found) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              FString::Printf(TEXT("Actor not found: %s"), *ActorName), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          FString::Printf(TEXT("Actor not found: %s"), *ActorName),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
 
@@ -2864,14 +2871,15 @@ bool McpHandlers::ControlEditor::HandleControlEditorPossess(
                              nullptr);
     } else {
       // If not in PIE, we can't possess
-      SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IN_PIE"),
-                              TEXT("Cannot possess actor while not in PIE"), nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("Cannot possess actor while not in PIE"),
+                            TEXT("NOT_IN_PIE"));
     }
     return true;
   }
 
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+  S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                        TEXT("EDITOR_NOT_AVAILABLE"));
   return true;
 #else
   return false;
@@ -2886,8 +2894,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorFocusActor(
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
   if (ActorName.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("actorName required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -2909,8 +2917,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorFocusActor(
         return true;
       }
     }
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ACTOR_NOT_FOUND"),
-                              TEXT("Actor not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Actor not found"),
+                          TEXT("ACTOR_NOT_FOUND"));
     return true;
   }
   return false;
@@ -3042,8 +3050,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetViewMode(
     bHasNativeViewMode = false;
   }
   else {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("Invalid viewMode"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Invalid viewMode"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -3071,8 +3079,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetViewMode(
                            FString());
     return true;
   }
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EXEC_FAILED"),
-                              TEXT("View mode command failed"), nullptr);
+  S.SendAutomationError(Socket, RequestId, TEXT("View mode command failed"),
+                        TEXT("EXEC_FAILED"));
   return true;
 #else
   return false;
@@ -3087,8 +3095,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetCameraFov(
   double Fov = 90.0;
   Payload->TryGetNumberField(TEXT("fov"), Fov);
   if (Fov <= 1.0 || Fov >= 179.0) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("fov must be between 1 and 179 degrees"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("fov must be between 1 and 179 degrees"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -3106,8 +3115,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetCameraFov(
     return true;
   }
 
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("VIEWPORT_NOT_AVAILABLE"),
-                            TEXT("No editor viewport available for FOV update"), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("No editor viewport available for FOV update"),
+                        TEXT("VIEWPORT_NOT_AVAILABLE"));
   return true;
 #else
   return false;
@@ -3122,8 +3132,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetGameSpeed(
   double Speed = 1.0;
   Payload->TryGetNumberField(TEXT("speed"), Speed);
   if (Speed <= 0.0 || Speed > 20.0) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("speed must be greater than 0 and no more than 20"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("speed must be greater than 0 and no more than 20"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -3131,8 +3142,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetGameSpeed(
       ? GEditor->PlayWorld.Get()
       : (GEditor ? GEditor->GetEditorWorldContext().World() : nullptr);
   if (!World || !World->GetWorldSettings()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_WORLD"),
-                              TEXT("No world available for game speed update"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No world available for game speed update"),
+                          TEXT("NO_WORLD"));
     return true;
   }
 
@@ -3158,42 +3170,43 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenAsset(
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("assetPath required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("assetPath required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SECURITY_VIOLATION"),
-                              TEXT("Invalid assetPath"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Invalid assetPath"),
+                          TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
   UAssetEditorSubsystem *AssetEditorSS =
       GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
   if (!AssetEditorSS) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SUBSYSTEM_MISSING"),
-                              TEXT("AssetEditorSubsystem not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("AssetEditorSubsystem not available"),
+                          TEXT("SUBSYSTEM_MISSING"));
     return true;
   }
 
   if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("ASSET_NOT_FOUND"),
-                              TEXT("Asset not found"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Asset not found"),
+                          TEXT("ASSET_NOT_FOUND"));
     return true;
   }
 
   UObject *Asset = McpLoadAssetPieSafe(AssetPath);
   if (!Asset) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("LOAD_FAILED"),
-                              TEXT("Failed to load asset"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to load asset"),
+                          TEXT("LOAD_FAILED"));
     return true;
   }
 
@@ -3221,8 +3234,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenAsset(
     S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset opened"), Resp,
                            FString());
   } else {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("OPEN_FAILED"),
-                              TEXT("Failed to open asset editor"), Resp);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             TEXT("Failed to open asset editor"), Resp,
+                             TEXT("OPEN_FAILED"));
   }
   return true;
 #else
@@ -3236,8 +3250,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3274,8 +3288,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
   // Get the active viewport
   FViewport* Viewport = GEditor->GetActiveViewport();
   if (!Viewport) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("VIEWPORT_NOT_AVAILABLE"),
-                              TEXT("No active viewport available"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No active viewport available"),
+                          TEXT("VIEWPORT_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3313,8 +3328,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
   Viewport->Draw();
   const FIntPoint ViewportSize = Viewport->GetSizeXY();
   if (ViewportSize.X <= 0 || ViewportSize.Y <= 0) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("VIEWPORT_NOT_AVAILABLE"),
-                              TEXT("Viewport has zero size"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Viewport has zero size"),
+                          TEXT("VIEWPORT_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3323,8 +3338,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
   if (!Viewport->ReadPixels(Bitmap, ReadFlags,
           FIntRect(0, 0, ViewportSize.X, ViewportSize.Y)) ||
       Bitmap.Num() < ViewportSize.X * ViewportSize.Y) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CAPTURE_FAILED"),
-                              TEXT("Failed to read viewport pixels"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Failed to read viewport pixels"),
+                          TEXT("CAPTURE_FAILED"));
     return true;
   }
 
@@ -3353,8 +3369,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
       TArrayView64<const FColor>(Pixels->GetData(), Pixels->Num()), PngData);
 
   if (PngData.Num() == 0 || !FFileHelper::SaveArrayToFile(PngData, *FullPath)) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("CAPTURE_FAILED"),
-                              TEXT("Failed to encode/write screenshot PNG"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Failed to encode/write screenshot PNG"),
+                          TEXT("CAPTURE_FAILED"));
     return true;
   }
 
@@ -3372,8 +3389,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
                          TEXT("Screenshot captured"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Screenshot requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Screenshot requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3384,15 +3402,16 @@ bool McpHandlers::ControlEditor::HandleControlEditorPause(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
   // Check if we're in PIE
   if (!GEditor->PlayWorld) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_ACTIVE_SESSION"),
-                              TEXT("No active PIE session to pause"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No active PIE session to pause"),
+                          TEXT("NO_ACTIVE_SESSION"));
     return true;
   }
 
@@ -3408,8 +3427,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorPause(
                          TEXT("PIE session paused"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Pause requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId, TEXT("Pause requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3420,15 +3439,16 @@ bool McpHandlers::ControlEditor::HandleControlEditorResume(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
   // Check if we're in PIE
   if (!GEditor->PlayWorld) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_ACTIVE_SESSION"),
-                              TEXT("No active PIE session to resume"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No active PIE session to resume"),
+                          TEXT("NO_ACTIVE_SESSION"));
     return true;
   }
 
@@ -3444,8 +3464,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorResume(
                          TEXT("PIE session resumed"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Resume requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Resume requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3456,15 +3477,16 @@ bool McpHandlers::ControlEditor::HandleControlEditorStepFrame(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
   // Check if we're in PIE
   if (!GEditor->PlayWorld) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NO_ACTIVE_SESSION"),
-                              TEXT("No active PIE session to step"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("No active PIE session to step"),
+                          TEXT("NO_ACTIVE_SESSION"));
     return true;
   }
 
@@ -3480,8 +3502,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorStepFrame(
                          TEXT("Frame stepped"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Step frame requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Step frame requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3492,8 +3515,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorStartRecording(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3528,8 +3551,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorStartRecording(
                          TEXT("Recording started"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Recording requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Recording requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3540,8 +3564,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorStopRecording(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3560,8 +3584,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorStopRecording(
                          TEXT("Recording stopped"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Recording requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Recording requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3572,8 +3597,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorCreateBookmark(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3600,8 +3625,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorCreateBookmark(
                          TEXT("Bookmark created"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Bookmarks require editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Bookmarks require editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3612,8 +3638,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorJumpToBookmark(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3640,8 +3666,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorJumpToBookmark(
                          TEXT("Jumped to bookmark"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Bookmarks require editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Bookmarks require editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3652,8 +3679,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetPreferences(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3733,8 +3760,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetPreferences(
                          ResponseMessage, Resp, ResponseErrorCode);
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Preferences require editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Preferences require editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3745,8 +3773,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetViewportRealtime(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -3787,8 +3815,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetViewportRealtime(
                          TEXT("Viewport realtime updated"), Resp, FString());
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Viewport realtime requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Viewport realtime requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -3799,8 +3828,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSimulateInput(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4034,12 +4063,14 @@ bool McpHandlers::ControlEditor::HandleControlEditorSimulateInput(
   if (bSuccess) {
     S.SendAutomationResponse(Socket, RequestId, true, Message, Resp, FString());
   } else {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INPUT_FAILED"), Message, Resp);
+    S.SendAutomationResponse(Socket, RequestId, false, Message, Resp,
+                             TEXT("INPUT_FAILED"));
   }
   return true;
 #else
-  SendStandardErrorResponse(&S, Socket, RequestId, TEXT("NOT_IMPLEMENTED"),
-                              TEXT("Simulate input requires editor build."), nullptr);
+  S.SendAutomationError(Socket, RequestId,
+                        TEXT("Simulate input requires editor build."),
+                        TEXT("NOT_IMPLEMENTED"));
   return true;
 #endif
 }
@@ -4052,29 +4083,30 @@ bool McpHandlers::ControlEditor::HandleControlEditorCloseAsset(
   FString AssetPath;
   Payload->TryGetStringField(TEXT("assetPath"), AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("assetPath required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("assetPath required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   AssetPath = SanitizeProjectRelativePath(AssetPath);
   if (AssetPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SECURITY_VIOLATION"),
-                              TEXT("Invalid assetPath"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Invalid assetPath"),
+                          TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
   UAssetEditorSubsystem* AssetEditorSS = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
   if (!AssetEditorSS) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SUBSYSTEM_MISSING"),
-                              TEXT("AssetEditorSubsystem unavailable"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("AssetEditorSubsystem unavailable"),
+                          TEXT("SUBSYSTEM_MISSING"));
     return true;
   }
 
   UObject* Asset = McpLoadAssetPieSafe(AssetPath);
   if (!Asset) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("LOAD_FAILED"),
-                              TEXT("Failed to load asset"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Failed to load asset"),
+                          TEXT("LOAD_FAILED"));
     return true;
   }
 
@@ -4204,11 +4236,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorSaveAll(
                            FString::Printf(TEXT("Saved %d world and %d content packages (skipped %d transient/temp)"), SavedWorldCount, SavedContentCount, SkippedCount),
                            Resp, FString());
   } else {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SAVE_FAILED"),
-                              FString::Printf(TEXT("Failed to save all packages. Saved %d of %d dirty packages."),
-                                               SavedWorldCount + SavedContentCount,
-                                               TotalDirty - SkippedCount),
-                              Resp);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             FString::Printf(TEXT("Failed to save all packages. Saved %d of %d dirty packages."), SavedWorldCount + SavedContentCount, TotalDirty - SkippedCount),
+                             Resp, TEXT("SAVE_FAILED"));
   }
   return true;
 #else
@@ -4222,8 +4252,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorUndo(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4245,8 +4275,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorRedo(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4270,14 +4300,14 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetEditorMode(
   FString Mode;
   Payload->TryGetStringField(TEXT("mode"), Mode);
   if (Mode.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("mode required"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("mode required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
   if (!IsSafeConsoleArgumentToken(Mode)) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("Invalid editor mode"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Invalid editor mode"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -4302,8 +4332,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorShowStats(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4335,8 +4365,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorHideStats(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4362,8 +4392,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetGameView(
   bool bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
 
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4423,8 +4453,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorSetFixedDeltaTime(
   }
 
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4459,8 +4489,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
     Payload->TryGetStringField(TEXT("assetPath"), LevelPath);
   }
   if (LevelPath.IsEmpty()) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("INVALID_ARGUMENT"),
-                              TEXT("levelPath, path, or assetPath required"), nullptr);
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("levelPath, path, or assetPath required"),
+                          TEXT("INVALID_ARGUMENT"));
     return true;
   }
 
@@ -4472,8 +4503,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
   LevelPath = SanitizeProjectRelativePath(LevelPath);
   if (LevelPath.IsEmpty() ||
       !(LevelPath.StartsWith(TEXT("/Game/")) || LevelPath.StartsWith(TEXT("/Engine/")))) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SECURITY_VIOLATION"),
-                              TEXT("Invalid levelPath"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Invalid levelPath"),
+                          TEXT("SECURITY_VIOLATION"));
     return true;
   }
 
@@ -4483,8 +4514,8 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
   }
 
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4537,10 +4568,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
     ErrorDetails->SetStringField(TEXT("checkedFolderBased"), FullFolderMapPath);
     ErrorDetails->SetStringField(TEXT("checkedFlat"), FullFlatMapPath);
     ErrorDetails->SetStringField(TEXT("hint"), TEXT("Unreal levels are typically stored as /Game/Path/LevelName/LevelName.umap"));
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("FILE_NOT_FOUND"),
-                              FString::Printf(TEXT("Level file not found. Checked:\n  Folder: %s\n  Flat: %s"), 
-                                            *FullFolderMapPath, *FullFlatMapPath), 
-                              ErrorDetails);
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             FString::Printf(TEXT("Level file not found. Checked:\n  Folder: %s\n  Flat: %s"), *FullFolderMapPath, *FullFlatMapPath),
+                             ErrorDetails, TEXT("FILE_NOT_FOUND"));
     return true;
   }
 
@@ -4575,9 +4605,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
       Details->SetNumberField(TEXT("dirtyWorldPackages"), BlockingWorldPackages);
       Details->SetNumberField(TEXT("dirtyContentPackages"), BlockingContentPackages);
       Details->SetStringField(TEXT("levelPath"), LevelPath);
-      SendStandardErrorResponse(&S, Socket, RequestId, TEXT("DIRTY_PACKAGES"),
-                                TEXT("Cannot open a level in unattended/headless mode while packages are dirty. Save or discard changes first."),
-                                Details);
+      S.SendAutomationResponse(Socket, RequestId, false,
+                               TEXT("Cannot open a level in unattended/headless mode while packages are dirty. Save or discard changes first."),
+                               Details, TEXT("DIRTY_PACKAGES"));
       return true;
     }
   }
@@ -4603,9 +4633,9 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
           WeakThis->SendAutomationResponse(Socket, RequestId, true,
                                            TEXT("Level opened"), Resp, FString());
         } else {
-          SendStandardErrorResponse(WeakThis.Get(), Socket, RequestId,
-                                    TEXT("OPEN_FAILED"),
-                                    TEXT("Failed to open level"), Resp);
+          WeakThis->SendAutomationResponse(Socket, RequestId, false,
+                                           TEXT("Failed to open level"), Resp,
+                                           TEXT("OPEN_FAILED"));
         }
 
         return false;
@@ -4623,8 +4653,8 @@ bool McpHandlers::ControlActor::HandleControlActorList(
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
   if (!GEditor) {
-    SendStandardErrorResponse(&S, Socket, RequestId, TEXT("EDITOR_NOT_AVAILABLE"),
-                              TEXT("Editor not available"), nullptr);
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
     return true;
   }
 
@@ -4645,8 +4675,8 @@ bool McpHandlers::ControlActor::HandleControlActorList(
     SourceWorld = GEditor->PlayWorld.Get();
     bUsingPieWorld = true;
     if (!SourceWorld) {
-      SendStandardErrorResponse(&S, Socket, RequestId, TEXT("WORLD_NOT_FOUND"),
-                                TEXT("PIE world unavailable"), nullptr);
+      S.SendAutomationError(Socket, RequestId, TEXT("PIE world unavailable"),
+                            TEXT("WORLD_NOT_FOUND"));
       return true;
     }
 
@@ -4658,8 +4688,9 @@ bool McpHandlers::ControlActor::HandleControlActorList(
     UEditorActorSubsystem *ActorSS =
         GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
     if (!ActorSS) {
-      SendStandardErrorResponse(&S, Socket, RequestId, TEXT("SUBSYSTEM_MISSING"),
-                                TEXT("EditorActorSubsystem unavailable"), nullptr);
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("EditorActorSubsystem unavailable"),
+                            TEXT("SUBSYSTEM_MISSING"));
       return true;
     }
 
