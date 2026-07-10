@@ -2006,18 +2006,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
     return FString();
   };
 
-  // get_blueprint_scs: retrieve SCS hierarchy
-  if (CleanAction.Equals(TEXT("get_blueprint_scs"), ESearchCase::IgnoreCase)) {
-    FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    TSharedPtr<FJsonObject> Result = FSCSHandlers::GetBlueprintSCS(BPPath);
-    SendAutomationResponse(RequestingSocket, RequestId,
-                           GetJsonBoolField(Result, TEXT("success")),
-                           SafeGetStr(Result, TEXT("message")), Result,
-                           SafeGetStr(Result, TEXT("error")));
-    return true;
-  }
-
   // add_scs_component: add component to SCS
   if (CleanAction.Equals(TEXT("add_scs_component"), ESearchCase::IgnoreCase)) {
     FString BPPath;
@@ -4344,11 +4332,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
 #endif
   }
 
-  if (CleanAction.Equals(TEXT("probe_subobject_handle"), ESearchCase::IgnoreCase)) {
-    return FBlueprintCreationHandlers::HandleBlueprintProbeSubobjectHandle(
-        this, RequestId, LocalPayload, RequestingSocket);
-  }
-
   // blueprint_create handler: parse payload and prepare coalesced creation
   // Support both explicit blueprint_create and the nested 'create' action from
   // manage_blueprint
@@ -4360,57 +4343,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
   // Other blueprint_* actions (modify_scs, compile, add_variable, add_function,
   // etc.) For simplicity, unhandled blueprint actions return NOT_IMPLEMENTED so
   // the server may fall back to Python helpers if available.
-
-  // blueprint_exists: check whether a blueprint asset or registry entry exists
-  if (CleanAction.Equals(TEXT("exists"), ESearchCase::IgnoreCase)) {
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_exists requires a blueprint path."), nullptr,
-          TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-    FString Normalized = Path;
-    bool bFound = false;
-#if WITH_EDITOR
-    // Use lightweight existence check instead of LoadBlueprintAsset
-    // to avoid Editor hangs on heavy/corrupted assets
-    FString CheckPath = Path;
-    // Ensure path starts with /Game if it doesn't have a valid root
-    if (!CheckPath.StartsWith(TEXT("/Game")) &&
-        !CheckPath.StartsWith(TEXT("/Engine")) &&
-        !CheckPath.StartsWith(TEXT("/Script"))) {
-      if (CheckPath.StartsWith(TEXT("/"))) {
-        CheckPath = TEXT("/Game") + CheckPath;
-      } else {
-        CheckPath = TEXT("/Game/") + CheckPath;
-      }
-    }
-    // Remove .uasset extension if present
-    if (CheckPath.EndsWith(TEXT(".uasset"))) {
-      CheckPath = CheckPath.LeftChop(7);
-    }
-    bFound = UEditorAssetLibrary::DoesAssetExist(CheckPath);
-    if (bFound) {
-      Normalized = CheckPath;
-    }
-#else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("blueprint_exists requires editor build"),
-                           nullptr, TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetBoolField(TEXT("exists"), bFound);
-    Resp->SetStringField(TEXT("blueprintPath"), bFound ? Normalized : Path);
-    // Always return true (action succeeded), let propert "exists" convey state
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           bFound ? TEXT("Blueprint exists")
-                                  : TEXT("Blueprint not found"),
-                           Resp, FString());
-    return true;
-  }
 
   // blueprint_get: return the lightweight registry entry for a blueprint
   if (CleanAction.Equals(TEXT("get"), ESearchCase::IgnoreCase)) {
@@ -5029,176 +4961,6 @@ bool UMcpAutomationBridgeSubsystem::HandleBlueprintAction(
         RequestingSocket, RequestId, false,
         TEXT("blueprint_add_node requires editor build with K2 node headers"),
         nullptr, TEXT("NOT_AVAILABLE"));
-    return true;
-#endif
-  }
-
-  // blueprint_connect_pins: Connect two pins between nodes
-  if (CleanAction.Equals(TEXT("connect_pins"), ESearchCase::IgnoreCase)) {
-#if WITH_EDITOR && MCP_HAS_EDGRAPH_SCHEMA_K2
-    FString Path = ResolveBlueprintRequestedPath();
-    if (Path.IsEmpty()) {
-      SendAutomationResponse(
-          RequestingSocket, RequestId, false,
-          TEXT("blueprint_connect_pins requires a blueprint path."), nullptr,
-          TEXT("INVALID_BLUEPRINT_PATH"));
-      return true;
-    }
-
-    FString SourceNodeGuid, TargetNodeGuid;
-    LocalPayload->TryGetStringField(TEXT("sourceNodeGuid"), SourceNodeGuid);
-    LocalPayload->TryGetStringField(TEXT("targetNodeGuid"), TargetNodeGuid);
-
-    if (SourceNodeGuid.IsEmpty() || TargetNodeGuid.IsEmpty()) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("sourceNodeGuid and targetNodeGuid required"),
-                             nullptr, TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-
-    FString SourcePinName, TargetPinName;
-    LocalPayload->TryGetStringField(TEXT("sourcePinName"), SourcePinName);
-    LocalPayload->TryGetStringField(TEXT("targetPinName"), TargetPinName);
-
-    if (GBlueprintBusySet.Contains(Path)) {
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Blueprint is busy"), nullptr,
-                             TEXT("BLUEPRINT_BUSY"));
-      return true;
-    }
-
-    GBlueprintBusySet.Add(Path);
-    ON_SCOPE_EXIT {
-      if (GBlueprintBusySet.Contains(Path)) {
-        GBlueprintBusySet.Remove(Path);
-      }
-    };
-
-    FString Normalized;
-    FString LoadErr;
-    UBlueprint *BP = LoadBlueprintAsset(Path, Normalized, LoadErr);
-    if (!BP) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(TEXT("error"), LoadErr);
-      SendAutomationResponse(RequestingSocket, RequestId, false, LoadErr,
-                             Result, TEXT("BLUEPRINT_NOT_FOUND"));
-      return true;
-    }
-
-    const FString RegistryKey = Normalized.IsEmpty() ? Path : Normalized;
-    UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
-           TEXT("HandleBlueprintAction: blueprint_connect_pins begin Path=%s"),
-           *RegistryKey);
-
-    UEdGraphNode *SourceNode = nullptr;
-    UEdGraphNode *TargetNode = nullptr;
-    FGuid SourceGuid, TargetGuid;
-    FGuid::Parse(SourceNodeGuid, SourceGuid);
-    FGuid::Parse(TargetNodeGuid, TargetGuid);
-
-    for (UEdGraph *Graph : BP->UbergraphPages) {
-      if (!Graph)
-        continue;
-      for (UEdGraphNode *Node : Graph->Nodes) {
-        if (!Node)
-          continue;
-        if (Node->NodeGuid == SourceGuid)
-          SourceNode = Node;
-        if (Node->NodeGuid == TargetGuid)
-          TargetNode = Node;
-      }
-    }
-
-    if (!SourceNode || !TargetNode) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(
-          TEXT("error"), TEXT("Could not find source or target node by GUID"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Node lookup failed"), Result,
-                             TEXT("NODE_NOT_FOUND"));
-      return true;
-    }
-
-    UEdGraphPin *SourcePin = nullptr;
-    UEdGraphPin *TargetPin = nullptr;
-
-    auto ResolvePin =
-        [](UEdGraphNode *Node, const FString &PreferredName,
-           EEdGraphPinDirection DesiredDirection) -> UEdGraphPin * {
-      if (!Node)
-        return nullptr;
-      if (!PreferredName.IsEmpty()) {
-        for (UEdGraphPin *Pin : Node->Pins) {
-          if (Pin &&
-              Pin->GetName().Equals(PreferredName, ESearchCase::IgnoreCase)) {
-            return Pin;
-          }
-        }
-      }
-      for (UEdGraphPin *Pin : Node->Pins) {
-        if (Pin && Pin->Direction == DesiredDirection) {
-          return Pin;
-        }
-      }
-      return nullptr;
-    };
-
-    SourcePin = ResolvePin(SourceNode, SourcePinName, EGPD_Output);
-    TargetPin = ResolvePin(TargetNode, TargetPinName, EGPD_Input);
-
-    if (!SourcePin || !TargetPin) {
-      TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-      Result->SetStringField(TEXT("error"),
-                             TEXT("Could not find source or target pin"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Pin lookup failed"), Result,
-                             TEXT("PIN_NOT_FOUND"));
-      return true;
-    }
-
-    BP->Modify();
-    SourceNode->GetGraph()->Modify();
-
-    const UEdGraphSchema_K2 *Schema =
-        Cast<UEdGraphSchema_K2>(SourceNode->GetGraph()->GetSchema());
-    bool bSuccess = false;
-    if (Schema) {
-      bSuccess = Schema->TryCreateConnection(SourcePin, TargetPin);
-      if (bSuccess) {
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-      }
-    }
-
-    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
-    Result->SetBoolField(TEXT("success"), bSuccess);
-    Result->SetStringField(TEXT("blueprintPath"), RegistryKey);
-    Result->SetStringField(TEXT("sourcePinName"), SourcePin->GetName());
-    Result->SetStringField(TEXT("targetPinName"), TargetPin->GetName());
-
-    if (!bSuccess) {
-      Result->SetStringField(TEXT("error"),
-                             Schema ? TEXT("Schema rejected connection")
-                                    : TEXT("Invalid graph schema"));
-      SendAutomationResponse(RequestingSocket, RequestId, false,
-                             TEXT("Pin connection failed"), Result,
-                             TEXT("CONNECTION_FAILED"));
-      return true;
-    }
-
-    const bool bSaved = SaveLoadedAssetThrottled(BP);
-    Result->SetBoolField(TEXT("saved"), bSaved);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
-                           TEXT("Pin connection complete"), Result, FString());
-    UE_LOG(
-        LogMcpAutomationBridgeSubsystem, Log,
-        TEXT("HandleBlueprintAction: blueprint_connect_pins succeeded Path=%s"),
-        *RegistryKey);
-    return true;
-#else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("blueprint_connect_pins requires editor build "
-                                "with EdGraphSchema_K2"),
-                           nullptr, TEXT("NOT_AVAILABLE"));
     return true;
 #endif
   }

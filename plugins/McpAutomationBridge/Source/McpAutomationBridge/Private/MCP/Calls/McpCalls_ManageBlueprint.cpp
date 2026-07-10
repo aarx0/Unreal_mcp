@@ -41,9 +41,8 @@ namespace McpCalls::ManageBlueprint
 // manage_sequence sequencePath/bindingGuid/animSequencePath/startTime — and the
 // stale top-level facade param attachTo (only read inside modify_scs 'operations'
 // items). Added the handler-read aliases the facade lacked: candidates (legacy
-// alias of blueprintCandidates), the SCS snake_case aliases, and source/
-// targetNodeGuid. The five zero-param actions (bind_*/create_property_binding)
-// author nothing.
+// alias of blueprintCandidates) and the SCS snake_case aliases. The five
+// zero-param actions (bind_*/create_property_binding) author nothing.
 
 // Core (HandleBlueprintAction, Action arg "manage_blueprint")
 
@@ -470,9 +469,7 @@ static void S_ConnectPins(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .String(TEXT("sourceNodeGuid"), TEXT("connect_pins: source node GUID (alias of sourceNodeId)."))
-	 .String(TEXT("targetNodeGuid"), TEXT("connect_pins: target node GUID (alias of targetNodeId)."))
-	 .Required({TEXT("assetPath"), TEXT("blueprintPath"), TEXT("sourceNodeId"), TEXT("sourcePinName"), TEXT("targetNodeId"), TEXT("targetPinName"), TEXT("sourceNodeGuid"), TEXT("targetNodeGuid")});
+	 .Required({TEXT("assetPath"), TEXT("blueprintPath"), TEXT("sourceNodeId"), TEXT("sourcePinName"), TEXT("targetNodeId"), TEXT("targetPinName")});
 }
 
 static void S_BreakPinLinks(FMcpSchemaBuilder& B)
