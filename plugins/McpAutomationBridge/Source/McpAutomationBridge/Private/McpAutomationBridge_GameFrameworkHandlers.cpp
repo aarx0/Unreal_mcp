@@ -49,6 +49,7 @@
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
+#include "McpResponseHelpers.h"
 #include "Misc/EngineVersionComparison.h"
 
 #if WITH_EDITOR
@@ -1302,47 +1303,41 @@ bool UMcpAutomationBridgeSubsystem::HandleGameFrameworkConfigureGameRules(
         return true;
     }
 
-    // Configure game rules via reflection
-    bool bModified = false;
+    McpHandlerUtils::FMcpWriteReport Report;
 
-    // Note: These properties may not exist on AGameModeBase, only on AGameMode
-    // We'll try to set them if they exist
-    
     if (Payload->HasField(TEXT("bDelayedStart")))
     {
         FBoolProperty* Prop = CastField<FBoolProperty>(BP->GeneratedClass->FindPropertyByName(TEXT("bDelayedStart")));
         if (Prop)
         {
             Prop->SetPropertyValue_InContainer(CDO, GetBoolField(Payload, TEXT("bDelayedStart")));
-            bModified = true;
+            Report.MarkApplied(TEXT("bDelayedStart"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("bDelayedStart"), TEXT("property not found on GameMode class (exists on AGameMode, not AGameModeBase)"));
         }
     }
 
     if (Payload->HasField(TEXT("startPlayersNeeded")))
     {
-        SendAutomationError(Socket, RequestId,
-            TEXT("startPlayersNeeded is not a native GameMode property and is not implemented as a generated Blueprint variable."),
-            TEXT("UNSUPPORTED_FIELD"));
-        return true;
+        Report.MarkFailed(TEXT("startPlayersNeeded"), TEXT("not a native GameMode property and not implemented as a generated Blueprint variable"));
     }
 
-    if (bModified)
+    if (Report.AnyApplied())
     {
         CDO->MarkPackageDirty();
         McpSafeCompileBlueprint(BP);
-    }
-
-    if (bSave)
-    {
-        McpSafeAssetSave(BP);
+        if (bSave)
+        {
+            McpSafeAssetSave(BP);
+        }
     }
 
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
-    Response->SetBoolField(TEXT("success"), true);
-    Response->SetStringField(TEXT("message"), TEXT("Configured game rules"));
     Response->SetStringField(TEXT("blueprintPath"), BP->GetPathName());
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Success"), Response);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Response,
+        TEXT("Configured game rules"), nullptr);
 #endif // WITH_EDITOR
 }
 

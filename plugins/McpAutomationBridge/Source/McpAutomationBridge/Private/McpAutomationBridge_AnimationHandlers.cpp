@@ -43,6 +43,7 @@
 
 #include "McpVersionCompatibility.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
@@ -1738,6 +1739,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
           return false;
         };
 
+        McpHandlerUtils::FMcpWriteReport Report;
+
         int32 ConfiguredWheels = 0;
         const TArray<TSharedPtr<FJsonValue>> *WheelsArray = nullptr;
         if (Payload->TryGetArrayField(TEXT("wheels"), WheelsArray) &&
@@ -1836,7 +1839,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
 
               ++ConfiguredWheels;
             }
+            Report.MarkApplied(TEXT("wheels"));
+          } else {
+            Report.MarkFailed(TEXT("wheels"), TEXT("WheelSetups property not found on vehicle movement component"));
           }
+        } else if (Payload->HasField(TEXT("wheels"))) {
+          Report.MarkFailed(TEXT("wheels"), TEXT("must be an array"));
         }
 
         const TSharedPtr<FJsonObject> *EngineObj = nullptr;
@@ -1872,6 +1880,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
                 {TEXT("NumForwardGears"), TEXT("ForwardGearCount")},
                 EngineGears);
           }
+          Report.MarkApplied(TEXT("engine"));
+        } else if (Payload->HasField(TEXT("engine"))) {
+          Report.MarkFailed(TEXT("engine"), TEXT("must be an object"));
         }
 
         const TSharedPtr<FJsonObject> *TransmissionObj = nullptr;
@@ -1904,6 +1915,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
               ConfigureForwardGearRatios(VehicleMC, Ratios);
             }
           }
+          Report.MarkApplied(TEXT("transmission"));
+        } else if (Payload->HasField(TEXT("transmission"))) {
+          Report.MarkFailed(TEXT("transmission"), TEXT("must be an object"));
         }
 
         double Mass = 0.0;
@@ -1916,6 +1930,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
             PrimitiveRoot->SetMassOverrideInKg(NAME_None,
                                                static_cast<float>(Mass), true);
           }
+          Report.MarkApplied(TEXT("mass"));
+        } else if (Payload->HasField(TEXT("mass"))) {
+          Report.MarkFailed(TEXT("mass"), TEXT("must be a number greater than 0"));
         }
 
         double DragCoefficient = 0.0;
@@ -1935,13 +1952,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
                   Cast<UPrimitiveComponent>(TargetActor->GetRootComponent())) {
             PrimitiveRoot->SetLinearDamping(static_cast<float>(DragCoefficient));
           }
+          Report.MarkApplied(TEXT("dragCoefficient"));
+        } else if (Payload->HasField(TEXT("dragCoefficient"))) {
+          Report.MarkFailed(TEXT("dragCoefficient"), TEXT("must be a number"));
         }
 
-        VehicleMC->RecreatePhysicsState();
+        if (Report.AnyApplied()) {
+          VehicleMC->RecreatePhysicsState();
+        }
 
-        bSuccess = true;
-        Message = FString::Printf(
-            TEXT("Vehicle physics configured for actor '%s'"), *ActorName);
         Resp->SetStringField(TEXT("actorName"), ActorName);
         Resp->SetStringField(TEXT("vehicleType"), VehicleType);
         Resp->SetBoolField(TEXT("createdMovementComponent"), bCreatedComponent);
@@ -1952,6 +1971,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAnimPhysConfigureVehicle(
 #else
         Resp->SetBoolField(TEXT("chaosVehicleHeadersAvailable"), false);
 #endif
+
+        return SendWriteReportResponse(
+            this, RequestingSocket, RequestId, Report, Resp,
+            FString::Printf(TEXT("Vehicle physics configured for actor '%s'"),
+                            *ActorName),
+            nullptr);
       }
     }
 #else

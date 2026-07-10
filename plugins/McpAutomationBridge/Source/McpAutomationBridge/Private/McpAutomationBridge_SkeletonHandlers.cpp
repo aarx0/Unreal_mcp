@@ -51,6 +51,7 @@
 // MCP Core
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 
@@ -655,44 +656,75 @@ bool UMcpAutomationBridgeSubsystem::HandleConfigureSocket(
         return true;
     }
 
-    // Update properties
-    FString NewBoneName = GetJsonStringField(Payload, TEXT("attachBoneName"));
-    if (!NewBoneName.IsEmpty())
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    if (Payload->HasField(TEXT("attachBoneName")))
     {
-        Socket->BoneName = FName(*NewBoneName);
+        FString NewBoneName = GetJsonStringField(Payload, TEXT("attachBoneName"));
+        if (!NewBoneName.IsEmpty())
+        {
+            Socket->BoneName = FName(*NewBoneName);
+            Report.MarkApplied(TEXT("attachBoneName"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("attachBoneName"), TEXT("must be a non-empty string"));
+        }
     }
 
     if (Payload->HasField(TEXT("relativeLocation")))
     {
-        Socket->RelativeLocation = ParseVectorFromJson(Payload, TEXT("relativeLocation"));
+        const TSharedPtr<FJsonObject>* LocObj;
+        if (Payload->TryGetObjectField(TEXT("relativeLocation"), LocObj))
+        {
+            Socket->RelativeLocation = ParseVectorFromJson(Payload, TEXT("relativeLocation"));
+            Report.MarkApplied(TEXT("relativeLocation"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("relativeLocation"), TEXT("must be an object with x/y/z"));
+        }
     }
 
     if (Payload->HasField(TEXT("relativeRotation")))
     {
-        Socket->RelativeRotation = ParseRotatorFromJson(Payload, TEXT("relativeRotation"));
+        const TSharedPtr<FJsonObject>* RotObj;
+        if (Payload->TryGetObjectField(TEXT("relativeRotation"), RotObj))
+        {
+            Socket->RelativeRotation = ParseRotatorFromJson(Payload, TEXT("relativeRotation"));
+            Report.MarkApplied(TEXT("relativeRotation"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("relativeRotation"), TEXT("must be an object with pitch/yaw/roll"));
+        }
     }
 
     if (Payload->HasField(TEXT("relativeScale")))
     {
-        Socket->RelativeScale = ParseVectorFromJson(Payload, TEXT("relativeScale"), FVector::OneVector);
+        const TSharedPtr<FJsonObject>* ScaleObj;
+        if (Payload->TryGetObjectField(TEXT("relativeScale"), ScaleObj))
+        {
+            Socket->RelativeScale = ParseVectorFromJson(Payload, TEXT("relativeScale"), FVector::OneVector);
+            Report.MarkApplied(TEXT("relativeScale"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("relativeScale"), TEXT("must be an object with x/y/z"));
+        }
     }
 
-    McpSafeAssetSave(Skeleton);
-
-    // Save if requested
-    bool bSave = false;
-    Payload->TryGetBoolField(TEXT("save"), bSave);
-    if (bSave)
+    if (Report.AnyApplied())
     {
+        McpSafeAssetSave(Skeleton);
     }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("socketName"), SocketName);
     Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
-        FString::Printf(TEXT("Socket '%s' configured"), *SocketName), Result);
-    return true;
+    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+        FString::Printf(TEXT("Socket '%s' configured"), *SocketName), nullptr);
 }
 
 /**
