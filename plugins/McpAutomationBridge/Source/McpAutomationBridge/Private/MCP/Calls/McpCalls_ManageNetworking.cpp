@@ -8,7 +8,7 @@
 // delegates to the subsystem member handlers — HandleNetworking*
 // (NetworkingHandlers.cpp) for the 27 core actions, HandleGameFramework*
 // (GameFrameworkHandlers.cpp) for the 20 game-framework actions, HandleSessions*
-// (SessionsHandlers.cpp) for the 16 session actions — until the module split
+// (SessionsHandlers.cpp) for the 6 session actions — until the module split
 // de-members those bodies. The 9 Enhanced Input actions split out into
 // manage_input (MCP/Calls/McpCalls_ManageInput.cpp).
 #include "MCP/Calls/McpCalls.h"
@@ -464,18 +464,6 @@ static void S_GetGameFrameworkInfo(FMcpSchemaBuilder& B)
 }
 
 // Sessions (SessionsHandlers.cpp)
-
-
-
-static void S_SetSplitScreenType(FMcpSchemaBuilder& B)
-{
-	B.StringEnum(TEXT("splitScreenType"), {
-		TEXT("None"), TEXT("TwoPlayer_Horizontal"), TEXT("TwoPlayer_Vertical"),
-		TEXT("ThreePlayer_FavorTop"), TEXT("ThreePlayer_FavorBottom"), TEXT("FourPlayer_Grid")
-	 }, TEXT("configure_split_screen / set_split_screen_type: split-screen layout."))
-	 .Required({TEXT("splitScreenType")});
-}
-
 static void S_AddLocalPlayer(FMcpSchemaBuilder& B)
 {
 	B.Number(TEXT("controllerId"), TEXT("add_local_player: controller id for the new local player."))
@@ -493,19 +481,10 @@ static void S_HostLanServer(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("serverName"), TEXT("host_lan_server: display name for the hosted server."))
 	 .String(TEXT("mapName"), TEXT("host_lan_server: map to travel to when hosting."))
-	 .Integer(TEXT("maxPlayers"), TEXT("configure_local_session_settings / host_lan_server: max player count (default 4)."))
-	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
+	 .Integer(TEXT("maxPlayers"), TEXT("host_lan_server: max player count (default 4)."))
+	 .String(TEXT("travelOptions"), TEXT("host_lan_server: extra URL options appended to the travel string."))
 	 .Bool(TEXT("executeTravel"), TEXT("host_lan_server: actually perform ServerTravel instead of just building the URL (default false)."))
 	 .Required({TEXT("mapName")});
-}
-
-static void S_JoinLanServer(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("serverAddress"), TEXT("join_lan_server: address of the LAN server to connect to."))
-	 .Integer(TEXT("serverPort"), TEXT("configure_lan_play / join_lan_server: port number (default 7777)."))
-	 .String(TEXT("serverPassword"), TEXT("configure_lan_play / join_lan_server: LAN server password."))
-	 .String(TEXT("travelOptions"), TEXT("host_lan_server / join_lan_server: extra URL options appended to the travel string."))
-	 .Required({TEXT("serverAddress")});
 }
 
 static void S_EnableVoiceChat(FMcpSchemaBuilder& B)
@@ -514,15 +493,6 @@ static void S_EnableVoiceChat(FMcpSchemaBuilder& B)
 	 .Required({TEXT("voiceEnabled")});
 }
 
-
-static void S_SetVoiceChannel(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("channelName"), TEXT("set_voice_channel: voice channel name."))
-	 .StringEnum(TEXT("channelType"), {
-		TEXT("Team"), TEXT("Global"), TEXT("Proximity"), TEXT("Party")
-	 }, TEXT("set_voice_channel: channel type (default Global)."))
-	 .Required({TEXT("channelName")});
-}
 
 static void S_MutePlayer(FMcpSchemaBuilder& B)
 {
@@ -533,31 +503,17 @@ static void S_MutePlayer(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("systemWide"), TEXT("mute_player: apply the mute system-wide rather than just locally."));
 }
 
-static void S_SetVoiceAttenuation(FMcpSchemaBuilder& B)
-{
-	B.Number(TEXT("attenuationRadius"), TEXT("set_voice_attenuation: distance at which voice starts attenuating (default 2000)."))
-	 .Number(TEXT("attenuationFalloff"), TEXT("set_voice_attenuation: falloff curve exponent, 0.1-10.0 (default 1.0)."))
-	 .Required({TEXT("attenuationRadius")});
-}
-
-
 static void S_GetSessionsInfo(FMcpSchemaBuilder&) {}
 
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // Flags are authored per action and deliberately mixed. RequiresEditor on
-// the 36 GameFramework/Sessions actions — those two chains were
+// the GameFramework/Sessions actions — those two chains were
 // whole-editor-gated and the members answer their editor-build stubs in
-// non-editor builds; NOT on the 27 core networking actions —
+// non-editor builds; NOT on the core networking actions —
 // NetworkingHandlers.cpp carries no editor gate, and flagging them would
 // newly reject GEditor-less runs the shim served (the world-dependent
 // bodies keep their handler-enforced NO_WORLD errors). Mutating on the
-// writers only. Nine actions parse and acknowledge without writing
-// anything and stay unflagged alongside the readers: the nine Sessions
-// echoes (configure_local_session_settings, configure_session_interface,
-// set_split_screen_type, configure_lan_play, join_lan_server — builds the
-// travel URL but never travels — configure_voice_settings,
-// set_voice_channel, set_voice_attenuation, configure_push_to_talk);
-// deepen-or-retire is TODO'd for Aaron. The readers are check_has_authority,
+// writers only. The readers are check_has_authority,
 // check_is_locally_controlled, get_info, get_game_framework_info, and
 // get_sessions_info.
 
@@ -638,15 +594,11 @@ MCP_NW_CALL(ConfigureSpectating, "configure_spectating", McpHandlers::Networking
 MCP_NW_CALL(GetGameFrameworkInfo, "get_game_framework_info", McpHandlers::Networking::HandleGameFrameworkGetGameFrameworkInfo, EMcpCallFlags::RequiresEditor)
 
 // Sessions (SessionsHandlers.cpp)
-MCP_NW_CALL(SetSplitScreenType, "set_split_screen_type", McpHandlers::Networking::HandleSessionsSetSplitScreenType, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(AddLocalPlayer, "add_local_player", McpHandlers::Networking::HandleSessionsAddLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(RemoveLocalPlayer, "remove_local_player", McpHandlers::Networking::HandleSessionsRemoveLocalPlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_NW_CALL(HostLanServer, "host_lan_server", McpHandlers::Networking::HandleSessionsHostLanServer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(JoinLanServer, "join_lan_server", McpHandlers::Networking::HandleSessionsJoinLanServer, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(EnableVoiceChat, "enable_voice_chat", McpHandlers::Networking::HandleSessionsEnableVoiceChat, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetVoiceChannel, "set_voice_channel", McpHandlers::Networking::HandleSessionsSetVoiceChannel, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(MutePlayer, "mute_player", McpHandlers::Networking::HandleSessionsMutePlayer, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_NW_CALL(SetVoiceAttenuation, "set_voice_attenuation", McpHandlers::Networking::HandleSessionsSetVoiceAttenuation, EMcpCallFlags::RequiresEditor)
 MCP_NW_CALL(GetSessionsInfo, "get_sessions_info", McpHandlers::Networking::HandleSessionsGetSessionsInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_NW_CALL
@@ -698,14 +650,10 @@ void McpRegisterManageNetworkingCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetRespawnRules>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_ConfigureSpectating>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetGameFrameworkInfo>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetSplitScreenType>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_AddLocalPlayer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_RemoveLocalPlayer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_HostLanServer>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_JoinLanServer>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_EnableVoiceChat>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetVoiceChannel>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_MutePlayer>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_SetVoiceAttenuation>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageNetworking_GetSessionsInfo>());
 }

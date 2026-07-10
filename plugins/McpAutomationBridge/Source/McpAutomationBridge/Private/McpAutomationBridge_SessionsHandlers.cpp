@@ -4,30 +4,17 @@
 // Session Management and Multiplayer Handlers for MCP Automation Bridge.
 //
 // This file implements the following handlers:
-// - manage_sessions (main dispatcher)
-//
-// Session Management:
-//   - configure_local_session_settings
-//   - configure_session_interface
 //
 // Local Multiplayer:
-//   - configure_split_screen
-//   - set_split_screen_type
 //   - add_local_player
 //   - remove_local_player
 //
 // LAN:
-//   - configure_lan_play
 //   - host_lan_server
-//   - join_lan_server
 //
 // Voice Chat:
 //   - enable_voice_chat
-//   - configure_voice_settings
-//   - set_voice_channel
 //   - mute_player
-//   - set_voice_attenuation
-//   - configure_push_to_talk
 //
 // Utility:
 //   - get_sessions_info
@@ -171,49 +158,6 @@ namespace SessionsHelpers
 // Local Multiplayer Actions
 // ============================================================================
 
-
-static bool HandleSetSplitScreenType(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require splitScreenType parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("splitScreenType")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("splitScreenType is required. Valid types: None, TwoPlayer_Horizontal, TwoPlayer_Vertical, ThreePlayer_FavorTop, ThreePlayer_FavorBottom, FourPlayer_Grid"), nullptr);
-        return true;
-    }
-
-    FString SplitScreenType = GetJsonStringField(Payload, TEXT("splitScreenType"), TEXT("TwoPlayer_Horizontal"));
-
-    // Validate split screen type
-    TArray<FString> ValidTypes = {
-        TEXT("None"),
-        TEXT("TwoPlayer_Horizontal"),
-        TEXT("TwoPlayer_Vertical"),
-        TEXT("ThreePlayer_FavorTop"),
-        TEXT("ThreePlayer_FavorBottom"),
-        TEXT("FourPlayer_Grid")
-    };
-
-    if (!ValidTypes.Contains(SplitScreenType))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Invalid split-screen type: %s"), *SplitScreenType), nullptr);
-        return true;  // Return true: request was handled (error response sent)
-    }
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("splitScreenType"), SplitScreenType);
-
-    FString Message = FString::Printf(TEXT("Split-screen type set to: %s"), *SplitScreenType);
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 static bool HandleAddLocalPlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
@@ -410,46 +354,6 @@ static bool HandleHostLanServer(
     return true;
 }
 
-static bool HandleJoinLanServer(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    FString ServerAddress = GetJsonStringField(Payload, TEXT("serverAddress"), TEXT(""));
-    int32 ServerPort = static_cast<int32>(GetJsonNumberField(Payload, TEXT("serverPort"), 7777));
-    FString ServerPassword = GetJsonStringField(Payload, TEXT("serverPassword"), TEXT(""));
-    FString TravelOptions = GetJsonStringField(Payload, TEXT("travelOptions"), TEXT(""));
-
-    if (ServerAddress.IsEmpty())
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("serverAddress is required to join a LAN server"), nullptr);
-        return true;  // Return true: request was handled (error response sent)
-    }
-
-    // Build connection string
-    FString ConnectionString = FString::Printf(TEXT("%s:%d"), *ServerAddress, ServerPort);
-    if (!ServerPassword.IsEmpty())
-    {
-        TravelOptions += FString::Printf(TEXT("?Password=%s"), *ServerPassword);
-    }
-    FString FullURL = ConnectionString + TravelOptions;
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("serverAddress"), ConnectionString);
-    ResponseJson->SetStringField(TEXT("connectionURL"), FullURL);
-    ResponseJson->SetStringField(TEXT("status"), TEXT("configured"));
-
-    FString Message = FString::Printf(TEXT("Configured to join LAN server at %s. Use ClientTravel to connect."),
-        *ConnectionString);
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
-
 // ============================================================================
 // Voice Chat Actions
 // ============================================================================
@@ -564,43 +468,6 @@ static bool HandleEnableVoiceChat(
     return true;
 }
 
-
-static bool HandleSetVoiceChannel(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require channelName parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("channelName")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("channelName is required. Optionally provide channelType (Team, Global, Proximity, Party)"), nullptr);
-        return true;
-    }
-
-    FString ChannelName = GetJsonStringField(Payload, TEXT("channelName"), TEXT("Default"));
-    FString ChannelType = GetJsonStringField(Payload, TEXT("channelType"), TEXT("Global"));
-
-    // Validate channel type
-    TArray<FString> ValidTypes = { TEXT("Team"), TEXT("Global"), TEXT("Proximity"), TEXT("Party") };
-    if (!ValidTypes.Contains(ChannelType))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            FString::Printf(TEXT("Invalid voice channel type: %s. Valid types: Team, Global, Proximity, Party"), *ChannelType), nullptr);
-        return true;  // Return true: request was handled (error response sent)
-    }
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetStringField(TEXT("channelName"), ChannelName);
-    ResponseJson->SetStringField(TEXT("channelType"), ChannelType);
-
-    FString Message = FString::Printf(TEXT("Voice channel '%s' set with type: %s"), *ChannelName, *ChannelType);
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
 
 static bool HandleMutePlayer(
     UMcpAutomationBridgeSubsystem* Subsystem,
@@ -780,41 +647,6 @@ static bool HandleMutePlayer(
     return true;
 }
 
-static bool HandleSetVoiceAttenuation(
-    UMcpAutomationBridgeSubsystem* Subsystem,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-    using namespace SessionsHelpers;
-
-    // VALIDATION: Require attenuationRadius parameter
-    if (!Payload.IsValid() || !Payload->HasField(TEXT("attenuationRadius")))
-    {
-        Subsystem->SendAutomationResponse(Socket, RequestId, false,
-            TEXT("attenuationRadius is required. Optionally provide attenuationFalloff (0.1-10.0)"), nullptr);
-        return true;
-    }
-
-    double AttenuationRadius = GetJsonNumberField(Payload, TEXT("attenuationRadius"), 2000.0);
-    double AttenuationFalloff = GetJsonNumberField(Payload, TEXT("attenuationFalloff"), 1.0);
-
-    // Clamp values to reasonable ranges
-    AttenuationRadius = FMath::Max(AttenuationRadius, 0.0);
-    AttenuationFalloff = FMath::Clamp(AttenuationFalloff, 0.1, 10.0);
-
-    TSharedPtr<FJsonObject> ResponseJson = McpHandlerUtils::CreateResultObject();
-    ResponseJson->SetNumberField(TEXT("attenuationRadius"), AttenuationRadius);
-    ResponseJson->SetNumberField(TEXT("attenuationFalloff"), AttenuationFalloff);
-
-    FString Message = FString::Printf(TEXT("Voice attenuation configured: radius=%.0f, falloff=%.2f"),
-        AttenuationRadius, AttenuationFalloff);
-
-    Subsystem->SendAutomationResponse(Socket, RequestId, true, Message, ResponseJson);
-    return true;
-}
-
-
 // ============================================================================
 // Utility Actions
 // ============================================================================
@@ -872,27 +704,6 @@ static bool HandleGetSessionsInfo(
 // member here wraps one advertised action's dedicated handler above,
 // replicating the retired chain's editor-build stub.
 
-// configure_local_session_settings
-
-// configure_session_interface
-
-// configure_split_screen
-
-// set_split_screen_type
-bool McpHandlers::Networking::HandleSessionsSetSplitScreenType(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleSetSplitScreenType(&S, RequestId, Payload, Socket);
-#else
-    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
-
 // add_local_player
 bool McpHandlers::Networking::HandleSessionsAddLocalPlayer(
     UMcpAutomationBridgeSubsystem& S,
@@ -923,8 +734,6 @@ bool McpHandlers::Networking::HandleSessionsRemoveLocalPlayer(
 #endif
 }
 
-// configure_lan_play
-
 // host_lan_server
 bool McpHandlers::Networking::HandleSessionsHostLanServer(
     UMcpAutomationBridgeSubsystem& S,
@@ -934,21 +743,6 @@ bool McpHandlers::Networking::HandleSessionsHostLanServer(
 {
 #if WITH_EDITOR
     return HandleHostLanServer(&S, RequestId, Payload, Socket);
-#else
-    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
-
-// join_lan_server
-bool McpHandlers::Networking::HandleSessionsJoinLanServer(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleJoinLanServer(&S, RequestId, Payload, Socket);
 #else
     S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
     return true;  // Return true: request was handled (error response sent)
@@ -970,23 +764,6 @@ bool McpHandlers::Networking::HandleSessionsEnableVoiceChat(
 #endif
 }
 
-// configure_voice_settings
-
-// set_voice_channel
-bool McpHandlers::Networking::HandleSessionsSetVoiceChannel(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleSetVoiceChannel(&S, RequestId, Payload, Socket);
-#else
-    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
-
 // mute_player
 bool McpHandlers::Networking::HandleSessionsMutePlayer(
     UMcpAutomationBridgeSubsystem& S,
@@ -1001,23 +778,6 @@ bool McpHandlers::Networking::HandleSessionsMutePlayer(
     return true;  // Return true: request was handled (error response sent)
 #endif
 }
-
-// set_voice_attenuation
-bool McpHandlers::Networking::HandleSessionsSetVoiceAttenuation(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString& RequestId,
-    const TSharedPtr<FJsonObject>& Payload,
-    FMcpResponseHandle Socket)
-{
-#if WITH_EDITOR
-    return HandleSetVoiceAttenuation(&S, RequestId, Payload, Socket);
-#else
-    S.SendAutomationResponse(Socket, RequestId, false, TEXT("manage_sessions requires editor build"), nullptr);
-    return true;  // Return true: request was handled (error response sent)
-#endif
-}
-
-// configure_push_to_talk
 
 // get_sessions_info
 bool McpHandlers::Networking::HandleSessionsGetSessionsInfo(

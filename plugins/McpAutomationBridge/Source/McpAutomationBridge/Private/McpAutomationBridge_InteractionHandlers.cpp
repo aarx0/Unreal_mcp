@@ -1993,36 +1993,6 @@ bool McpHandlers::Interaction::HandleInteractionCreateTriggerActor(
 
 // ===========================================================================
 
-/**
- * configure_destruction_levels
- * -----------------------------
- * Configures destruction levels on an actor.
- */
-
-/**
- * configure_destruction_effects
- * -------------------------------
- * Configures destruction effects on an actor.
- */
-
-/**
- * configure_destruction_damage
- * -----------------------------
- * Configures destruction damage on an actor.
- */
-
-/**
- * configure_trigger_filter
- * -------------------------
- * Configures trigger filter on a Blueprint.
- */
-
-/**
- * configure_trigger_response
- * ----------------------------
- * Configures trigger response on a Blueprint.
- */
-
 // Section 5: Utility Handlers
 // ===========================================================================
 

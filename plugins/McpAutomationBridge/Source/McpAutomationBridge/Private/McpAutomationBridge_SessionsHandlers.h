@@ -16,23 +16,15 @@ class UMcpAutomationBridgeSubsystem;
 
 namespace McpHandlers::Networking
 {
-bool HandleSessionsSetSplitScreenType(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsAddLocalPlayer(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsRemoveLocalPlayer(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsHostLanServer(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
-bool HandleSessionsJoinLanServer(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsEnableVoiceChat(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
-bool HandleSessionsSetVoiceChannel(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsMutePlayer(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
-bool HandleSessionsSetVoiceAttenuation(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSessionsGetSessionsInfo(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);

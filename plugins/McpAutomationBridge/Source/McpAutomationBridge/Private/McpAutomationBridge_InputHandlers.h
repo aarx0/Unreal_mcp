@@ -26,10 +26,6 @@ bool HandleInputSetInputTrigger(UMcpAutomationBridgeSubsystem& S, const FString&
                                         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleInputSetInputModifier(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                                         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
-bool HandleInputEnableInputMapping(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-                                        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
-bool HandleInputDisableInputAction(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
-                                        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleInputGetInputInfo(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                                         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 

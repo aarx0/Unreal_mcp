@@ -304,7 +304,7 @@ inline const TArray<FString>& AnimationPhysicsCore()
 		TEXT("setup_ik"), TEXT("create_pose_library"),
 		TEXT("create_animation_asset"), TEXT("play_montage"),
 		
-		TEXT("activate_ragdoll"), TEXT("configure_vehicle"),
+		TEXT("setup_ragdoll"), TEXT("activate_ragdoll"), TEXT("configure_vehicle"),
 		TEXT("setup_physics_simulation"), TEXT("setup_retargeting"),
 		TEXT("cleanup")
 	};
@@ -500,7 +500,6 @@ inline const TArray<FString>& Input()
 		TEXT("create_input_action"), TEXT("create_input_mapping_context"),
 		TEXT("add_mapping"), TEXT("remove_mapping"),
 		TEXT("set_input_trigger"), TEXT("set_input_modifier"),
-		TEXT("enable_input_mapping"), TEXT("disable_input_action"),
 		TEXT("get_info")
 	};
 	return Actions;
@@ -526,15 +525,9 @@ inline const TArray<FString>& GameFramework()
 inline const TArray<FString>& Sessions()
 {
 	static const TArray<FString> Actions = {
-		
-		
-		TEXT("set_split_screen_type"), TEXT("add_local_player"),
-		TEXT("remove_local_player"), 
-		TEXT("host_lan_server"), TEXT("join_lan_server"),
-		TEXT("enable_voice_chat"), 
-		TEXT("set_voice_channel"), TEXT("mute_player"),
-		TEXT("set_voice_attenuation"), 
-		TEXT("get_sessions_info")
+		TEXT("add_local_player"), TEXT("remove_local_player"),
+		TEXT("host_lan_server"), TEXT("enable_voice_chat"),
+		TEXT("mute_player"), TEXT("get_sessions_info")
 	};
 	return Actions;
 }

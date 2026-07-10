@@ -7,7 +7,7 @@
 // validation decl from the same fragment via McpDeriveDecl(), so schema and
 // decl are one source and cannot drift. Run() delegates to the namespaced free
 // handlers (McpHandlers::Input::HandleInput*, McpAutomationBridge_InputHandlers.cpp)
-// for the 9 input actions.
+// for the 7 input actions.
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
@@ -80,19 +80,6 @@ static void S_SetInputModifier(FMcpSchemaBuilder& B)
 	 .Required({TEXT("actionPath"), TEXT("modifierType")});
 }
 
-static void S_EnableInputMapping(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("contextPath"), TEXT("InputMappingContext asset path (add_mapping / remove_mapping)."))
-	 .Integer(TEXT("priority"), TEXT("enable_input_mapping: mapping context priority (default 0)."))
-	 .Required({TEXT("contextPath")});
-}
-
-static void S_DisableInputAction(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("actionPath"), TEXT("InputAction asset path (mappings / triggers)."))
-	 .Required({TEXT("actionPath")});
-}
-
 static void S_GetInputInfo(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Input asset to read (get_info)."))
@@ -103,9 +90,7 @@ static void S_GetInputInfo(FMcpSchemaBuilder& B)
 // Flags are authored per action and carried over verbatim from manage_networking:
 // RequiresEditor on every input action (the chain was whole-editor-gated and the
 // members answer their editor-build stubs in non-editor builds); Mutating on the
-// writers only. enable_input_mapping and disable_input_action parse and
-// acknowledge without writing anything and stay unflagged alongside the reader
-// get_info (was get_input_info).
+// writers only. The reader is get_info (was get_input_info).
 
 #define MCP_MINPUT_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                     \
 class FMcpCall_ManageInput_##ClassSuffix final : public FMcpCall                          \
@@ -131,8 +116,6 @@ MCP_MINPUT_CALL(AddMapping, "add_mapping", McpHandlers::Input::HandleInputAddMap
 MCP_MINPUT_CALL(RemoveMapping, "remove_mapping", McpHandlers::Input::HandleInputRemoveMapping, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MINPUT_CALL(SetInputTrigger, "set_input_trigger", McpHandlers::Input::HandleInputSetInputTrigger, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MINPUT_CALL(SetInputModifier, "set_input_modifier", McpHandlers::Input::HandleInputSetInputModifier, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MINPUT_CALL(EnableInputMapping, "enable_input_mapping", McpHandlers::Input::HandleInputEnableInputMapping, EMcpCallFlags::RequiresEditor)
-MCP_MINPUT_CALL(DisableInputAction, "disable_input_action", McpHandlers::Input::HandleInputDisableInputAction, EMcpCallFlags::RequiresEditor)
 MCP_MINPUT_CALL(GetInputInfo, "get_info", McpHandlers::Input::HandleInputGetInputInfo, EMcpCallFlags::RequiresEditor)
 
 #undef MCP_MINPUT_CALL
@@ -149,7 +132,5 @@ void McpRegisterManageInputCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_RemoveMapping>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_SetInputTrigger>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_SetInputModifier>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_EnableInputMapping>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_DisableInputAction>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageInput_GetInputInfo>());
 }

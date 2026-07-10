@@ -6,10 +6,7 @@
 // folds those fragments and GetDecl() derives the validation decl from the same
 // fragment via McpDeriveDecl(), so schema and decl are one source and cannot
 // drift. Run() delegates to the namespaced free handlers (McpHandlers::Interaction::HandleInteraction*,
-// McpAutomationBridge_InteractionHandlers.cpp). Five of the 22 are shallow
-// scaffolds preserved as-is — the configure_destruction_* marker-tag writers
-// and the configure_trigger_filter/response variable scaffolds; deepening or
-// retiring them is a logged product decision (TODO.md).
+// McpAutomationBridge_InteractionHandlers.cpp).
 #include "MCP/Calls/McpCalls.h"
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
