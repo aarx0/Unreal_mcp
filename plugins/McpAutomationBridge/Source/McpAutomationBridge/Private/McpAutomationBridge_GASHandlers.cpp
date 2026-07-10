@@ -71,6 +71,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
@@ -611,14 +612,12 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
     if (!Blueprint) return true;
 
     FString ComponentName = GetJsonStringField(Payload, TEXT("componentName"), TEXT("AbilitySystemComponent"));
-    FString ReplicationMode = GetJsonStringField(Payload, TEXT("replicationMode"), TEXT("Full"));
-    const FString ReplicationModeToken = NormalizeGASToken(ReplicationMode);
 
     // Find ASC in SCS
     UAbilitySystemComponent* ASCTemplate = nullptr;
     for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
     {
-        if (Node && Node->ComponentTemplate && 
+        if (Node && Node->ComponentTemplate &&
             Node->ComponentTemplate->IsA<UAbilitySystemComponent>())
         {
             if (Node->GetVariableName().ToString() == ComponentName)
@@ -631,34 +630,53 @@ bool UMcpAutomationBridgeSubsystem::HandleGasConfigureAsc(
 
     if (!ASCTemplate)
     {
-        SendAutomationError(Socket, RequestId, 
+        SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("ASC not found: %s"), *ComponentName), TEXT("NOT_FOUND"));
         return true;
     }
 
-    // Configure replication mode
-    if (ReplicationModeToken == TEXT("full"))
+    McpHandlerUtils::FMcpWriteReport Report;
+    const FString ReplicationMode = GetJsonStringField(Payload, TEXT("replicationMode"));
+
+    if (Payload->HasField(TEXT("replicationMode")))
     {
-        ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Full);
-    }
-    else if (ReplicationModeToken == TEXT("mixed"))
-    {
-        ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-    }
-    else if (ReplicationModeToken == TEXT("minimal"))
-    {
-        ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+        const FString ReplicationModeToken = NormalizeGASToken(ReplicationMode);
+        if (ReplicationModeToken == TEXT("full"))
+        {
+            ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Full);
+            Report.MarkApplied(TEXT("replicationMode"));
+        }
+        else if (ReplicationModeToken == TEXT("mixed"))
+        {
+            ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+            Report.MarkApplied(TEXT("replicationMode"));
+        }
+        else if (ReplicationModeToken == TEXT("minimal"))
+        {
+            ASCTemplate->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+            Report.MarkApplied(TEXT("replicationMode"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("replicationMode"),
+                TEXT("unknown replication mode; expected Full, Mixed, or Minimal"));
+        }
     }
 
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
+    if (Report.AnyApplied())
+    {
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("componentName"), ComponentName);
-    Result->SetStringField(TEXT("replicationMode"), ReplicationMode);
-    McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(Socket, RequestId, true, TEXT("ASC configured"), Result);
-    return true;
+    if (Payload->HasField(TEXT("replicationMode")))
+    {
+        Result->SetStringField(TEXT("replicationMode"), ReplicationMode);
+    }
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("ASC configured"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
@@ -1031,9 +1049,6 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
         return true;
     }
 
-    float MinValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("minValue"), 0.0));
-    float MaxValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("maxValue"), 100.0));
-
     UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, Socket);
     if (!Blueprint) return true;
 
@@ -1044,72 +1059,96 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAttributeClamping(
         return true;
     }
 
-    // Add min/max clamping variables for this attribute
-    FString MinVarName = FString::Printf(TEXT("%s_Min"), *AttributeName);
-    FString MaxVarName = FString::Printf(TEXT("%s_Max"), *AttributeName);
+    const bool bHasMin = Payload->HasField(TEXT("minValue"));
+    const bool bHasMax = Payload->HasField(TEXT("maxValue"));
+    const float MinValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("minValue"), 0.0));
+    const float MaxValue = static_cast<float>(GetJsonNumberField(Payload, TEXT("maxValue"), 100.0));
+
+    const FString MinVarName = FString::Printf(TEXT("%s_Min"), *AttributeName);
+    const FString MaxVarName = FString::Printf(TEXT("%s_Max"), *AttributeName);
+    const FString EnableClampVarName = FString::Printf(TEXT("bClamp%s"), *AttributeName);
 
     FEdGraphPinType FloatPinType;
     FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
     FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
 
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*MinVarName), FloatPinType);
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*MaxVarName), FloatPinType);
+    McpHandlerUtils::FMcpWriteReport Report;
 
-    // Set the category for organization
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*MinVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*MaxVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
-
-    // Set default values on the CDO for the min/max variables
-    UAttributeSet* AttrSetCDO = Cast<UAttributeSet>(Blueprint->GeneratedClass->GetDefaultObject());
-    if (AttrSetCDO)
+    if (bHasMin || bHasMax)
     {
-        // Use reflection to set the default values for min/max variables after compile
         Blueprint->Modify();
-        
-        // Set default values via variable descriptions
+    }
+
+    if (bHasMin)
+    {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*MinVarName), FloatPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*MinVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
         for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
         {
             if (VarDesc.VarName == FName(*MinVarName))
             {
                 VarDesc.DefaultValue = FString::SanitizeFloat(MinValue);
+                break;
             }
-            else if (VarDesc.VarName == FName(*MaxVarName))
+        }
+        Report.MarkApplied(TEXT("minValue"));
+    }
+
+    if (bHasMax)
+    {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*MaxVarName), FloatPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*MaxVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == FName(*MaxVarName))
             {
                 VarDesc.DefaultValue = FString::SanitizeFloat(MaxValue);
+                break;
             }
         }
+        Report.MarkApplied(TEXT("maxValue"));
     }
 
-    // Add a boolean to enable/disable clamping at runtime
-    FString EnableClampVarName = FString::Printf(TEXT("bClamp%s"), *AttributeName);
-    FEdGraphPinType BoolPinType;
-    BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*EnableClampVarName), BoolPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*EnableClampVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
-    
-    // Set default to enabled
-    for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+    // The enable-clamp bool and the compile/save belong to the clamping scaffold,
+    // so they run only when at least one bound was actually configured.
+    if (Report.AnyApplied())
     {
-        if (VarDesc.VarName == FName(*EnableClampVarName))
+        FEdGraphPinType BoolPinType;
+        BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(*EnableClampVarName), BoolPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, FName(*EnableClampVarName), nullptr, FText::FromString(TEXT("Attribute Clamping")));
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
         {
-            VarDesc.DefaultValue = TEXT("true");
-            break;
+            if (VarDesc.VarName == FName(*EnableClampVarName))
+            {
+                VarDesc.DefaultValue = TEXT("true");
+                break;
+            }
         }
-    }
 
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
     Result->SetStringField(TEXT("attributeName"), AttributeName);
-    Result->SetNumberField(TEXT("minValue"), MinValue);
-    Result->SetNumberField(TEXT("maxValue"), MaxValue);
-    Result->SetStringField(TEXT("minVariable"), MinVarName);
-    Result->SetStringField(TEXT("maxVariable"), MaxVarName);
-    Result->SetStringField(TEXT("enableClampVariable"), EnableClampVarName);
-    Result->SetStringField(TEXT("message"), TEXT("Clamping variables added. Override PreAttributeChange in Blueprint and use these variables to clamp the attribute value."));
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Attribute clamping configured"), Result);
-    return true;
+    if (bHasMin)
+    {
+        Result->SetNumberField(TEXT("minValue"), MinValue);
+        Result->SetStringField(TEXT("minVariable"), MinVarName);
+    }
+    if (bHasMax)
+    {
+        Result->SetNumberField(TEXT("maxValue"), MaxValue);
+        Result->SetStringField(TEXT("maxVariable"), MaxVarName);
+    }
+    if (Report.AnyApplied())
+    {
+        Result->SetStringField(TEXT("enableClampVariable"), EnableClampVarName);
+        Result->SetStringField(TEXT("message"), TEXT("Clamping variables added. Override PreAttributeChange in Blueprint and use these variables to clamp the attribute value."));
+    }
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Attribute clamping configured"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
@@ -1685,16 +1724,10 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
         return true;
     }
 
-    FString TargetingType = GetGASStringFieldWithFallback(Payload, TEXT("targetingType"), TEXT("targetingMode"), TEXT("self"));
-    float TargetingRange = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("targetingRange"), TEXT("targetRange"), 1000.0));
-    float AOERadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("aoeRadius"), 0.0));
-    bool bRequiresLineOfSight = GetJsonBoolField(Payload, TEXT("requiresLineOfSight"), false);
-    float TargetingAngle = static_cast<float>(GetJsonNumberField(Payload, TEXT("targetingAngle"), 360.0));
-
     UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
     if (!Blueprint || !Blueprint->GeneratedClass)
     {
-        SendAutomationError(Socket, RequestId, 
+        SendAutomationError(Socket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -1706,121 +1739,167 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetAbilityTargeting(
         return true;
     }
 
-    // Add targeting configuration variables based on targeting type
-    
-    // 1. Targeting Type enum-like variable (stored as Name for flexibility)
+    const bool bHasType = Payload->HasField(TEXT("targetingType")) || Payload->HasField(TEXT("targetingMode"));
+    const bool bHasRange = Payload->HasField(TEXT("targetingRange")) || Payload->HasField(TEXT("targetRange"));
+    const bool bHasAoe = Payload->HasField(TEXT("aoeRadius"));
+    const bool bHasLoS = Payload->HasField(TEXT("requiresLineOfSight"));
+    const bool bHasAngle = Payload->HasField(TEXT("targetingAngle"));
+
+    const FString TargetingType = GetGASStringFieldWithFallback(Payload, TEXT("targetingType"), TEXT("targetingMode"), TEXT("self"));
+    const float TargetingRange = static_cast<float>(GetGASNumberFieldWithFallback(Payload, TEXT("targetingRange"), TEXT("targetRange"), 1000.0));
+    const float AOERadius = static_cast<float>(GetJsonNumberField(Payload, TEXT("aoeRadius"), 0.0));
+    const bool bRequiresLineOfSight = GetJsonBoolField(Payload, TEXT("requiresLineOfSight"), false);
+    const float TargetingAngle = static_cast<float>(GetJsonNumberField(Payload, TEXT("targetingAngle"), 360.0));
+
+    McpHandlerUtils::FMcpWriteReport Report;
+    TArray<TSharedPtr<FJsonValue>> VariablesArray;
+
     FEdGraphPinType NamePinType;
     NamePinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingType"), NamePinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingType"), nullptr, FText::FromString(TEXT("Targeting")));
-    
-    // Set the default value
-    for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
-    {
-        if (VarDesc.VarName == TEXT("TargetingType"))
-        {
-            VarDesc.DefaultValue = TargetingType;
-            break;
-        }
-    }
-
-    // 2. Targeting Range
     FEdGraphPinType FloatPinType;
     FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
     FloatPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingRange"), FloatPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingRange"), nullptr, FText::FromString(TEXT("Targeting")));
-    
-    for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
-    {
-        if (VarDesc.VarName == TEXT("TargetingRange"))
-        {
-            VarDesc.DefaultValue = FString::SanitizeFloat(TargetingRange);
-            break;
-        }
-    }
-
-    // 3. Line of Sight requirement
     FEdGraphPinType BoolPinType;
     BoolPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bRequiresLineOfSight"), BoolPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("bRequiresLineOfSight"), nullptr, FText::FromString(TEXT("Targeting")));
-    
-    for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
-    {
-        if (VarDesc.VarName == TEXT("bRequiresLineOfSight"))
-        {
-            VarDesc.DefaultValue = bRequiresLineOfSight ? TEXT("true") : TEXT("false");
-            break;
-        }
-    }
 
-    // 4. Targeting Angle (for cone-based targeting)
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingAngle"), FloatPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingAngle"), nullptr, FText::FromString(TEXT("Targeting")));
-    
-    for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+    // Targeting Type enum-like variable (stored as Name for flexibility)
+    if (bHasType)
     {
-        if (VarDesc.VarName == TEXT("TargetingAngle"))
-        {
-            VarDesc.DefaultValue = FString::SanitizeFloat(TargetingAngle);
-            break;
-        }
-    }
-
-    if (AOERadius > 0.0f)
-    {
-        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("AOERadius"), FloatPinType);
-        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("AOERadius"), nullptr, FText::FromString(TEXT("Targeting")));
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingType"), NamePinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingType"), nullptr, FText::FromString(TEXT("Targeting")));
         for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
         {
-            if (VarDesc.VarName == TEXT("AOERadius"))
+            if (VarDesc.VarName == TEXT("TargetingType"))
             {
-                VarDesc.DefaultValue = FString::SanitizeFloat(AOERadius);
+                VarDesc.DefaultValue = TargetingType;
                 break;
             }
         }
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingType")));
+        Report.MarkApplied(TEXT("targetingType"));
     }
 
-    // 5. Add target actor variable for runtime use
-    FEdGraphPinType ActorPinType;
-    ActorPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-    ActorPinType.PinSubCategoryObject = AActor::StaticClass();
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetActor"), ActorPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetActor"), nullptr, FText::FromString(TEXT("Targeting")));
+    if (bHasRange)
+    {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingRange"), FloatPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingRange"), nullptr, FText::FromString(TEXT("Targeting")));
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == TEXT("TargetingRange"))
+            {
+                VarDesc.DefaultValue = FString::SanitizeFloat(TargetingRange);
+                break;
+            }
+        }
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingRange")));
+        Report.MarkApplied(TEXT("targetingRange"));
+    }
 
-    // 6. Add target location variable for ground/point targeting
-    FEdGraphPinType VectorPinType;
-    VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-    VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetLocation"), VectorPinType);
-    FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetLocation"), nullptr, FText::FromString(TEXT("Targeting")));
+    if (bHasLoS)
+    {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("bRequiresLineOfSight"), BoolPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("bRequiresLineOfSight"), nullptr, FText::FromString(TEXT("Targeting")));
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == TEXT("bRequiresLineOfSight"))
+            {
+                VarDesc.DefaultValue = bRequiresLineOfSight ? TEXT("true") : TEXT("false");
+                break;
+            }
+        }
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("bRequiresLineOfSight")));
+        Report.MarkApplied(TEXT("requiresLineOfSight"));
+    }
 
-    McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    if (bHasAngle)
+    {
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetingAngle"), FloatPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetingAngle"), nullptr, FText::FromString(TEXT("Targeting")));
+        for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+        {
+            if (VarDesc.VarName == TEXT("TargetingAngle"))
+            {
+                VarDesc.DefaultValue = FString::SanitizeFloat(TargetingAngle);
+                break;
+            }
+        }
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingAngle")));
+        Report.MarkApplied(TEXT("targetingAngle"));
+    }
+
+    if (bHasAoe)
+    {
+        if (AOERadius > 0.0f)
+        {
+            FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("AOERadius"), FloatPinType);
+            FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("AOERadius"), nullptr, FText::FromString(TEXT("Targeting")));
+            for (FBPVariableDescription& VarDesc : Blueprint->NewVariables)
+            {
+                if (VarDesc.VarName == TEXT("AOERadius"))
+                {
+                    VarDesc.DefaultValue = FString::SanitizeFloat(AOERadius);
+                    break;
+                }
+            }
+            VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("AOERadius")));
+            Report.MarkApplied(TEXT("aoeRadius"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("aoeRadius"), TEXT("must be > 0"));
+        }
+    }
+
+    // Runtime storage for the resolved target — part of the targeting scaffold, so
+    // it (and the compile/save) runs only when at least one field was configured.
+    if (Report.AnyApplied())
+    {
+        FEdGraphPinType ActorPinType;
+        ActorPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+        ActorPinType.PinSubCategoryObject = AActor::StaticClass();
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetActor"), ActorPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetActor"), nullptr, FText::FromString(TEXT("Targeting")));
+
+        FEdGraphPinType VectorPinType;
+        VectorPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        VectorPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetLocation"), VectorPinType);
+        FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, TEXT("TargetLocation"), nullptr, FText::FromString(TEXT("Targeting")));
+
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetActor")));
+        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetLocation")));
+
+        McpFinalizeBlueprint(Blueprint, /*bStructural=*/true, /*bSave=*/true);
+    }
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("targetingType"), TargetingType);
-    Result->SetNumberField(TEXT("targetingRange"), TargetingRange);
-    Result->SetNumberField(TEXT("aoeRadius"), AOERadius);
-    Result->SetBoolField(TEXT("requiresLineOfSight"), bRequiresLineOfSight);
-    Result->SetNumberField(TEXT("targetingAngle"), TargetingAngle);
-    
-    TArray<TSharedPtr<FJsonValue>> VariablesArray;
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingType")));
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingRange")));
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("bRequiresLineOfSight")));
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetingAngle")));
-    if (AOERadius > 0.0f)
+    if (bHasType)
     {
-        VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("AOERadius")));
+        Result->SetStringField(TEXT("targetingType"), TargetingType);
     }
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetActor")));
-    VariablesArray.Add(MakeShared<FJsonValueString>(TEXT("TargetLocation")));
-    Result->SetArrayField(TEXT("variablesAdded"), VariablesArray);
-    
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Targeting configuration complete"), Result);
-    return true;
+    if (bHasRange)
+    {
+        Result->SetNumberField(TEXT("targetingRange"), TargetingRange);
+    }
+    if (bHasAoe)
+    {
+        Result->SetNumberField(TEXT("aoeRadius"), AOERadius);
+    }
+    if (bHasLoS)
+    {
+        Result->SetBoolField(TEXT("requiresLineOfSight"), bRequiresLineOfSight);
+    }
+    if (bHasAngle)
+    {
+        Result->SetNumberField(TEXT("targetingAngle"), TargetingAngle);
+    }
+    if (VariablesArray.Num() > 0)
+    {
+        Result->SetArrayField(TEXT("variablesAdded"), VariablesArray);
+    }
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Targeting configuration complete"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
@@ -2425,67 +2504,106 @@ bool UMcpAutomationBridgeSubsystem::HandleGasSetEffectDuration(
         return true;
     }
 
-    FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
-    const FString DurationTypeToken = NormalizeGASToken(DurationType);
-    float Duration = static_cast<float>(GetJsonNumberField(Payload, TEXT("duration"), 0.0));
+    McpHandlerUtils::FMcpWriteReport Report;
 
-    // Resolve the target policy before mutating so validation failures leave the CDO untouched.
-    EGameplayEffectDurationType NewPolicy = EffectCDO->DurationPolicy;
-    if (DurationTypeToken == TEXT("instant"))
-    {
-        NewPolicy = EGameplayEffectDurationType::Instant;
-    }
-    else if (DurationTypeToken == TEXT("infinite"))
-    {
-        NewPolicy = EGameplayEffectDurationType::Infinite;
-    }
-    else if (DurationTypeToken == TEXT("hasduration"))
-    {
-        NewPolicy = EGameplayEffectDurationType::HasDuration;
-    }
-
+    const bool bHasDurationType = Payload->HasField(TEXT("durationType"));
+    const bool bHasDuration = Payload->HasField(TEXT("duration"));
     double PeriodValue = 0.0;
     const bool bHasPeriod = Payload->TryGetNumberField(TEXT("period"), PeriodValue);
+
+    const FString DurationType = GetJsonStringField(Payload, TEXT("durationType"), TEXT("Instant"));
+    const float Duration = static_cast<float>(GetJsonNumberField(Payload, TEXT("duration"), 0.0));
+
+    // Resolve the target policy: the requested durationType if valid, otherwise the
+    // effect's current policy, so duration/period validate against what will hold.
+    EGameplayEffectDurationType NewPolicy = EffectCDO->DurationPolicy;
+    bool bDurationTypeValid = false;
+    if (bHasDurationType)
+    {
+        const FString DurationTypeToken = NormalizeGASToken(DurationType);
+        if (DurationTypeToken == TEXT("instant"))
+        {
+            NewPolicy = EGameplayEffectDurationType::Instant;
+            bDurationTypeValid = true;
+        }
+        else if (DurationTypeToken == TEXT("infinite"))
+        {
+            NewPolicy = EGameplayEffectDurationType::Infinite;
+            bDurationTypeValid = true;
+        }
+        else if (DurationTypeToken == TEXT("hasduration"))
+        {
+            NewPolicy = EGameplayEffectDurationType::HasDuration;
+            bDurationTypeValid = true;
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("durationType"),
+                TEXT("unknown duration type; expected Instant, Infinite, or HasDuration"));
+        }
+    }
+
+    if (bDurationTypeValid)
+    {
+        EffectCDO->DurationPolicy = NewPolicy;
+        Report.MarkApplied(TEXT("durationType"));
+    }
+
+    if (bHasDuration)
+    {
+        if (NewPolicy == EGameplayEffectDurationType::HasDuration)
+        {
+            // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
+            EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
+            Report.MarkApplied(TEXT("duration"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("duration"),
+                TEXT("duration magnitude only applies when durationType is HasDuration"));
+        }
+    }
+
     if (bHasPeriod)
     {
         if (PeriodValue <= 0.0)
         {
-            SendAutomationError(Socket, RequestId, TEXT("'period' must be > 0."), TEXT("INVALID_ARGUMENT"));
-            return true;
+            Report.MarkFailed(TEXT("period"), TEXT("must be > 0"));
         }
-        if (NewPolicy == EGameplayEffectDurationType::Instant)
+        else if (NewPolicy == EGameplayEffectDurationType::Instant)
         {
-            SendAutomationError(Socket, RequestId,
-                TEXT("'period' requires durationType HasDuration or Infinite; Instant effects cannot be periodic."),
-                TEXT("INVALID_ARGUMENT"));
-            return true;
+            Report.MarkFailed(TEXT("period"),
+                TEXT("requires durationType HasDuration or Infinite; Instant effects cannot be periodic"));
+        }
+        else
+        {
+            EffectCDO->Period = FScalableFloat(static_cast<float>(PeriodValue));
+            Report.MarkApplied(TEXT("period"));
         }
     }
 
-    EffectCDO->DurationPolicy = NewPolicy;
-    if (NewPolicy == EGameplayEffectDurationType::HasDuration)
+    if (Report.AnyApplied())
     {
-        // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
-        EffectCDO->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Duration));
+        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+        McpSafeAssetSave(Blueprint);
     }
-    if (bHasPeriod)
-    {
-        EffectCDO->Period = FScalableFloat(static_cast<float>(PeriodValue));
-    }
-
-    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-    McpSafeAssetSave(Blueprint);
 
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-    Result->SetStringField(TEXT("durationType"), DurationType);
-    Result->SetNumberField(TEXT("duration"), Duration);
+    if (bHasDurationType)
+    {
+        Result->SetStringField(TEXT("durationType"), DurationType);
+    }
+    if (bHasDuration)
+    {
+        Result->SetNumberField(TEXT("duration"), Duration);
+    }
     if (bHasPeriod)
     {
         Result->SetNumberField(TEXT("period"), PeriodValue);
     }
-    SendAutomationResponse(Socket, RequestId, true, TEXT("Duration set"), Result);
-    return true;
+    return SendWriteReportResponse(this, Socket, RequestId, Report, Result,
+                                   TEXT("Duration set"), Blueprint);
 #endif // WITH_EDITOR && MCP_HAS_GAS
 }
 
