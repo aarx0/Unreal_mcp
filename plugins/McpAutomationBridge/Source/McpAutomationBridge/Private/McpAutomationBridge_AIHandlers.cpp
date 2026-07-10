@@ -56,6 +56,7 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
+#include "McpResponseHelpers.h"
 #include "McpHandlerUtils.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
@@ -351,18 +352,24 @@ static void SetBPVarDefaultValueAI(UBlueprint* Blueprint, FName VarName, const F
     Blueprint->MarkPackageDirty();
 }
 
-static EEnvTestScoreEquation::Type ParseEQSScoringEquationAI(const FString& Value)
+static EEnvTestScoreEquation::Type ParseEQSScoringEquationAI(const FString& Value, bool& bOutRecognized)
 {
+    bOutRecognized = true;
     if (Value.Equals(TEXT("Square"), ESearchCase::IgnoreCase)) return EEnvTestScoreEquation::Square;
     if (Value.Equals(TEXT("InverseLinear"), ESearchCase::IgnoreCase)) return EEnvTestScoreEquation::InverseLinear;
     if (Value.Equals(TEXT("Constant"), ESearchCase::IgnoreCase)) return EEnvTestScoreEquation::Constant;
+    if (Value.Equals(TEXT("Linear"), ESearchCase::IgnoreCase)) return EEnvTestScoreEquation::Linear;
+    bOutRecognized = false;
     return EEnvTestScoreEquation::Linear;
 }
 
-static EEnvTestFilterType::Type ParseEQSFilterTypeAI(const FString& Value)
+static EEnvTestFilterType::Type ParseEQSFilterTypeAI(const FString& Value, bool& bOutRecognized)
 {
+    bOutRecognized = true;
     if (Value.Equals(TEXT("Minimum"), ESearchCase::IgnoreCase)) return EEnvTestFilterType::Minimum;
     if (Value.Equals(TEXT("Maximum"), ESearchCase::IgnoreCase)) return EEnvTestFilterType::Maximum;
+    if (Value.Equals(TEXT("Range"), ESearchCase::IgnoreCase)) return EEnvTestFilterType::Range;
+    bOutRecognized = false;
     return EEnvTestFilterType::Range;
 }
 
@@ -1920,72 +1927,132 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
     Payload->TryGetObjectField(TEXT("testSettings"), TestSettings);
     const TSharedPtr<FJsonObject>& Settings = (TestSettings && TestSettings->IsValid()) ? *TestSettings : Payload;
 
-    bool bConfiguredAnySetting = false;
-    FString ScoringEquation;
-    if (Settings->TryGetStringField(TEXT("scoringEquation"), ScoringEquation) && !ScoringEquation.IsEmpty())
+    McpHandlerUtils::FMcpWriteReport Report;
+
+    if (Settings->HasField(TEXT("scoringEquation")))
     {
-        TargetTest->ScoringEquation = ParseEQSScoringEquationAI(ScoringEquation);
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        FString ScoringEquation;
+        if (!Settings->TryGetStringField(TEXT("scoringEquation"), ScoringEquation) || ScoringEquation.IsEmpty())
+        {
+            Report.MarkFailed(TEXT("scoringEquation"), TEXT("must be a non-empty string"));
+        }
+        else
+        {
+            bool bRecognized = false;
+            const EEnvTestScoreEquation::Type Parsed = ParseEQSScoringEquationAI(ScoringEquation, bRecognized);
+            if (!bRecognized)
+            {
+                Report.MarkFailed(TEXT("scoringEquation"), TEXT("unknown scoring equation (expected Linear, Square, InverseLinear, or Constant)"));
+            }
+            else
+            {
+                TargetTest->ScoringEquation = Parsed;
+                TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+                Report.MarkApplied(TEXT("scoringEquation"));
+            }
+        }
     }
 
-    FString FilterType;
-    if (Settings->TryGetStringField(TEXT("filterType"), FilterType) && !FilterType.IsEmpty())
+    if (Settings->HasField(TEXT("filterType")))
     {
-        TargetTest->FilterType = ParseEQSFilterTypeAI(FilterType);
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        FString FilterType;
+        if (!Settings->TryGetStringField(TEXT("filterType"), FilterType) || FilterType.IsEmpty())
+        {
+            Report.MarkFailed(TEXT("filterType"), TEXT("must be a non-empty string"));
+        }
+        else
+        {
+            bool bRecognized = false;
+            const EEnvTestFilterType::Type Parsed = ParseEQSFilterTypeAI(FilterType, bRecognized);
+            if (!bRecognized)
+            {
+                Report.MarkFailed(TEXT("filterType"), TEXT("unknown filter type (expected Range, Minimum, or Maximum)"));
+            }
+            else
+            {
+                TargetTest->FilterType = Parsed;
+                TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+                Report.MarkApplied(TEXT("filterType"));
+            }
+        }
     }
 
-    double NumericValue = 0.0;
-    if (Settings->TryGetNumberField(TEXT("clampMin"), NumericValue))
+    if (Settings->HasField(TEXT("clampMin")))
     {
-        TargetTest->ScoreClampMin.DefaultValue = static_cast<float>(NumericValue);
-        TargetTest->ClampMinType = EEnvQueryTestClamping::SpecifiedValue;
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        double NumericValue = 0.0;
+        if (Settings->TryGetNumberField(TEXT("clampMin"), NumericValue))
+        {
+            TargetTest->ScoreClampMin.DefaultValue = static_cast<float>(NumericValue);
+            TargetTest->ClampMinType = EEnvQueryTestClamping::SpecifiedValue;
+            TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+            Report.MarkApplied(TEXT("clampMin"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("clampMin"), TEXT("must be a number"));
+        }
     }
-    if (Settings->TryGetNumberField(TEXT("clampMax"), NumericValue))
+    if (Settings->HasField(TEXT("clampMax")))
     {
-        TargetTest->ScoreClampMax.DefaultValue = static_cast<float>(NumericValue);
-        TargetTest->ClampMaxType = EEnvQueryTestClamping::SpecifiedValue;
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        double NumericValue = 0.0;
+        if (Settings->TryGetNumberField(TEXT("clampMax"), NumericValue))
+        {
+            TargetTest->ScoreClampMax.DefaultValue = static_cast<float>(NumericValue);
+            TargetTest->ClampMaxType = EEnvQueryTestClamping::SpecifiedValue;
+            TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+            Report.MarkApplied(TEXT("clampMax"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("clampMax"), TEXT("must be a number"));
+        }
     }
-    if (Settings->TryGetNumberField(TEXT("floatMin"), NumericValue))
+    if (Settings->HasField(TEXT("floatMin")))
     {
-        TargetTest->FloatValueMin.DefaultValue = static_cast<float>(NumericValue);
-        TargetTest->FilterType = EEnvTestFilterType::Range;
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        double NumericValue = 0.0;
+        if (Settings->TryGetNumberField(TEXT("floatMin"), NumericValue))
+        {
+            TargetTest->FloatValueMin.DefaultValue = static_cast<float>(NumericValue);
+            TargetTest->FilterType = EEnvTestFilterType::Range;
+            TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+            Report.MarkApplied(TEXT("floatMin"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("floatMin"), TEXT("must be a number"));
+        }
     }
-    if (Settings->TryGetNumberField(TEXT("floatMax"), NumericValue))
+    if (Settings->HasField(TEXT("floatMax")))
     {
-        TargetTest->FloatValueMax.DefaultValue = static_cast<float>(NumericValue);
-        TargetTest->FilterType = EEnvTestFilterType::Range;
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        bConfiguredAnySetting = true;
+        double NumericValue = 0.0;
+        if (Settings->TryGetNumberField(TEXT("floatMax"), NumericValue))
+        {
+            TargetTest->FloatValueMax.DefaultValue = static_cast<float>(NumericValue);
+            TargetTest->FilterType = EEnvTestFilterType::Range;
+            TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
+            Report.MarkApplied(TEXT("floatMax"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("floatMax"), TEXT("must be a number"));
+        }
     }
 
-    if (!bConfiguredAnySetting)
+    if (Report.AnyApplied())
     {
-        TargetTest->TestPurpose = EEnvTestPurpose::FilterAndScore;
-        TargetTest->ScoringEquation = EEnvTestScoreEquation::Linear;
-        bConfiguredAnySetting = true;
+        Query->MarkPackageDirty();
+        McpSafeAssetSave(Query);
     }
 
-    Query->MarkPackageDirty();
-    McpSafeAssetSave(Query);
     Result->SetNumberField(TEXT("optionIndex"), ResolvedOptionIndex);
     Result->SetNumberField(TEXT("optionTestIndex"), ResolvedTestIndex);
     Result->SetNumberField(TEXT("testIndex"), TestIndex);
     Result->SetStringField(TEXT("testClass"), TargetTest->GetClass()->GetName());
-    Result->SetBoolField(TEXT("configured"), bConfiguredAnySetting);
+    Result->SetBoolField(TEXT("configured"), Report.AnyApplied());
     Result->SetStringField(TEXT("message"), TEXT("Test scoring configured"));
 
-    McpHandlerUtils::AddVerification(Result, Query);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Scoring configured"), Result);
-    return true;
+    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+                                   TEXT("Scoring configured"), Query);
 #endif
 }
 
@@ -2911,11 +2978,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
         return true;
     }
     
-    // Configure state properties from payload
+    McpHandlerUtils::FMcpWriteReport Report;
+
     if (Payload->HasField(TEXT("selectionBehavior")))
     {
         FString Behavior = GetJsonStringField(Payload, TEXT("selectionBehavior"));
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 7
+        bool bBehaviorResolved = true;
         if (Behavior.Equals(TEXT("TryEnterState"), ESearchCase::IgnoreCase))
         {
             FoundState->SelectionBehavior = EStateTreeStateSelectionBehavior::TryEnterState;
@@ -2945,13 +3014,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
         }
         else
         {
-            UE_LOG(LogMcpAIHandlers, Warning, TEXT("Unknown selection behavior: %s"), *Behavior);
+            bBehaviorResolved = false;
+        }
+        if (bBehaviorResolved)
+        {
+            Report.MarkApplied(TEXT("selectionBehavior"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("selectionBehavior"), FString::Printf(TEXT("unknown selection behavior '%s'"), *Behavior));
         }
 #else
-        // UE 5.7+: SelectionBehavior API was refactored - skip setting
-        (void)Behavior; // Suppress unused warning
+        (void)Behavior;
+        Report.MarkFailed(TEXT("selectionBehavior"), TEXT("SelectionBehavior is not settable on UE 5.7+ (API refactored)"));
 #endif
-}
+    }
 
     bool bTaskAdded = false;
     FString ResolvedTaskStructPath;
@@ -2976,41 +3053,40 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
 
         if (!TaskStruct)
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("taskType '%s' did not resolve to a UScriptStruct"), *TaskType),
-                TEXT("NOT_FOUND"));
-            return true;
+            Report.MarkFailed(TEXT("taskType"), FString::Printf(TEXT("taskType '%s' did not resolve to a UScriptStruct"), *TaskType));
         }
-        if (!TaskStruct->IsChildOf(TaskBaseStruct))
+        else if (!TaskStruct->IsChildOf(TaskBaseStruct))
         {
-            SendAutomationError(RequestingSocket, RequestId,
-                FString::Printf(TEXT("taskType '%s' (%s) does not derive from FStateTreeTaskBase"), *TaskType, *TaskStruct->GetPathName()),
-                TEXT("INVALID_PARAMS"));
-            return true;
+            Report.MarkFailed(TEXT("taskType"), FString::Printf(TEXT("taskType '%s' (%s) does not derive from FStateTreeTaskBase"), *TaskType, *TaskStruct->GetPathName()));
         }
-
-        // Mirror UStateTreeState::AddTask<T> at runtime: add a defaulted editor node,
-        // give it an ID, instantiate the task struct, then init its instance data.
-        FStateTreeEditorNode& TaskNode = FoundState->Tasks.AddDefaulted_GetRef();
-        TaskNode.ID = FGuid::NewGuid();
-        TaskNode.Node.InitializeAs(TaskStruct);
-        if (const FStateTreeNodeBase* NodeBase = TaskNode.Node.GetPtr<FStateTreeNodeBase>())
+        else
         {
-            if (const UScriptStruct* InstanceType = Cast<const UScriptStruct>(NodeBase->GetInstanceDataType()))
+            // Mirror UStateTreeState::AddTask<T> at runtime: add a defaulted editor node,
+            // give it an ID, instantiate the task struct, then init its instance data.
+            FStateTreeEditorNode& TaskNode = FoundState->Tasks.AddDefaulted_GetRef();
+            TaskNode.ID = FGuid::NewGuid();
+            TaskNode.Node.InitializeAs(TaskStruct);
+            if (const FStateTreeNodeBase* NodeBase = TaskNode.Node.GetPtr<FStateTreeNodeBase>())
             {
-                TaskNode.Instance.InitializeAs(InstanceType);
+                if (const UScriptStruct* InstanceType = Cast<const UScriptStruct>(NodeBase->GetInstanceDataType()))
+                {
+                    TaskNode.Instance.InitializeAs(InstanceType);
+                }
+                if (const UScriptStruct* RuntimeType = Cast<const UScriptStruct>(NodeBase->GetExecutionRuntimeDataType()))
+                {
+                    TaskNode.ExecutionRuntimeData.InitializeAs(RuntimeType);
+                }
             }
-            if (const UScriptStruct* RuntimeType = Cast<const UScriptStruct>(NodeBase->GetExecutionRuntimeDataType()))
-            {
-                TaskNode.ExecutionRuntimeData.InitializeAs(RuntimeType);
-            }
+            bTaskAdded = true;
+            ResolvedTaskStructPath = TaskStruct->GetPathName();
+            Report.MarkApplied(TEXT("taskType"));
         }
-        bTaskAdded = true;
-        ResolvedTaskStructPath = TaskStruct->GetPathName();
     }
 
-    // Save
-    McpSafeAssetSave(StateTree);
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(StateTree);
+    }
 
     Result->SetStringField(TEXT("stateName"), StateName);
     Result->SetBoolField(TEXT("taskAdded"), bTaskAdded);
@@ -3022,7 +3098,8 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     Result->SetStringField(TEXT("message"), bTaskAdded
         ? TEXT("Task added to state")
         : TEXT("State task configuration updated (no taskType supplied)"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Task configured"), Result);
+    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+                                   TEXT("Task configured"), nullptr);
 #elif MCP_HAS_STATE_TREE
     FString StateTreePath = GetJsonStringField(Payload, TEXT("stateTreePath"));
     FString StateName = GetJsonStringField(Payload, TEXT("stateName"));
@@ -3240,11 +3317,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
     
     // Get the slot and configure it
     FSmartObjectSlotDefinition& Slot = Definition->GetMutableSlot(SlotIndex);
-    
-    // Configure activity tags if provided
+
+    McpHandlerUtils::FMcpWriteReport Report;
+
     if (Payload->HasField(TEXT("activityTags")))
     {
-        const TArray<TSharedPtr<FJsonValue>>* TagsArray;
+        const TArray<TSharedPtr<FJsonValue>>* TagsArray = nullptr;
         if (Payload->TryGetArrayField(TEXT("activityTags"), TagsArray))
         {
             for (const auto& TagValue : *TagsArray)
@@ -3256,22 +3334,36 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
                     Slot.ActivityTags.AddTag(Tag);
                 }
             }
+            Report.MarkApplied(TEXT("activityTags"));
+        }
+        else
+        {
+            Report.MarkFailed(TEXT("activityTags"), TEXT("must be an array of gameplay tag names"));
         }
     }
-    
-    // Configure enabled state
+
     if (Payload->HasField(TEXT("enabled")))
     {
         Slot.bEnabled = GetJsonBoolField(Payload, TEXT("enabled"), true);
+        Report.MarkApplied(TEXT("enabled"));
     }
-    
-    // Save
-    McpSafeAssetSave(Definition);
-    
+
+    if (Payload->HasField(TEXT("behaviorType")))
+    {
+        Report.MarkFailed(TEXT("behaviorType"),
+            FString::Printf(TEXT("behavior definition assignment ('%s') is not implemented for smart object slots"), *BehaviorType));
+    }
+
+    if (Report.AnyApplied())
+    {
+        McpSafeAssetSave(Definition);
+    }
+
     Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
     Result->SetNumberField(TEXT("behaviorCount"), Slot.BehaviorDefinitions.Num());
     Result->SetStringField(TEXT("message"), TEXT("Slot behavior configured"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior configured"), Result);
+    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+                                   TEXT("Behavior configured"), nullptr);
 #else
     // UE 5.0: SmartObject API is limited - skip slot configuration
     SendAutomationError(RequestingSocket, RequestId,
