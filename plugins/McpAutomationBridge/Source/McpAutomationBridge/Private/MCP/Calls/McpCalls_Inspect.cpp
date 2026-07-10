@@ -68,8 +68,9 @@ static void NormalizeActorAlias(const TSharedPtr<FJsonObject> &Payload, bool bAl
 // (the fold dedups shared params to one entry). Descriptions are the tool's
 // authored help text; McpDeriveDecl() reads the param kinds + required-set back
 // out of these to build the transport validation decl. Notes carried over from
-// the retired shim declarations: list_objects reads nothing (its old 33-param
-// mega-bag with seven bogus required fields is gone); pie_report shares
+// the retired shim declarations: list_objects mirrors find_objects'
+// className/pathContains/limit filter-and-bound over world actors (className
+// optional); pie_report shares
 // runtime_report's contract like it shares its implementation; the target
 // aliases actorName/name/objectPath are uniformly optional (requiring one
 // spelling would false-reject the others the normalization accepts), and the
@@ -113,13 +114,20 @@ static void S_GetSelectedActors(FMcpSchemaBuilder&) {}
 static void S_GetSceneStats(FMcpSchemaBuilder&) {}
 static void S_GetPerformanceStats(FMcpSchemaBuilder&) {}
 static void S_GetMemoryStats(FMcpSchemaBuilder&) {}
-static void S_ListObjects(FMcpSchemaBuilder&) {}
+
+static void S_ListObjects(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("className"), TEXT("list_objects: optional class filter (IsA); loaded short name or fully-qualified path. Omit to list every actor."))
+	 .String(TEXT("pathContains"), TEXT("list_objects: case-insensitive substring filter on the actor's full path."))
+	 .Integer(TEXT("limit"), TEXT("list_objects: max objects returned (default 50, cap 200)."));
+}
 
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("className"), TEXT(""))
 	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
-	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."));
+	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
+	 .Integer(TEXT("limit"), TEXT("find_by_class: max actors returned (default 50, cap 200)."));
 }
 
 static void S_FindByTag(FMcpSchemaBuilder& B)

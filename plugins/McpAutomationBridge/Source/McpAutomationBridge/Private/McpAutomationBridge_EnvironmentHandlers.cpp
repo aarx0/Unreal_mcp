@@ -53,6 +53,9 @@
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridge_AssetWorkflowHandlers.h"
 #include "McpAutomationBridge_EnvironmentHandlers.h"
+#include "McpAutomationBridge_FoliageHandlers.h"
+#include "McpAutomationBridge_LandscapeHandlers.h"
+#include "McpAutomationBridge_EditorFunctionHandlers.h"
 #include "UObject/UObjectIterator.h" // find_objects: TObjectIterator discovery
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformMemory.h"
@@ -344,7 +347,8 @@ static TSharedPtr<FJsonObject> McpDescribeRuntimeActor(AActor *Actor, const TArr
 // literals and payload re-shaping).
 
 // add_foliage_instances
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentAddFoliageInstances(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentAddFoliageInstances(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -375,12 +379,13 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentAddFoliageInstances(
         FoliagePayload->SetArrayField(TEXT("locations"), *Locations);
     }
 
-    return HandleAddFoliageInstances(RequestId, TEXT("add_foliage_instances"),
+    return HandleAddFoliageInstances(S, RequestId, TEXT("add_foliage_instances"),
                                      FoliagePayload, RequestingSocket);
 }
 
 // get_foliage_instances
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGetFoliageInstances(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentGetFoliageInstances(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -391,12 +396,13 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentGetFoliageInstances(
     {
         FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
     }
-    return HandleGetFoliageInstances(RequestId, TEXT("get_foliage_instances"),
+    return HandleGetFoliageInstances(S, RequestId, TEXT("get_foliage_instances"),
                                      FoliagePayload, RequestingSocket);
 }
 
 // remove_foliage
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentRemoveFoliage(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentRemoveFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
@@ -411,25 +417,27 @@ bool UMcpAutomationBridgeSubsystem::HandleEnvironmentRemoveFoliage(
         FoliagePayload->SetStringField(TEXT("foliageTypePath"), FoliageTypePath);
     }
     FoliagePayload->SetBoolField(TEXT("removeAll"), bRemoveAll);
-    return HandleRemoveFoliage(RequestId, TEXT("remove_foliage"),
+    return HandleRemoveFoliage(S, RequestId, TEXT("remove_foliage"),
                                FoliagePayload, RequestingSocket);
 }
 
 // paint_foliage
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentPaintFoliage(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentPaintFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandlePaintFoliage(RequestId, TEXT("paint_foliage"), Payload,
+    return HandlePaintFoliage(S, RequestId, TEXT("paint_foliage"), Payload,
                               RequestingSocket);
 }
 
 // create_procedural_foliage
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateProceduralFoliage(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateProceduralFoliage(RequestId,
+    return HandleCreateProceduralFoliage(S, RequestId,
                                          TEXT("create_procedural_foliage"),
                                          Payload, RequestingSocket);
 }
@@ -446,65 +454,72 @@ bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateProceduralTerrain(
 }
 
 // add_foliage
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentAddFoliage(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentAddFoliage(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleAddFoliageType(RequestId, TEXT("add_foliage_type"),
+    return HandleAddFoliageType(S, RequestId, TEXT("add_foliage_type"),
                                 Payload, RequestingSocket);
 }
 
 // create_landscape
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateLandscape(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateLandscape(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateLandscape(RequestId, TEXT("create_landscape"),
+    return HandleCreateLandscape(S, RequestId, TEXT("create_landscape"),
                                  Payload, RequestingSocket);
 }
 
 // paint_landscape
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentPaintLandscape(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentPaintLandscape(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandlePaintLandscapeLayer(RequestId, TEXT("paint_landscape_layer"),
+    return HandlePaintLandscapeLayer(S, RequestId, TEXT("paint_landscape_layer"),
                                      Payload, RequestingSocket);
 }
 
 // sculpt
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSculpt(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentSculpt(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleSculptLandscape(RequestId, TEXT("sculpt_landscape"), Payload,
+    return HandleSculptLandscape(S, RequestId, TEXT("sculpt_landscape"), Payload,
                                  RequestingSocket);
 }
 
 // modify_heightmap
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentModifyHeightmap(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentModifyHeightmap(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleModifyHeightmap(RequestId, TEXT("modify_heightmap"), Payload,
+    return HandleModifyHeightmap(S, RequestId, TEXT("modify_heightmap"), Payload,
                                  RequestingSocket);
 }
 
 // set_landscape_material
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentSetLandscapeMaterial(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentSetLandscapeMaterial(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleSetLandscapeMaterial(RequestId, TEXT("set_landscape_material"),
+    return HandleSetLandscapeMaterial(S, RequestId, TEXT("set_landscape_material"),
                                       Payload, RequestingSocket);
 }
 
 // create_landscape_grass_type
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentCreateLandscapeGrassType(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateLandscapeGrassType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleCreateLandscapeGrassType(RequestId,
+    return HandleCreateLandscapeGrassType(S, RequestId,
                                           TEXT("create_landscape_grass_type"),
                                           Payload, RequestingSocket);
 }
@@ -520,11 +535,12 @@ bool McpHandlers::BuildEnvironment::HandleEnvironmentGenerateLODs(
 }
 
 // bake_lightmap
-bool UMcpAutomationBridgeSubsystem::HandleEnvironmentBakeLightmap(
+bool McpHandlers::BuildEnvironment::HandleEnvironmentBakeLightmap(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleBakeLightmap(RequestId, TEXT("bake_lightmap"), Payload,
+    return HandleBakeLightmap(S, RequestId, TEXT("bake_lightmap"), Payload,
                               RequestingSocket);
 }
 
@@ -1128,7 +1144,8 @@ bool McpHandlers::BuildEnvironment::HandleEnvironmentCreateFogVolume(
  * 
  * Dispatches to HandleExecuteEditorFunction with BUILD_LIGHTING.
  */
-bool UMcpAutomationBridgeSubsystem::HandleBakeLightmap(
+bool McpHandlers::BuildEnvironment::HandleBakeLightmap(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const FString &Action,
     const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
@@ -1151,11 +1168,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBakeLightmap(
     P->SetStringField(TEXT("functionName"), TEXT("BUILD_LIGHTING"));
     P->SetStringField(TEXT("quality"), QualityStr);
 
-    return HandleExecuteEditorFunction(RequestId, TEXT("execute_editor_function"),
+    return HandleExecuteEditorFunction(S, RequestId, TEXT("execute_editor_function"),
                                        P, RequestingSocket);
 
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
                            TEXT("Requires editor"), nullptr,
                            TEXT("NOT_IMPLEMENTED"));
     return true;
@@ -1918,23 +1935,78 @@ bool McpHandlers::Inspect::HandleInspectListObjects(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket)
 {
+    // Optional className filter — resolved exactly as find_objects does
+    // (loaded short name, then /Script/Module.Class or /Game/....Name_C path).
+    FString ClassName;
+    Payload->TryGetStringField(TEXT("className"), ClassName);
+    ClassName.TrimStartAndEndInline();
+    UClass* TargetClass = nullptr;
+    if (!ClassName.IsEmpty())
+    {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        TargetClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::None);
+#endif
+        if (!TargetClass && (ClassName.Contains(TEXT(".")) || ClassName.Contains(TEXT("/"))))
+        {
+            TargetClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ClassName, nullptr, LOAD_NoWarn | LOAD_Quiet);
+        }
+        if (!TargetClass)
+        {
+            S.SendAutomationError(
+                RequestingSocket, RequestId,
+                FString::Printf(TEXT("Could not resolve className '%s' to a loaded UClass. Pass a loaded short name or a fully-qualified path."), *ClassName),
+                TEXT("CLASS_NOT_FOUND"));
+            return true;
+        }
+    }
+
+    FString PathContains;
+    Payload->TryGetStringField(TEXT("pathContains"), PathContains);
+    int32 Limit = 50;
+    {
+        double LimitNum = 0.0;
+        if (Payload->TryGetNumberField(TEXT("limit"), LimitNum))
+        {
+            Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+        }
+    }
+
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
+    int32 Matched = 0;
+    bool bTruncated = false;
     if (GEditor && GEditor->GetEditorWorldContext().World())
     {
         UWorld* World = GEditor->GetEditorWorldContext().World();
         for (TActorIterator<AActor> It(World); It; ++It)
         {
             AActor* Actor = *It;
+            if (TargetClass && !Actor->IsA(TargetClass))
+            {
+                continue;
+            }
+            const FString Path = Actor->GetPathName();
+            if (!PathContains.IsEmpty() && !Path.Contains(PathContains, ESearchCase::IgnoreCase))
+            {
+                continue;
+            }
+            ++Matched;
+            if (ObjectsArray.Num() >= Limit)
+            {
+                bTruncated = true;
+                continue;
+            }
             TSharedPtr<FJsonObject> Obj = McpHandlerUtils::CreateResultObject();
             Obj->SetStringField(TEXT("name"), Actor->GetName());
-            Obj->SetStringField(TEXT("path"), Actor->GetPathName());
+            Obj->SetStringField(TEXT("path"), Path);
             Obj->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
             ObjectsArray.Add(MakeShared<FJsonValueObject>(Obj));
         }
     }
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
+    Resp->SetNumberField(TEXT("matched"), Matched);
+    Resp->SetBoolField(TEXT("truncated"), bTruncated);
     Resp->SetBoolField(TEXT("success"), true);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects listed"), Resp, FString());
@@ -1957,7 +2029,17 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     {
         Payload->TryGetStringField(TEXT("classPath"), ClassName);
     }
+    int32 Limit = 50;
+    {
+        double LimitNum = 0.0;
+        if (Payload->TryGetNumberField(TEXT("limit"), LimitNum))
+        {
+            Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+        }
+    }
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
+    int32 Matched = 0;
+    bool bTruncated = false;
 
     if (GEditor && GEditor->GetEditorWorldContext().World() && !ClassName.IsEmpty())
     {
@@ -1968,6 +2050,12 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
             if (Actor->GetClass()->GetName().Equals(ClassName, ESearchCase::IgnoreCase) ||
                 Actor->GetClass()->GetPathName().Contains(ClassName))
             {
+                ++Matched;
+                if (ObjectsArray.Num() >= Limit)
+                {
+                    bTruncated = true;
+                    continue;
+                }
                 TSharedPtr<FJsonObject> Obj = McpHandlerUtils::CreateResultObject();
                 Obj->SetStringField(TEXT("name"), Actor->GetName());
                 Obj->SetStringField(TEXT("path"), Actor->GetPathName());
@@ -1978,6 +2066,8 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     }
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
+    Resp->SetNumberField(TEXT("matched"), Matched);
+    Resp->SetBoolField(TEXT("truncated"), bTruncated);
     Resp->SetBoolField(TEXT("success"), true);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Objects found by class"), Resp, FString());
