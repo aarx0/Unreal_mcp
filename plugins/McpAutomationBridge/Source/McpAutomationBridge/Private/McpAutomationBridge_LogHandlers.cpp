@@ -346,23 +346,23 @@ bool McpHandlers::SystemControl::HandleLogClear(UMcpAutomationBridgeSubsystem& S
 // subscribe / unsubscribe : enable/disable capture (NOT a push — read via
 // get_log/tail_log). Kept for backward compat with the old action names;
 // now honest about the pull model instead of reporting a push that never fires.
-bool UMcpAutomationBridgeSubsystem::HandleLogSetSubscribed(
+bool McpHandlers::SystemControl::HandleLogSetSubscribed(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket, bool bSubscribe)
 {
         const bool bEnable = bSubscribe;
         {
-            FScopeLock Lock(&LogRingMutex);
-            bLogCaptureEnabled = bEnable;
+            FScopeLock Lock(&S.LogRingMutex);
+            S.bLogCaptureEnabled = bEnable;
         }
         // The device is registered always-on in Initialize; ensure it exists in
         // case subscribe is called on a build where init skipped (commandlet).
-        if (bEnable && GLog && !LogCaptureDevice.IsValid())
+        if (bEnable && GLog && !S.LogCaptureDevice.IsValid())
         {
-            LogRing.SetNum(LogRingCapacity);
-            LogCaptureDevice = MakeLogCaptureDevice();
-            GLog->AddOutputDevice(LogCaptureDevice.Get());
+            S.LogRing.SetNum(S.LogRingCapacity);
+            S.LogCaptureDevice = S.MakeLogCaptureDevice();
+            GLog->AddOutputDevice(S.LogCaptureDevice.Get());
         }
 
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -373,22 +373,22 @@ bool UMcpAutomationBridgeSubsystem::HandleLogSetSubscribed(
         const FString Msg = bEnable
             ? TEXT("Log capture enabled. Read lines with get_log/tail_log (pull — no push).")
             : TEXT("Log capture paused. Re-enable with subscribe; existing lines stay readable until clear_log.");
-        SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, Msg, Result, FString());
         return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLogSubscribe(
+bool McpHandlers::SystemControl::HandleLogSubscribe(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleLogSetSubscribed(RequestId, Payload, RequestingSocket, true);
+    return HandleLogSetSubscribed(S, RequestId, Payload, RequestingSocket, true);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleLogUnsubscribe(
+bool McpHandlers::SystemControl::HandleLogUnsubscribe(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
-    return HandleLogSetSubscribed(RequestId, Payload, RequestingSocket, false);
+    return HandleLogSetSubscribed(S, RequestId, Payload, RequestingSocket, false);
 }

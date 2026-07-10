@@ -520,19 +520,9 @@ private:
                             FMcpResponseHandle RequestingSocket);
   // Additional consolidated tool handlers
   bool
-  HandleConsoleCommandAction(const FString &RequestId, const FString &Action,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle RequestingSocket);
-
-  bool
   HandleWorldPartitionAction(const FString &RequestId, const FString &Action,
                              const TSharedPtr<FJsonObject> &Payload,
                              FMcpResponseHandle RequestingSocket);
-
-  // 3. Observability, Logs, Debugging & History
-  bool HandleInsightsAction(const FString &RequestId, const FString &Action,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle RequestingSocket);
 
   // Ticker handle for managing the subsystems tick function
   FTSTicker::FDelegateHandle TickHandle;
@@ -546,39 +536,11 @@ public:
   // de-membered handler free functions resolve actors through it.
   AActor *FindActorByName(const FString &Target, bool bExactMatchOnly = false);
 
-  // system_control subhandlers — public so the system_control FMcpCall
-  // classes (Private/MCP/Calls/) can delegate, until the module split
-  // de-members the implementations off the subsystem. Implementations span
-  // the Performance / SystemControl / Ui / Log / Debug / Render handler TUs;
-  // the log family and HandleSysExecuteCommand / HandleSysSetCvar /
-  // HandleDebugSpawnCategory are NOT editor-gated.
-  bool HandleSysStartSession(const FString &RequestId,
-                             const TSharedPtr<FJsonObject> &Payload,
-                             FMcpResponseHandle Socket);
-  bool HandleSysExecuteCommand(const FString &RequestId,
-                               const TSharedPtr<FJsonObject> &Payload,
-                               FMcpResponseHandle Socket);
-  bool HandleSysSetCvar(const FString &RequestId,
-                        const TSharedPtr<FJsonObject> &Payload,
-                        FMcpResponseHandle Socket);
-  bool HandleLogSubscribe(const FString &RequestId,
-                          const TSharedPtr<FJsonObject> &Payload,
-                          FMcpResponseHandle Socket);
-  bool HandleLogUnsubscribe(const FString &RequestId,
-                            const TSharedPtr<FJsonObject> &Payload,
-                            FMcpResponseHandle Socket);
-
-public:
   // Lightweight snapshot cache for the de-membered control_actor
   // create_snapshot/restore_snapshot handlers.
   TMap<FString, FTransform> CachedActorSnapshots;
 
 private:
-
-  // subscribe/unsubscribe shared implementation.
-  bool HandleLogSetSubscribed(const FString &RequestId,
-                              const TSharedPtr<FJsonObject> &Payload,
-                              FMcpResponseHandle Socket, bool bSubscribe);
 
   /** Guards against reentrant automation request processing */
   bool bProcessingAutomationRequest = false;

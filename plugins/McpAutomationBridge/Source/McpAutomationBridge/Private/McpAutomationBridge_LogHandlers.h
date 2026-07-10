@@ -18,5 +18,12 @@ bool HandleLogQuery(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                           const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleLogClear(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                           const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleLogSubscribe(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleLogUnsubscribe(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleLogSetSubscribed(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket,
+                          bool bSubscribe);
 
 } // namespace McpHandlers::SystemControl

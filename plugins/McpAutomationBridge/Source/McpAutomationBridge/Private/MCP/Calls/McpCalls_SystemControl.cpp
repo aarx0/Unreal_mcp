@@ -5,8 +5,8 @@
 // S_<Suffix>() function; the published facade schema folds those fragments and
 // GetDecl() derives the validation decl from the same fragment via
 // McpDeriveDecl(), so schema and decl are one source and cannot drift. Run()
-// delegates to the subsystem member handlers until the module split de-members
-// those bodies. Unlike earlier families the implementations span six handler
+// forwards to the namespaced McpHandlers::SystemControl free-function handlers.
+// Unlike earlier families the implementations span six handler
 // TUs (Performance / SystemControl / Ui / Log / Debug / Render handlers), and
 // execute_command / set_cvar delegate to HandleConsoleCommandAction (which has
 // other owners and keeps its internal "console_command" literal).
@@ -282,26 +282,6 @@ class FMcpCall_SystemControl_##ClassSuffix final : public FMcpCall              
 	}                                                                                       \
 };
 
-// Member-form variant: the handler stays a UMcpAutomationBridgeSubsystem member
-// (delegates to a private member: HandleInsightsAction / HandleConsoleCommandAction /
-// HandleLogSetSubscribed), so Run() dispatches through the instance.
-#define MCP_SC_MEMBER_CALL(ClassSuffix, ActionLiteral, HandlerFn, Flags)                          \
-class FMcpCall_SystemControl_##ClassSuffix final : public FMcpCall                         \
-{                                                                                          \
-	void AppendSchema(FMcpSchemaBuilder& B) const override { S_##ClassSuffix(B); }         \
-	const FMcpCallDecl& GetDecl() const override                                            \
-	{                                                                                       \
-		static const FMcpCallDecl& D = McpDeriveDecl(TEXT("system_control"),                \
-			TEXT(ActionLiteral), (Flags), &S_##ClassSuffix);                               \
-		return D;                                                                           \
-	}                                                                                       \
-	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                    \
-	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override    \
-	{                                                                                       \
-		return S.HandlerFn(RequestId, Payload, Socket);                                     \
-	}                                                                                       \
-};
-
 // Build / test pipeline (McpAutomationBridge_SystemControlHandlers.cpp)
 MCP_SC_CALL(GenerateTestStub, "generate_test_stub", McpHandlers::SystemControl::HandleSysGenerateTestStub, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(LiveCodingCompile, "live_coding_compile", McpHandlers::SystemControl::HandleSysLiveCodingCompile, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -311,12 +291,12 @@ MCP_SC_CALL(ListTests, "list_tests", McpHandlers::SystemControl::HandleSysListTe
 MCP_SC_CALL(RunTests, "run_tests", McpHandlers::SystemControl::HandleSysRunTests, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_SC_CALL(GetTestResults, "get_test_results", McpHandlers::SystemControl::HandleSysGetTestResults, EMcpCallFlags::RequiresEditor)
 MCP_SC_CALL(ExecutePython, "execute_python", McpHandlers::SystemControl::HandleSysExecutePython, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_SC_MEMBER_CALL(StartSession, "start_session", HandleSysStartSession, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
+MCP_SC_CALL(StartSession, "start_session", McpHandlers::SystemControl::HandleSysStartSession, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 // Console delegations (McpAutomationBridge_SystemControlHandlers.cpp →
 // HandleConsoleCommandAction; handler-enforced availability, all builds)
-MCP_SC_MEMBER_CALL(ExecuteCommand, "execute_command", HandleSysExecuteCommand, EMcpCallFlags::Mutating)
-MCP_SC_MEMBER_CALL(SetCvar, "set_cvar", HandleSysSetCvar, EMcpCallFlags::Mutating)
+MCP_SC_CALL(ExecuteCommand, "execute_command", McpHandlers::SystemControl::HandleSysExecuteCommand, EMcpCallFlags::Mutating)
+MCP_SC_CALL(SetCvar, "set_cvar", McpHandlers::SystemControl::HandleSysSetCvar, EMcpCallFlags::Mutating)
 
 // Project settings (McpAutomationBridge_UiHandlers.cpp). get/set_project_settings
 // walk GEngine/GConfig with fallbacks — handler-enforced, not RequiresEditor.
@@ -328,8 +308,8 @@ MCP_SC_CALL(SetProjectSetting, "set_project_setting", McpHandlers::SystemControl
 MCP_SC_CALL(GetLog, "get_log", McpHandlers::SystemControl::HandleLogQuery, EMcpCallFlags::None)
 MCP_SC_CALL(TailLog, "tail_log", McpHandlers::SystemControl::HandleLogQuery, EMcpCallFlags::None)
 MCP_SC_CALL(ClearLog, "clear_log", McpHandlers::SystemControl::HandleLogClear, EMcpCallFlags::Mutating)
-MCP_SC_MEMBER_CALL(Subscribe, "subscribe", HandleLogSubscribe, EMcpCallFlags::Mutating)
-MCP_SC_MEMBER_CALL(Unsubscribe, "unsubscribe", HandleLogUnsubscribe, EMcpCallFlags::Mutating)
+MCP_SC_CALL(Subscribe, "subscribe", McpHandlers::SystemControl::HandleLogSubscribe, EMcpCallFlags::Mutating)
+MCP_SC_CALL(Unsubscribe, "unsubscribe", McpHandlers::SystemControl::HandleLogUnsubscribe, EMcpCallFlags::Mutating)
 
 // Gameplay debugger (McpAutomationBridge_DebugHandlers.cpp; not editor-gated)
 MCP_SC_CALL(SpawnCategory, "spawn_category", McpHandlers::SystemControl::HandleDebugSpawnCategory, EMcpCallFlags::Mutating)
@@ -360,7 +340,6 @@ MCP_SC_CALL(MergeActors, "merge_actors", McpHandlers::SystemControl::HandlePerfM
 MCP_SC_CALL(RunBenchmark, "run_benchmark", McpHandlers::SystemControl::HandlePerfRunBenchmark, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 
 #undef MCP_SC_CALL
-#undef MCP_SC_MEMBER_CALL
 
 } // namespace McpCalls::SystemControl
 

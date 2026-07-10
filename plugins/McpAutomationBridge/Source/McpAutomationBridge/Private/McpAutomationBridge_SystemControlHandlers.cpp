@@ -6,6 +6,8 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
 #include "McpAutomationBridge_SystemControlHandlers.h"
+#include "McpAutomationBridge_InsightsHandlers.h"
+#include "McpAutomationBridge_ConsoleCommandHandlers.h"
 
 #if WITH_EDITOR
 #include "Editor/UnrealEd/Public/Editor.h"
@@ -183,10 +185,10 @@ bool McpHandlers::SystemControl::HandleSysGenerateTestStub(UMcpAutomationBridgeS
     return true;
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysStartSession(
+bool McpHandlers::SystemControl::HandleSysStartSession(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
-    return HandleInsightsAction(RequestId, TEXT("manage_insights"), Payload, RequestingSocket);
+    return HandleInsightsAction(S, RequestId, TEXT("manage_insights"), Payload, RequestingSocket);
 }
 
 // Trigger a Live Coding compile + patch of the running editor so .cpp-body
@@ -1422,23 +1424,23 @@ MCP_SYS_HANDLER_STUB(HandleSysGetTestResults)
 MCP_SYS_HANDLER_STUB(HandleSysExecutePython)
 #undef MCP_SYS_HANDLER_STUB
 
-// HandleSysStartSession stays a member (delegates to the private HandleInsightsAction).
-bool UMcpAutomationBridgeSubsystem::HandleSysStartSession(
-    const FString &, const TSharedPtr<FJsonObject> &, FMcpResponseHandle) { return false; }
+bool McpHandlers::SystemControl::HandleSysStartSession(
+    UMcpAutomationBridgeSubsystem &, const FString &, const TSharedPtr<FJsonObject> &,
+    FMcpResponseHandle) { return false; }
 
 #endif // WITH_EDITOR
 
 // execute_command / set_cvar — console-handler delegations, available in all
 // builds (HandleConsoleCommandAction owns availability and the security
 // blocklist; "console_command" is its internal canonical name).
-bool UMcpAutomationBridgeSubsystem::HandleSysExecuteCommand(
+bool McpHandlers::SystemControl::HandleSysExecuteCommand(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
-  return HandleConsoleCommandAction(RequestId, TEXT("console_command"), Payload,
+  return HandleConsoleCommandAction(S, RequestId, TEXT("console_command"), Payload,
                                     Socket);
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleSysSetCvar(
+bool McpHandlers::SystemControl::HandleSysSetCvar(UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
   // Compose a console command and reuse the audited console path.
@@ -1446,7 +1448,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysSetCvar(
   Payload->TryGetStringField(TEXT("key"), Key);
   Payload->TryGetStringField(TEXT("value"), Value);
   if (Key.IsEmpty()) {
-    SendAutomationError(
+    S.SendAutomationError(
         Socket, RequestId,
         TEXT("set_cvar requires 'key' (and usually "
              "'value')."),
@@ -1460,7 +1462,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSysSetCvar(
           ? Key
           : FString::Printf(TEXT("%s %s"), *Key, *Value));
   return HandleConsoleCommandAction(
-      RequestId, TEXT("console_command"), CmdPayload, Socket);
+      S, RequestId, TEXT("console_command"), CmdPayload, Socket);
 }
 
 // ---------------------------------------------------------------------------

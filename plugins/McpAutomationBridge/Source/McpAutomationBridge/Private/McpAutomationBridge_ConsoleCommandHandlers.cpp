@@ -16,6 +16,7 @@
 
 #include "McpVersionCompatibility.h"  // MUST BE FIRST - Version compatibility macros
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_ConsoleCommandHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpHandlerUtils.h"
 #include "Dom/JsonObject.h"
@@ -172,7 +173,7 @@ namespace ConsoleCommandSecurity
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
+bool McpHandlers::SystemControl::HandleConsoleCommandAction(UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const FString& Action,
     const TSharedPtr<FJsonObject>& Payload,
@@ -190,7 +191,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
     {
         if (!Payload.IsValid())
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("Payload missing for batch_console_commands"), nullptr, TEXT("INVALID_PAYLOAD"));
             return true;
         }
@@ -199,14 +200,14 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         const TArray<TSharedPtr<FJsonValue>>* CommandsArray = nullptr;
         if (!Payload->TryGetArrayField(TEXT("commands"), CommandsArray) || !CommandsArray)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("'commands' array is required"), nullptr, TEXT("INVALID_ARGUMENT"));
             return true;
         }
         
         if (CommandsArray->Num() == 0)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, true,
+            S.SendAutomationResponse(RequestingSocket, RequestId, true,
                 TEXT("No commands to execute"), nullptr);
             return true;
         }
@@ -225,7 +226,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         
         if (!World)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("No world available for console command execution"), nullptr, TEXT("NO_WORLD"));
             return true;
         }
@@ -327,7 +328,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
                 ExecutedCount, FailedCount);
         }
         
-        SendAutomationResponse(RequestingSocket, RequestId, bOverallSuccess, Message, Result,
+        S.SendAutomationResponse(RequestingSocket, RequestId, bOverallSuccess, Message, Result,
             bOverallSuccess ? FString() : TEXT("PARTIAL_FAILURE"));
         
         return true;
@@ -340,7 +341,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
     {
         if (!Payload.IsValid())
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("Payload missing for console_command"), nullptr, TEXT("INVALID_PAYLOAD"));
             return true;
         }
@@ -348,7 +349,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         FString Command;
         if (!Payload->TryGetStringField(TEXT("command"), Command) || Command.TrimStartAndEnd().IsEmpty())
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("'command' parameter is required"), nullptr, TEXT("INVALID_ARGUMENT"));
             return true;
         }
@@ -358,7 +359,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         // Security check
         if (ConsoleCommandSecurity::IsBlockedCommand(Command))
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 FString::Printf(TEXT("Command blocked for security: %s"), *Command),
                 nullptr, TEXT("COMMAND_BLOCKED"));
             return true;
@@ -378,7 +379,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         
         if (!World)
         {
-            SendAutomationResponse(RequestingSocket, RequestId, false,
+            S.SendAutomationResponse(RequestingSocket, RequestId, false,
                 TEXT("No world available for console command execution"), nullptr, TEXT("NO_WORLD"));
             return true;
         }
@@ -399,7 +400,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
         Result->SetStringField(TEXT("command"), Command);
         Result->SetBoolField(TEXT("success"), bSuccess);
         
-        SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
+        S.SendAutomationResponse(RequestingSocket, RequestId, bSuccess,
             bSuccess ? FString::Printf(TEXT("Command executed: %s"), *Command)
                      : FString::Printf(TEXT("Command not executed: %s"), *Command),
             Result, bSuccess ? FString() : TEXT("EXEC_FAILED"));
@@ -409,7 +410,7 @@ bool UMcpAutomationBridgeSubsystem::HandleConsoleCommandAction(
     
     return false; // Not handled
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, false,
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
         TEXT("Console command actions require editor build"),
         nullptr, TEXT("NOT_IMPLEMENTED"));
     return true;

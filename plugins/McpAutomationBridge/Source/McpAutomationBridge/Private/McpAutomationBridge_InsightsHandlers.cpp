@@ -26,6 +26,7 @@
 // Core Includes
 // -----------------------------------------------------------------------------
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_InsightsHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpHandlerUtils.h"
@@ -39,8 +40,8 @@
 // Handler Implementation
 // =============================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
-    const FString& RequestId, 
+bool McpHandlers::SystemControl::HandleInsightsAction(UMcpAutomationBridgeSubsystem& S,
+    const FString& RequestId,
     const FString& Action, 
     const TSharedPtr<FJsonObject>& Payload, 
     FMcpResponseHandle RequestingSocket)
@@ -54,7 +55,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
     // Validate payload
     if (!Payload.IsValid())
     {
-        SendAutomationError(RequestingSocket, RequestId, 
+        S.SendAutomationError(RequestingSocket, RequestId, 
             TEXT("Missing payload."), TEXT("INVALID_PAYLOAD"));
         return true;
     }
@@ -89,7 +90,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
 
             if (!bChannelsSafe)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     TEXT("Trace channels contain unsupported characters."),
                     TEXT("INVALID_CHANNELS"));
                 return true;
@@ -99,7 +100,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
         // Guard GEngine before Exec call
         if (!GEngine)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Engine is not available."), TEXT("ENGINE_UNAVAILABLE"));
             return true;
         }
@@ -119,7 +120,7 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
         // Check if command was executed successfully
         if (!bCommandExecuted)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Failed to start trace session. Trace module may not be available."),
                 TEXT("COMMAND_FAILED"));
             return true;
@@ -136,13 +137,13 @@ bool UMcpAutomationBridgeSubsystem::HandleInsightsAction(
             Result->SetStringField(TEXT("channels"), Channels);
         }
 
-        SendAutomationResponse(RequestingSocket, RequestId, true, 
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
             TEXT("Trace session started."), Result);
         return true;
     }
 
     // Unknown subaction
-    SendAutomationError(RequestingSocket, RequestId, 
+    S.SendAutomationError(RequestingSocket, RequestId, 
         TEXT("Unknown subAction."), TEXT("INVALID_SUBACTION"));
     return true;
 }

@@ -30,5 +30,11 @@ bool HandleSysGetTestResults(UMcpAutomationBridgeSubsystem& S, const FString& Re
                           const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleSysExecutePython(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                           const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleSysStartSession(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleSysExecuteCommand(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
+bool HandleSysSetCvar(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                          const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 
 } // namespace McpHandlers::SystemControl
