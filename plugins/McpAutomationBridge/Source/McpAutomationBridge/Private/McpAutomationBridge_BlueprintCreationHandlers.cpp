@@ -44,6 +44,7 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpPropertyReflection.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/ScopeLock.h"
 
@@ -113,80 +114,6 @@
 #endif
 
 #endif // WITH_EDITOR
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * @brief Applies JSON-defined property values to a UObject, recursively handling nested object properties.
- *
- * For each entry in Properties, this function looks up a property on TargetObj by name and sets it:
- * - If the property is an object property and the JSON value is an object, the function recurses into that child object.
- * - Otherwise JSON primitives (string, number, boolean) are converted to text and applied using ImportText_Direct.
- * Unknown property names are silently ignored and no errors are thrown.
- *
- * @param TargetObj The UObject to modify. No action is performed if null.
- * @param Properties JSON object mapping property names to values; nested JSON objects map to subobjects/components.
- */
-static void ApplyPropertiesToObject(UObject *TargetObj,
-                                    const TSharedPtr<FJsonObject> &Properties) {
-  if (!TargetObj || !Properties.IsValid()) {
-    return;
-  }
-
-  for (const auto &Pair : Properties->Values) {
-    FProperty *Property = TargetObj->GetClass()->FindPropertyByName(*Pair.Key);
-    if (!Property) {
-      continue;
-    }
-
-    // 1. Handle Object Properties (Recursion for Components/Subobjects)
-    if (FObjectProperty *ObjProp = CastField<FObjectProperty>(Property)) {
-      if (Pair.Value->Type == EJson::Object) {
-        // This is likely a component or subobject property we want to edit
-        // inline
-        UObject *ChildObj =
-            ObjProp->GetObjectPropertyValue_InContainer(TargetObj);
-        if (ChildObj) {
-          ApplyPropertiesToObject(ChildObj, Pair.Value->AsObject());
-        }
-        continue;
-      }
-    }
-
-    // 2. Handle generic property setting via text import
-    FString TextValue;
-
-    if (Pair.Value->Type == EJson::String) {
-      TextValue = Pair.Value->AsString();
-    } else if (Pair.Value->Type == EJson::Number) {
-      double Val = Pair.Value->AsNumber();
-      // Heuristic: check if target is integer to avoid floating point syntax
-      // issues if any
-      if (Property->IsA<FIntProperty>() || Property->IsA<FInt64Property>() ||
-          Property->IsA<FByteProperty>()) {
-        TextValue = FString::Printf(TEXT("%lld"), (long long)Val);
-      } else {
-        TextValue = FString::SanitizeFloat(Val);
-      }
-    } else if (Pair.Value->Type == EJson::Boolean) {
-      TextValue = Pair.Value->AsBool() ? TEXT("True") : TEXT("False");
-    }
-
-    if (!TextValue.IsEmpty()) {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-      Property->ImportText_Direct(
-          *TextValue, Property->ContainerPtrToValuePtr<void>(TargetObj),
-          TargetObj, 0);
-#else
-      // UE 5.0: Use ImportText with different signature
-      Property->ImportText(*TextValue, Property->ContainerPtrToValuePtr<void>(TargetObj),
-          PPF_None, TargetObj);
-#endif
-    }
-  }
-}
 
 // =============================================================================
 // Handler Implementations
@@ -699,13 +626,24 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
   // -------------------------------------------------------------------------
   // Apply CDO Properties
   // -------------------------------------------------------------------------
+  TArray<FString> PropertyWriteFailures;
   if (CreatedBlueprint && CreatedBlueprint->GeneratedClass) {
     const TSharedPtr<FJsonObject> *PropertiesPtr;
-    if (LocalPayload->TryGetObjectField(TEXT("properties"), PropertiesPtr)) {
+    if (LocalPayload->TryGetObjectField(TEXT("properties"), PropertiesPtr) &&
+        PropertiesPtr && (*PropertiesPtr).IsValid()) {
       UObject *CDO = CreatedBlueprint->GeneratedClass->GetDefaultObject();
       if (CDO) {
-        ApplyPropertiesToObject(CDO, *PropertiesPtr);
-        // Mark dirty
+        TMap<FName, TSharedPtr<FJsonValue>> JsonValues;
+        for (const auto &Pair : (*PropertiesPtr)->Values) {
+          JsonValues.Add(FName(*Pair.Key), Pair.Value);
+        }
+        TMap<FName, FString> ImportErrors;
+        McpPropertyReflection::ApplyJsonValuesToObject(CDO, JsonValues,
+                                                       &ImportErrors);
+        for (const TPair<FName, FString> &ImportError : ImportErrors) {
+          PropertyWriteFailures.Add(FString::Printf(
+              TEXT("%s (%s)"), *ImportError.Key.ToString(), *ImportError.Value));
+        }
         CreatedBlueprint->Modify();
       }
     }
@@ -814,13 +752,38 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
   ResultPayload->SetBoolField(TEXT("saved"), bSavedToDisk);
   McpHandlerUtils::AddVerification(ResultPayload, CreatedBlueprint);
 
+  // Creation-default properties are applied strictly (unknown name or bad value
+  // is an error, not a silent drop). The blueprint is still created and saved;
+  // report the import failure so the caller can re-read or delete it.
+  const bool bPropertyWriteFailed = PropertyWriteFailures.Num() > 0;
+  const FString ResponseMessage =
+      bPropertyWriteFailed
+          ? FString::Printf(
+                TEXT("Blueprint was created at %s but %d creation-default "
+                     "propert%s failed to apply: %s. The blueprint was still "
+                     "created; re-read or delete it as needed."),
+                *CreatedNormalizedPath, PropertyWriteFailures.Num(),
+                PropertyWriteFailures.Num() == 1 ? TEXT("y") : TEXT("ies"),
+                *FString::Join(PropertyWriteFailures, TEXT("; ")))
+          : TEXT("Blueprint created");
+  const FString ResponseErrorCode =
+      bPropertyWriteFailed ? TEXT("PROPERTY_WRITE_FAILED") : FString();
+  if (bPropertyWriteFailed) {
+    ResultPayload->SetStringField(TEXT("blueprintPath"), CreatedNormalizedPath);
+    TArray<TSharedPtr<FJsonValue>> FailedArr;
+    for (const FString &Failure : PropertyWriteFailures) {
+      FailedArr.Add(MakeShared<FJsonValueString>(Failure));
+    }
+    ResultPayload->SetArrayField(TEXT("failedProperties"), FailedArr);
+  }
+
   FScopeLock Lock(&GBlueprintCreateMutex);
   if (TArray<TPair<FString, FMcpResponseHandle>> *Subs =
           GBlueprintCreateInflight.Find(CreateKey)) {
     for (const TPair<FString, FMcpResponseHandle> &Pair : *Subs) {
-      Self->SendAutomationResponse(Pair.Value, Pair.Key, true,
-                                   TEXT("Blueprint created"), ResultPayload,
-                                   FString());
+      Self->SendAutomationResponse(Pair.Value, Pair.Key, !bPropertyWriteFailed,
+                                   ResponseMessage, ResultPayload,
+                                   ResponseErrorCode);
     }
     GBlueprintCreateInflight.Remove(CreateKey);
     GBlueprintCreateInflightTs.Remove(CreateKey);
@@ -828,9 +791,9 @@ bool FBlueprintCreationHandlers::HandleBlueprintCreate(
            TEXT("blueprint_create RequestId=%s completed (coalesced)."),
            *RequestId);
   } else {
-    Self->SendAutomationResponse(RequestingSocket, RequestId, true,
-                                 TEXT("Blueprint created"), ResultPayload,
-                                 FString());
+    Self->SendAutomationResponse(RequestingSocket, RequestId,
+                                 !bPropertyWriteFailed, ResponseMessage,
+                                 ResultPayload, ResponseErrorCode);
   }
 
   // -------------------------------------------------------------------------

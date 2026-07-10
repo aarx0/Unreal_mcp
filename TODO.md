@@ -8,7 +8,7 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
-> **[ ] Found 2026-07-09 (silent-success sweep, code read): `set_object_property` special-cased
+> **[x] Found 2026-07-09 (silent-success sweep, code read): `set_object_property` special-cased
 > transform paths silently zero on wrong value type.** In `HandleSetObjectProperty`
 > (PropertyHandlers.cpp:267-340), the ActorLocation/ActorRotation/ActorScale fast paths accept the
 > discriminated value only as Object or Array — any other kind (e.g. `stringValue:"(100,0,0)"`)
@@ -17,6 +17,9 @@ as they land.
 > on a level actor with propertyName=ActorLocation + stringValue. Fix belongs in the Phase-B
 > dynamic-strictness pass (same handler also skips the `PropertyMatchesValueKind` cross-check the
 > control_actor path does — reject non-vector kinds with VALUE_TYPE_MISMATCH before the branch).
+> Fixed 2026-07-09 (Phase B): each transform fast path now rejects non-Object/Array kinds (and bHidden
+> non-Boolean) with VALUE_TYPE_MISMATCH before applying, plus a PropertyMatchesValueKind cross-check on
+> the generic path.
 
 > **[ ] Found 2026-07-09 (silent-success sweep, code read), two pre-existing warts adjacent to the
 > conversion but out of its scope:**

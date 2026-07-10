@@ -654,6 +654,47 @@ static FProperty* FindStructChildProperty(const UScriptStruct* Struct, const FSt
     return nullptr;
 }
 
+static const TCHAR* JsonTypeToString(EJson Type)
+{
+    switch (Type)
+    {
+    case EJson::None:    return TEXT("none");
+    case EJson::Null:    return TEXT("null");
+    case EJson::String:  return TEXT("string");
+    case EJson::Number:  return TEXT("number");
+    case EJson::Boolean: return TEXT("bool");
+    case EJson::Array:   return TEXT("array");
+    case EJson::Object:  return TEXT("object");
+    }
+    return TEXT("unknown");
+}
+
+// Apply a JSON number to a fixed-width integer property. Number only (a string is
+// not a number), and a value outside the type's representable range is an error,
+// never a silent narrowing.
+template <typename FPropertyType, typename CppType>
+static bool ApplyBoundedIntProperty(FPropertyType* Prop, void* Container,
+                                    const TSharedPtr<FJsonValue>& ValueField, FString& OutError)
+{
+    if (ValueField->Type != EJson::Number)
+    {
+        OutError = FString::Printf(TEXT("Expected number for %s '%s', got %s"),
+                                   *Prop->GetClass()->GetName(), *Prop->GetName(),
+                                   JsonTypeToString(ValueField->Type));
+        return false;
+    }
+    const double Num = ValueField->AsNumber();
+    if (Num < static_cast<double>(TNumericLimits<CppType>::Min()) ||
+        Num > static_cast<double>(TNumericLimits<CppType>::Max()))
+    {
+        OutError = FString::Printf(TEXT("Value %g out of range for %s '%s'"),
+                                   Num, *Prop->GetClass()->GetName(), *Prop->GetName());
+        return false;
+    }
+    Prop->SetPropertyValue_InContainer(Container, static_cast<CppType>(Num));
+    return true;
+}
+
 bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const TSharedPtr<FJsonValue>& ValueField, FString& OutError, int32 Depth, UObject* OwnerForInstancing)
 {
     OutError.Empty();
@@ -666,23 +707,14 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
     // Bool
     if (FBoolProperty* BP = CastField<FBoolProperty>(Property))
     {
-        if (ValueField->Type == EJson::Boolean)
+        if (ValueField->Type != EJson::Boolean)
         {
-            BP->SetPropertyValue_InContainer(TargetContainer, ValueField->AsBool());
-            return true;
+            OutError = FString::Printf(TEXT("Expected bool for bool property '%s', got %s"),
+                                       *Property->GetName(), JsonTypeToString(ValueField->Type));
+            return false;
         }
-        if (ValueField->Type == EJson::Number)
-        {
-            BP->SetPropertyValue_InContainer(TargetContainer, ValueField->AsNumber() != 0.0);
-            return true;
-        }
-        if (ValueField->Type == EJson::String)
-        {
-            BP->SetPropertyValue_InContainer(TargetContainer, ValueField->AsString().Equals(TEXT("true"), ESearchCase::IgnoreCase));
-            return true;
-        }
-        OutError = TEXT("Unsupported JSON type for bool property");
-        return false;
+        BP->SetPropertyValue_InContainer(TargetContainer, ValueField->AsBool());
+        return true;
     }
 
     // String
@@ -712,45 +744,63 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
     // Float
     if (FFloatProperty* FP = CastField<FFloatProperty>(Property))
     {
-        double Val = 0.0;
-        if (ValueField->Type == EJson::Number) Val = ValueField->AsNumber();
-        else if (ValueField->Type == EJson::String) Val = FCString::Atod(*ValueField->AsString());
-        else { OutError = TEXT("Unsupported JSON type for float property"); return false; }
-        FP->SetPropertyValue_InContainer(TargetContainer, static_cast<float>(Val));
+        if (ValueField->Type != EJson::Number)
+        {
+            OutError = FString::Printf(TEXT("Expected number for float property '%s', got %s"),
+                                       *Property->GetName(), JsonTypeToString(ValueField->Type));
+            return false;
+        }
+        FP->SetPropertyValue_InContainer(TargetContainer, static_cast<float>(ValueField->AsNumber()));
         return true;
     }
 
     // Double
     if (FDoubleProperty* DP = CastField<FDoubleProperty>(Property))
     {
-        double Val = 0.0;
-        if (ValueField->Type == EJson::Number) Val = ValueField->AsNumber();
-        else if (ValueField->Type == EJson::String) Val = FCString::Atod(*ValueField->AsString());
-        else { OutError = TEXT("Unsupported JSON type for double property"); return false; }
-        DP->SetPropertyValue_InContainer(TargetContainer, Val);
+        if (ValueField->Type != EJson::Number)
+        {
+            OutError = FString::Printf(TEXT("Expected number for double property '%s', got %s"),
+                                       *Property->GetName(), JsonTypeToString(ValueField->Type));
+            return false;
+        }
+        DP->SetPropertyValue_InContainer(TargetContainer, ValueField->AsNumber());
         return true;
     }
 
     // Int32
     if (FIntProperty* IP = CastField<FIntProperty>(Property))
     {
-        int64 Val = 0;
-        if (ValueField->Type == EJson::Number) Val = static_cast<int64>(ValueField->AsNumber());
-        else if (ValueField->Type == EJson::String) Val = FCString::Atoi64(*ValueField->AsString());
-        else { OutError = TEXT("Unsupported JSON type for int property"); return false; }
-        IP->SetPropertyValue_InContainer(TargetContainer, static_cast<int32>(Val));
-        return true;
+        return ApplyBoundedIntProperty<FIntProperty, int32>(IP, TargetContainer, ValueField, OutError);
     }
 
     // Int64
     if (FInt64Property* I64P = CastField<FInt64Property>(Property))
     {
-        int64 Val = 0;
-        if (ValueField->Type == EJson::Number) Val = static_cast<int64>(ValueField->AsNumber());
-        else if (ValueField->Type == EJson::String) Val = FCString::Atoi64(*ValueField->AsString());
-        else { OutError = TEXT("Unsupported JSON type for int64 property"); return false; }
-        I64P->SetPropertyValue_InContainer(TargetContainer, Val);
-        return true;
+        return ApplyBoundedIntProperty<FInt64Property, int64>(I64P, TargetContainer, ValueField, OutError);
+    }
+
+    // Sub-width integer types. PropertyMatchesValueKind advertises these under the
+    // 'int' kind, so the importer must apply them too or a validated intValue would
+    // fall through to the generic tail and fail.
+    if (FInt8Property* I8P = CastField<FInt8Property>(Property))
+    {
+        return ApplyBoundedIntProperty<FInt8Property, int8>(I8P, TargetContainer, ValueField, OutError);
+    }
+    if (FInt16Property* I16P = CastField<FInt16Property>(Property))
+    {
+        return ApplyBoundedIntProperty<FInt16Property, int16>(I16P, TargetContainer, ValueField, OutError);
+    }
+    if (FUInt16Property* U16P = CastField<FUInt16Property>(Property))
+    {
+        return ApplyBoundedIntProperty<FUInt16Property, uint16>(U16P, TargetContainer, ValueField, OutError);
+    }
+    if (FUInt32Property* U32P = CastField<FUInt32Property>(Property))
+    {
+        return ApplyBoundedIntProperty<FUInt32Property, uint32>(U32P, TargetContainer, ValueField, OutError);
+    }
+    if (FUInt64Property* U64P = CastField<FUInt64Property>(Property))
+    {
+        return ApplyBoundedIntProperty<FUInt64Property, uint64>(U64P, TargetContainer, ValueField, OutError);
     }
 
     // Byte (may be an enum)
@@ -788,12 +838,7 @@ bool ApplyJsonValueToProperty(void* TargetContainer, FProperty* Property, const 
             OutError = TEXT("Enum property requires string or number");
             return false;
         }
-        int64 Val = 0;
-        if (ValueField->Type == EJson::Number) Val = static_cast<int64>(ValueField->AsNumber());
-        else if (ValueField->Type == EJson::String) Val = FCString::Atoi64(*ValueField->AsString());
-        else { OutError = TEXT("Unsupported JSON type for byte property"); return false; }
-        BP->SetPropertyValue_InContainer(TargetContainer, static_cast<uint8>(Val));
-        return true;
+        return ApplyBoundedIntProperty<FByteProperty, uint8>(BP, TargetContainer, ValueField, OutError);
     }
 
     // Enum property (newer engine versions)
@@ -1270,13 +1315,16 @@ bool PropertyMatchesValueKind(const FProperty* P, const FString& Kind)
     if (Kind == TEXT("int"))
         return CastField<FIntProperty>(P) || CastField<FInt64Property>(P) ||
                CastField<FInt16Property>(P) || CastField<FInt8Property>(P) ||
-               CastField<FUInt32Property>(P) || CastField<FByteProperty>(P);
+               CastField<FUInt16Property>(P) || CastField<FUInt32Property>(P) ||
+               CastField<FUInt64Property>(P) || CastField<FByteProperty>(P);
     if (Kind == TEXT("float"))
         return CastField<FFloatProperty>(P) || CastField<FDoubleProperty>(P);
     if (Kind == TEXT("string"))
         return CastField<FStrProperty>(P) || CastField<FNameProperty>(P) ||
                CastField<FTextProperty>(P) || CastField<FEnumProperty>(P) ||
-               CastField<FByteProperty>(P);
+               CastField<FByteProperty>(P) || CastField<FObjectProperty>(P) ||
+               CastField<FSoftObjectProperty>(P) || CastField<FSoftClassProperty>(P) ||
+               CastField<FClassProperty>(P);
     if (Kind == TEXT("vector"))
     {
         const FStructProperty* SP = CastField<FStructProperty>(P);

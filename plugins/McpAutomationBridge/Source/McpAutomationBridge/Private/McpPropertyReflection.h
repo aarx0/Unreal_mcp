@@ -95,10 +95,12 @@ namespace McpPropertyReflection
     /**
      * Apply a JSON value to a reflected property on a target container.
      * 
-     * Supports conversion from JSON to:
-     * - Bool (from boolean, number, or "true"/"false" string)
+     * JSON type is matched strictly to the property's storage kind — a JSON bool
+     * only sets a bool, a JSON number only sets a numeric property. Mismatches fail
+     * loud rather than coercing. Supports:
+     * - Bool (from boolean)
      * - String/Name (from string)
-     * - Numeric types (from number or numeric string)
+     * - Numeric types, including sub-width ints (from number; out-of-range errors)
      * - Enums (from string name or numeric value)
      * - Object references (from path string)
      * - Soft references (from path string or null)

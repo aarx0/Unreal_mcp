@@ -266,6 +266,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
     }
     if (!bIsClassDefaultObject &&
         PropertyName.Equals(TEXT("ActorLocation"), ESearchCase::IgnoreCase)) {
+          if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
+          {
+              SendAutomationError(RequestingSocket, RequestId,
+                  TEXT("ActorLocation requires vectorValue {x,y,z} or arrayValue [x,y,z]."),
+                  TEXT("VALUE_TYPE_MISMATCH"));
+              return true;
+          }
           FVector NewLoc = FVector::ZeroVector;
           if (ValueField->Type == EJson::Object)
           {
@@ -275,7 +282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           {
               McpPropertyReflection::JsonArrayToVector(ValueField->AsArray(), NewLoc);
           }
-          
+
           Actor->Modify();
           Actor->SetActorLocation(NewLoc);
 
@@ -291,6 +298,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       // ActorRotation
       if (PropertyName.Equals(TEXT("ActorRotation"), ESearchCase::IgnoreCase))
       {
+          if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
+          {
+              SendAutomationError(RequestingSocket, RequestId,
+                  TEXT("ActorRotation requires vectorValue {pitch,yaw,roll} or arrayValue [pitch,yaw,roll]."),
+                  TEXT("VALUE_TYPE_MISMATCH"));
+              return true;
+          }
           FRotator NewRot = FRotator::ZeroRotator;
           if (ValueField->Type == EJson::Object)
           {
@@ -300,7 +314,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           {
               McpPropertyReflection::JsonArrayToRotator(ValueField->AsArray(), NewRot);
           }
-          
+
           Actor->Modify();
           Actor->SetActorRotation(NewRot);
 
@@ -317,6 +331,13 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       if (PropertyName.Equals(TEXT("ActorScale"), ESearchCase::IgnoreCase) ||
           PropertyName.Equals(TEXT("ActorScale3D"), ESearchCase::IgnoreCase))
       {
+          if (ValueField->Type != EJson::Object && ValueField->Type != EJson::Array)
+          {
+              SendAutomationError(RequestingSocket, RequestId,
+                  TEXT("ActorScale requires vectorValue {x,y,z} or arrayValue [x,y,z]."),
+                  TEXT("VALUE_TYPE_MISMATCH"));
+              return true;
+          }
           FVector NewScale = FVector::OneVector;
           if (ValueField->Type == EJson::Object)
           {
@@ -326,7 +347,7 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
           {
               McpPropertyReflection::JsonArrayToVector(ValueField->AsArray(), NewScale);
           }
-          
+
           Actor->Modify();
           Actor->SetActorScale3D(NewScale);
 
@@ -342,12 +363,15 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
       // bHidden (visibility) — skip runtime setter for CDOs, let generic path handle it
       if (!bIsClassDefaultObject && PropertyName.Equals(TEXT("bHidden"), ESearchCase::IgnoreCase))
       {
-          bool bHidden = GetJsonBoolField(Payload, TEXT("value"), false);
-          if (ValueField->Type == EJson::Boolean)
-              bHidden = ValueField->AsBool();
-          else if (ValueField->Type == EJson::Number)
-              bHidden = ValueField->AsNumber() != 0;
-          
+          if (ValueField->Type != EJson::Boolean)
+          {
+              SendAutomationError(RequestingSocket, RequestId,
+                  TEXT("bHidden requires boolValue true/false."),
+                  TEXT("VALUE_TYPE_MISMATCH"));
+              return true;
+          }
+          const bool bHidden = ValueField->AsBool();
+
           Actor->Modify();
           Actor->SetActorHiddenInGame(bHidden);
 
@@ -387,6 +411,18 @@ bool UMcpAutomationBridgeSubsystem::HandleSetObjectProperty(
               TEXT("PROPERTY_NOT_FOUND"));
           return true;
       }
+  }
+
+  // Cross-check the sent value kind against the resolved property's real type
+  // before applying — a mismatch fails loud instead of silently coercing (mirrors
+  // the control_actor set-variable path).
+  if (!McpPropertyReflection::PropertyMatchesValueKind(Property, PropTyped.Kind))
+  {
+      SendAutomationError(RequestingSocket, RequestId,
+          FString::Printf(TEXT("%s: you sent %sValue but the property type is '%s'."),
+                          *PropertyName, *PropTyped.Kind, *Property->GetCPPType()),
+          TEXT("VALUE_TYPE_MISMATCH"));
+      return true;
   }
 
   // --- Apply Value ---
