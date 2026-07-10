@@ -69,6 +69,7 @@
 
 #include "Dom/JsonObject.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_NavigationHandlers.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "Misc/EngineVersionComparison.h"
 
@@ -1606,169 +1607,181 @@ static bool HandleGetNavigationInfo(
 // Thin per-action wrappers over the static handlers above, called by the
 // FMcpCall classes (MCP/Calls/McpCalls_ManageAi.cpp).
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationConfigureNavMeshSettings(
+bool McpHandlers::Ai::HandleNavigationConfigureNavMeshSettings(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureNavMeshSettings(this, RequestId, Payload, Socket);
+    return HandleConfigureNavMeshSettings(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationSetNavAgentProperties(
+bool McpHandlers::Ai::HandleNavigationSetNavAgentProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetNavAgentProperties(this, RequestId, Payload, Socket);
+    return HandleSetNavAgentProperties(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationRebuildNavigation(
+bool McpHandlers::Ai::HandleNavigationRebuildNavigation(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleRebuildNavigation(this, RequestId, Payload, Socket);
+    return HandleRebuildNavigation(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationCreateNavModifierComponent(
+bool McpHandlers::Ai::HandleNavigationCreateNavModifierComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateNavModifierComponent(this, RequestId, Payload, Socket);
+    return HandleCreateNavModifierComponent(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationSetNavAreaClass(
+bool McpHandlers::Ai::HandleNavigationSetNavAreaClass(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetNavAreaClass(this, RequestId, Payload, Socket);
+    return HandleSetNavAreaClass(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationConfigureNavAreaCost(
+bool McpHandlers::Ai::HandleNavigationConfigureNavAreaCost(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureNavAreaCost(this, RequestId, Payload, Socket);
+    return HandleConfigureNavAreaCost(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationCreateNavLinkProxy(
+bool McpHandlers::Ai::HandleNavigationCreateNavLinkProxy(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateNavLinkProxy(this, RequestId, Payload, Socket);
+    return HandleCreateNavLinkProxy(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationConfigureNavLink(
+bool McpHandlers::Ai::HandleNavigationConfigureNavLink(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureNavLink(this, RequestId, Payload, Socket);
+    return HandleConfigureNavLink(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationSetNavLinkType(
+bool McpHandlers::Ai::HandleNavigationSetNavLinkType(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleSetNavLinkType(this, RequestId, Payload, Socket);
+    return HandleSetNavLinkType(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationCreateSmartLink(
+bool McpHandlers::Ai::HandleNavigationCreateSmartLink(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleCreateSmartLink(this, RequestId, Payload, Socket);
+    return HandleCreateSmartLink(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationConfigureSmartLinkBehavior(
+bool McpHandlers::Ai::HandleNavigationConfigureSmartLinkBehavior(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleConfigureSmartLinkBehavior(this, RequestId, Payload, Socket);
+    return HandleConfigureSmartLinkBehavior(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleNavigationGetNavigationInfo(
+bool McpHandlers::Ai::HandleNavigationGetNavigationInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId,
     const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle Socket)
 {
 #if WITH_EDITOR
-    return HandleGetNavigationInfo(this, RequestId, Payload, Socket);
+    return HandleGetNavigationInfo(&S, RequestId, Payload, Socket);
 #else
-    SendAutomationResponse(Socket, RequestId, false,
+    S.SendAutomationResponse(Socket, RequestId, false,
         TEXT("Navigation operations require editor build"), nullptr, TEXT("EDITOR_ONLY"));
     return true;
 #endif

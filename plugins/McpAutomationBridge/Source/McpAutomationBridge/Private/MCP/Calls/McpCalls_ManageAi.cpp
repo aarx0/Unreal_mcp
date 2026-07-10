@@ -13,6 +13,9 @@
 #include "MCP/McpCallRegistry.h"
 #include "MCP/McpSchemaBuilder.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_AIHandlers.h"
+#include "McpAutomationBridge_BehaviorTreeHandlers.h"
+#include "McpAutomationBridge_NavigationHandlers.h"
 
 // Per-family namespace: unity builds compile several McpCalls_*.cpp in one TU,
 // so file-scope helpers would collide across families otherwise.
@@ -838,89 +841,89 @@ class FMcpCall_ManageAi_##ClassSuffix final : public FMcpCall                   
 	bool Run(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,                  \
 	         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket) override  \
 	{                                                                                     \
-		return S.HandlerFn(RequestId, Payload, Socket);                                   \
+		return HandlerFn(S, RequestId, Payload, Socket);                                   \
 	}                                                                                     \
 };
 
 // AI Controllers & Blackboard assets (AIHandlers.cpp)
-MCP_AI_CALL(CreateAiController, "create_controller", HandleAiCreateAiController, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AssignBehaviorTree, "assign_behavior_tree", HandleAiAssignBehaviorTree, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AssignBlackboard, "assign_blackboard", HandleAiAssignBlackboard, EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateBlackboardAsset, "create_blackboard_asset", HandleAiCreateBlackboardAsset, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddBlackboardKey, "add_blackboard_key", HandleAiAddBlackboardKey, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetKeyInstanceSynced, "set_key_instance_synced", HandleAiSetKeyInstanceSynced, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateAiController, "create_controller", McpHandlers::Ai::HandleAiCreateAiController, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AssignBehaviorTree, "assign_behavior_tree", McpHandlers::Ai::HandleAiAssignBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AssignBlackboard, "assign_blackboard", McpHandlers::Ai::HandleAiAssignBlackboard, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateBlackboardAsset, "create_blackboard_asset", McpHandlers::Ai::HandleAiCreateBlackboardAsset, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddBlackboardKey, "add_blackboard_key", McpHandlers::Ai::HandleAiAddBlackboardKey, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetKeyInstanceSynced, "set_key_instance_synced", McpHandlers::Ai::HandleAiSetKeyInstanceSynced, EMcpCallFlags::Mutating)
 
 // Behavior Tree conveniences (AIHandlers.cpp wrappers over the graph members)
-MCP_AI_CALL(CreateBehaviorTree, "create_behavior_tree", HandleAiCreateBehaviorTree, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddCompositeNode, "add_composite_node", HandleAiAddCompositeNode, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddTaskNode, "add_task_node", HandleAiAddTaskNode, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddDecorator, "add_decorator", HandleAiAddDecorator, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddService, "add_service", HandleAiAddService, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureBtNode, "configure_bt_node", HandleAiConfigureBtNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateBehaviorTree, "create_behavior_tree", McpHandlers::Ai::HandleAiCreateBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddCompositeNode, "add_composite_node", McpHandlers::Ai::HandleAiAddCompositeNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddTaskNode, "add_task_node", McpHandlers::Ai::HandleAiAddTaskNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddDecorator, "add_decorator", McpHandlers::Ai::HandleAiAddDecorator, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddService, "add_service", McpHandlers::Ai::HandleAiAddService, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureBtNode, "configure_bt_node", McpHandlers::Ai::HandleAiConfigureBtNode, EMcpCallFlags::Mutating)
 
 // EQS
-MCP_AI_CALL(CreateEqsQuery, "create_eqs_query", HandleAiCreateEqsQuery, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddEqsGenerator, "add_eqs_generator", HandleAiAddEqsGenerator, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddEqsContext, "add_eqs_context", HandleAiAddEqsContext, EMcpCallFlags::None)
-MCP_AI_CALL(AddEqsTest, "add_eqs_test", HandleAiAddEqsTest, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureTestScoring, "configure_test_scoring", HandleAiConfigureTestScoring, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateEqsQuery, "create_eqs_query", McpHandlers::Ai::HandleAiCreateEqsQuery, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddEqsGenerator, "add_eqs_generator", McpHandlers::Ai::HandleAiAddEqsGenerator, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddEqsContext, "add_eqs_context", McpHandlers::Ai::HandleAiAddEqsContext, EMcpCallFlags::None)
+MCP_AI_CALL(AddEqsTest, "add_eqs_test", McpHandlers::Ai::HandleAiAddEqsTest, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureTestScoring, "configure_test_scoring", McpHandlers::Ai::HandleAiConfigureTestScoring, EMcpCallFlags::Mutating)
 
 // Perception
-MCP_AI_CALL(AddAiPerceptionComponent, "add_perception_component", HandleAiAddAiPerceptionComponent, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSightConfig, "configure_sight_config", HandleAiConfigureSightConfig, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureHearingConfig, "configure_hearing_config", HandleAiConfigureHearingConfig, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureDamageSenseConfig, "configure_damage_sense_config", HandleAiConfigureDamageSenseConfig, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetPerceptionTeam, "set_perception_team", HandleAiSetPerceptionTeam, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddAiPerceptionComponent, "add_perception_component", McpHandlers::Ai::HandleAiAddAiPerceptionComponent, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSightConfig, "configure_sight_config", McpHandlers::Ai::HandleAiConfigureSightConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureHearingConfig, "configure_hearing_config", McpHandlers::Ai::HandleAiConfigureHearingConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureDamageSenseConfig, "configure_damage_sense_config", McpHandlers::Ai::HandleAiConfigureDamageSenseConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetPerceptionTeam, "set_perception_team", McpHandlers::Ai::HandleAiSetPerceptionTeam, EMcpCallFlags::Mutating)
 
 // State Trees (UE 5.3+)
-MCP_AI_CALL(CreateStateTree, "create_state_tree", HandleAiCreateStateTree, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddStateTreeState, "add_state_tree_state", HandleAiAddStateTreeState, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddStateTreeTransition, "add_state_tree_transition", HandleAiAddStateTreeTransition, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureStateTreeTask, "configure_state_tree_task", HandleAiConfigureStateTreeTask, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateStateTree, "create_state_tree", McpHandlers::Ai::HandleAiCreateStateTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddStateTreeState, "add_state_tree_state", McpHandlers::Ai::HandleAiAddStateTreeState, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddStateTreeTransition, "add_state_tree_transition", McpHandlers::Ai::HandleAiAddStateTreeTransition, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureStateTreeTask, "configure_state_tree_task", McpHandlers::Ai::HandleAiConfigureStateTreeTask, EMcpCallFlags::Mutating)
 
 // Smart Objects
-MCP_AI_CALL(CreateSmartObjectDefinition, "create_smart_object_definition", HandleAiCreateSmartObjectDefinition, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSmartObjectSlot, "add_smart_object_slot", HandleAiAddSmartObjectSlot, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSlotBehavior, "configure_slot_behavior", HandleAiConfigureSlotBehavior, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSmartObjectComponent, "add_smart_object_component", HandleAiAddSmartObjectComponent, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateSmartObjectDefinition, "create_smart_object_definition", McpHandlers::Ai::HandleAiCreateSmartObjectDefinition, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSmartObjectSlot, "add_smart_object_slot", McpHandlers::Ai::HandleAiAddSmartObjectSlot, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSlotBehavior, "configure_slot_behavior", McpHandlers::Ai::HandleAiConfigureSlotBehavior, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSmartObjectComponent, "add_smart_object_component", McpHandlers::Ai::HandleAiAddSmartObjectComponent, EMcpCallFlags::Mutating)
 
 // Mass AI
-MCP_AI_CALL(CreateMassEntityConfig, "create_mass_entity_config", HandleAiCreateMassEntityConfig, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureMassEntity, "configure_mass_entity", HandleAiConfigureMassEntity, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", HandleAiAddMassSpawner, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateMassEntityConfig, "create_mass_entity_config", McpHandlers::Ai::HandleAiCreateMassEntityConfig, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureMassEntity, "configure_mass_entity", McpHandlers::Ai::HandleAiConfigureMassEntity, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddMassSpawner, "add_mass_spawner", McpHandlers::Ai::HandleAiAddMassSpawner, EMcpCallFlags::Mutating)
 
 // Utility & conveniences
-MCP_AI_CALL(GetAiInfo, "get_info", HandleAiGetAiInfo, EMcpCallFlags::None)
-MCP_AI_CALL(SetupPerception, "setup_perception", HandleAiSetupPerception, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetFocus, "set_focus", HandleAiSetFocus, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ClearFocus, "clear_focus", HandleAiClearFocus, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetBlackboardValue, "set_blackboard_value", HandleAiSetBlackboardValue, EMcpCallFlags::Mutating)
-MCP_AI_CALL(GetBlackboardValue, "get_blackboard_value", HandleAiGetBlackboardValue, EMcpCallFlags::None)
-MCP_AI_CALL(RunBehaviorTree, "run_behavior_tree", HandleAiRunBehaviorTree, EMcpCallFlags::Mutating)
-MCP_AI_CALL(StopBehaviorTree, "stop_behavior_tree", HandleAiStopBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetAiInfo, "get_info", McpHandlers::Ai::HandleAiGetAiInfo, EMcpCallFlags::None)
+MCP_AI_CALL(SetupPerception, "setup_perception", McpHandlers::Ai::HandleAiSetupPerception, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetFocus, "set_focus", McpHandlers::Ai::HandleAiSetFocus, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ClearFocus, "clear_focus", McpHandlers::Ai::HandleAiClearFocus, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetBlackboardValue, "set_blackboard_value", McpHandlers::Ai::HandleAiSetBlackboardValue, EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetBlackboardValue, "get_blackboard_value", McpHandlers::Ai::HandleAiGetBlackboardValue, EMcpCallFlags::None)
+MCP_AI_CALL(RunBehaviorTree, "run_behavior_tree", McpHandlers::Ai::HandleAiRunBehaviorTree, EMcpCallFlags::Mutating)
+MCP_AI_CALL(StopBehaviorTree, "stop_behavior_tree", McpHandlers::Ai::HandleAiStopBehaviorTree, EMcpCallFlags::Mutating)
 
 // Behavior Tree graph (BehaviorTreeHandlers.cpp)
-MCP_AI_CALL(Create, "create", HandleBehaviorTreeCreate, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddNode, "add_node", HandleBehaviorTreeAddNode, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConnectNodes, "connect_nodes", HandleBehaviorTreeConnectNodes, EMcpCallFlags::Mutating)
-MCP_AI_CALL(RemoveNode, "remove_node", HandleBehaviorTreeRemoveNode, EMcpCallFlags::Mutating)
-MCP_AI_CALL(BreakConnections, "break_connections", HandleBehaviorTreeBreakConnections, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNodeProperties, "set_node_properties", HandleBehaviorTreeSetNodeProperties, EMcpCallFlags::Mutating)
-MCP_AI_CALL(AddSubnode, "add_subnode", HandleBehaviorTreeAddSubnode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(Create, "create", McpHandlers::Ai::HandleBehaviorTreeCreate, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddNode, "add_node", McpHandlers::Ai::HandleBehaviorTreeAddNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConnectNodes, "connect_nodes", McpHandlers::Ai::HandleBehaviorTreeConnectNodes, EMcpCallFlags::Mutating)
+MCP_AI_CALL(RemoveNode, "remove_node", McpHandlers::Ai::HandleBehaviorTreeRemoveNode, EMcpCallFlags::Mutating)
+MCP_AI_CALL(BreakConnections, "break_connections", McpHandlers::Ai::HandleBehaviorTreeBreakConnections, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNodeProperties, "set_node_properties", McpHandlers::Ai::HandleBehaviorTreeSetNodeProperties, EMcpCallFlags::Mutating)
+MCP_AI_CALL(AddSubnode, "add_subnode", McpHandlers::Ai::HandleBehaviorTreeAddSubnode, EMcpCallFlags::Mutating)
 
 // Navigation (NavigationHandlers.cpp)
-MCP_AI_CALL(ConfigureNavMeshSettings, "configure_nav_mesh_settings", HandleNavigationConfigureNavMeshSettings, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavAgentProperties, "set_nav_agent_properties", HandleNavigationSetNavAgentProperties, EMcpCallFlags::Mutating)
-MCP_AI_CALL(RebuildNavigation, "rebuild_navigation", HandleNavigationRebuildNavigation, EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateNavModifierComponent, "create_nav_modifier_component", HandleNavigationCreateNavModifierComponent, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavAreaClass, "set_nav_area_class", HandleNavigationSetNavAreaClass, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureNavAreaCost, "configure_nav_area_cost", HandleNavigationConfigureNavAreaCost, EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateNavLinkProxy, "create_nav_link_proxy", HandleNavigationCreateNavLinkProxy, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureNavLink, "configure_nav_link", HandleNavigationConfigureNavLink, EMcpCallFlags::Mutating)
-MCP_AI_CALL(SetNavLinkType, "set_nav_link_type", HandleNavigationSetNavLinkType, EMcpCallFlags::Mutating)
-MCP_AI_CALL(CreateSmartLink, "create_smart_link", HandleNavigationCreateSmartLink, EMcpCallFlags::Mutating)
-MCP_AI_CALL(ConfigureSmartLinkBehavior, "configure_smart_link_behavior", HandleNavigationConfigureSmartLinkBehavior, EMcpCallFlags::Mutating)
-MCP_AI_CALL(GetNavigationInfo, "get_navigation_info", HandleNavigationGetNavigationInfo, EMcpCallFlags::None)
+MCP_AI_CALL(ConfigureNavMeshSettings, "configure_nav_mesh_settings", McpHandlers::Ai::HandleNavigationConfigureNavMeshSettings, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavAgentProperties, "set_nav_agent_properties", McpHandlers::Ai::HandleNavigationSetNavAgentProperties, EMcpCallFlags::Mutating)
+MCP_AI_CALL(RebuildNavigation, "rebuild_navigation", McpHandlers::Ai::HandleNavigationRebuildNavigation, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateNavModifierComponent, "create_nav_modifier_component", McpHandlers::Ai::HandleNavigationCreateNavModifierComponent, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavAreaClass, "set_nav_area_class", McpHandlers::Ai::HandleNavigationSetNavAreaClass, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureNavAreaCost, "configure_nav_area_cost", McpHandlers::Ai::HandleNavigationConfigureNavAreaCost, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateNavLinkProxy, "create_nav_link_proxy", McpHandlers::Ai::HandleNavigationCreateNavLinkProxy, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureNavLink, "configure_nav_link", McpHandlers::Ai::HandleNavigationConfigureNavLink, EMcpCallFlags::Mutating)
+MCP_AI_CALL(SetNavLinkType, "set_nav_link_type", McpHandlers::Ai::HandleNavigationSetNavLinkType, EMcpCallFlags::Mutating)
+MCP_AI_CALL(CreateSmartLink, "create_smart_link", McpHandlers::Ai::HandleNavigationCreateSmartLink, EMcpCallFlags::Mutating)
+MCP_AI_CALL(ConfigureSmartLinkBehavior, "configure_smart_link_behavior", McpHandlers::Ai::HandleNavigationConfigureSmartLinkBehavior, EMcpCallFlags::Mutating)
+MCP_AI_CALL(GetNavigationInfo, "get_navigation_info", McpHandlers::Ai::HandleNavigationGetNavigationInfo, EMcpCallFlags::None)
 
 #undef MCP_AI_CALL
 

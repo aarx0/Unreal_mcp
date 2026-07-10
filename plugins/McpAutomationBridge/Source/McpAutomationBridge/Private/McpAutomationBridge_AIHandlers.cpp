@@ -57,6 +57,8 @@
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeGlobals.h"
 #include "McpResponseHelpers.h"
+#include "McpAutomationBridge_AIHandlers.h"
+#include "McpAutomationBridge_BehaviorTreeHandlers.h"
 #include "McpHandlerUtils.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
@@ -540,12 +542,13 @@ static UEnvQuery* CreateEQSQueryAsset(const FString& Path, const FString& Name, 
 // 16.1 AI Controller (3 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateAiController(
+bool McpHandlers::Ai::HandleAiCreateAiController(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -557,7 +560,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateAiController(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Missing name parameter"),
                             TEXT("INVALID_PARAMS"));
         return true;
@@ -567,24 +570,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateAiController(
     UBlueprint* Blueprint = CreateAIControllerBlueprint(Path, Name, Error);
     if (!Blueprint)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
     Result->SetStringField(TEXT("controllerPath"), Blueprint->GetPathName());
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Created AI Controller: %s"), *Name));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI Controller created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI Controller created"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAssignBehaviorTree(
+bool McpHandlers::Ai::HandleAiAssignBehaviorTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -594,13 +598,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBehaviorTree(
     FString ControllerPath = GetJsonStringField(Payload, TEXT("controllerPath"));
     FString BehaviorTreePath = GetJsonStringField(Payload, TEXT("behaviorTreePath"));
 
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
     if (!ControllerBP) return true;
 
     UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
     if (!BT)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Behavior tree not found: %s"), *BehaviorTreePath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -669,17 +673,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBehaviorTree(
     Result->SetStringField(TEXT("controllerPath"), ControllerPath);
     Result->SetStringField(TEXT("behaviorTreePath"), BehaviorTreePath);
     McpHandlerUtils::AddVerification(Result, ControllerBP);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior Tree reference set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior Tree reference set"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAssignBlackboard(
+bool McpHandlers::Ai::HandleAiAssignBlackboard(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -695,7 +700,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBlackboard(
         UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
         if (!BT)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Behavior tree not found: %s"), *BehaviorTreePath), TEXT("NOT_FOUND"));
             return true;
         }
@@ -703,7 +708,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBlackboard(
         UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
         if (!BB)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath), TEXT("NOT_FOUND"));
             return true;
         }
@@ -736,17 +741,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBlackboard(
         Result->SetBoolField(TEXT("saved"), bSaved);
         Result->SetStringField(TEXT("message"), TEXT("Blackboard assigned to Behavior Tree"));
         McpHandlerUtils::AddVerification(Result, BT);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard assigned to Behavior Tree"), Result);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard assigned to Behavior Tree"), Result);
         return true;
     }
 
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
     if (!ControllerBP) return true;
 
     UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
     if (!BB)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -815,19 +820,20 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAssignBlackboard(
     Result->SetStringField(TEXT("controllerPath"), ControllerPath);
     Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
     McpHandlerUtils::AddVerification(Result, ControllerBP);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard reference set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard reference set"), Result);
     return true;
 #endif
 }
 
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateBlackboardAsset(
+bool McpHandlers::Ai::HandleAiCreateBlackboardAsset(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -839,7 +845,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateBlackboardAsset(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Missing name parameter"),
                             TEXT("INVALID_PARAMS"));
         return true;
@@ -849,24 +855,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateBlackboardAsset(
     UBlackboardData* Blackboard = CreateBlackboardAsset(Path, Name, Error);
     if (!Blackboard)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
     Result->SetStringField(TEXT("blackboardPath"), Blackboard->GetPathName());
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Created Blackboard: %s"), *Name));
     McpHandlerUtils::AddVerification(Result, Blackboard);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard created"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddBlackboardKey(
+bool McpHandlers::Ai::HandleAiAddBlackboardKey(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -880,7 +887,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddBlackboardKey(
     // CRITICAL: Explicitly check if asset exists before LoadObject
     if (!UEditorAssetLibrary::DoesAssetExist(BlackboardPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -888,7 +895,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddBlackboardKey(
     UBlackboardData* Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
     if (!Blackboard)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -957,17 +964,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddBlackboardKey(
     Result->SetStringField(TEXT("keyName"), KeyName);
     Result->SetStringField(TEXT("keyType"), KeyType);
     McpHandlerUtils::AddVerification(Result, Blackboard);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard key added"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard key added"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiSetKeyInstanceSynced(
+bool McpHandlers::Ai::HandleAiSetKeyInstanceSynced(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -981,7 +989,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetKeyInstanceSynced(
     UBlackboardData* Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
     if (!Blackboard)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1000,7 +1008,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetKeyInstanceSynced(
 
     if (!bFound)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Key not found: %s"), *KeyName),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1012,7 +1020,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetKeyInstanceSynced(
     Result->SetStringField(TEXT("keyName"), KeyName);
     Result->SetBoolField(TEXT("isInstanceSynced"), bInstanceSynced);
     McpHandlerUtils::AddVerification(Result, Blackboard);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Key instance sync updated"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Key instance sync updated"), Result);
     return true;
 #endif
 }
@@ -1021,12 +1029,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetKeyInstanceSynced(
 // 16.3 Behavior Tree - Expanded (6 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateBehaviorTree(
+bool McpHandlers::Ai::HandleAiCreateBehaviorTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1040,7 +1049,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateBehaviorTree(
     {
         Delegated->SetStringField(TEXT("savePath"), TEXT("/Game/AI/BehaviorTrees"));
     }
-    return HandleBehaviorTreeCreate(RequestId, Delegated, RequestingSocket);
+    return McpHandlers::Ai::HandleBehaviorTreeCreate(S, RequestId, Delegated, RequestingSocket);
 #endif
 }
 
@@ -1051,12 +1060,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateBehaviorTree(
 // Tree graph.
 // -----------------------------------------------------------------------
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddCompositeNode(
+bool McpHandlers::Ai::HandleAiAddCompositeNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1067,30 +1077,31 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddCompositeNode(
     FString CompositeType = GetJsonStringField(Payload, TEXT("compositeType"));
     if (CompositeType.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Missing compositeType (Selector, Sequence, or SimpleParallel)"),
             TEXT("INVALID_PARAMS"));
         return true;
     }
     if (CompositeType.Equals(TEXT("Parallel"), ESearchCase::IgnoreCase))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("UE Behavior Trees have no plain Parallel composite; use compositeType 'SimpleParallel'"),
             TEXT("INVALID_PARAMS"));
         return true;
     }
     Delegated->SetStringField(TEXT("nodeType"), CompositeType);
 
-    return HandleBehaviorTreeAddNode(RequestId, Delegated, RequestingSocket);
+    return McpHandlers::Ai::HandleBehaviorTreeAddNode(S, RequestId, Delegated, RequestingSocket);
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddTaskNode(
+bool McpHandlers::Ai::HandleAiAddTaskNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1101,7 +1112,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddTaskNode(
     FString TaskType = GetJsonStringField(Payload, TEXT("taskType"));
     if (TaskType.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Missing taskType (e.g. Wait, MoveTo, PlaySound — or 'Custom' with nodeClass)"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -1112,7 +1123,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddTaskNode(
         TaskClass = GetJsonStringField(Payload, TEXT("nodeClass"));
         if (TaskClass.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("taskType 'Custom' requires nodeClass (class name or Blueprint class path)"),
                 TEXT("INVALID_PARAMS"));
             return true;
@@ -1124,16 +1135,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddTaskNode(
     }
     Delegated->SetStringField(TEXT("nodeType"), TaskClass);
 
-    return HandleBehaviorTreeAddNode(RequestId, Delegated, RequestingSocket);
+    return McpHandlers::Ai::HandleBehaviorTreeAddNode(S, RequestId, Delegated, RequestingSocket);
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
+bool McpHandlers::Ai::HandleAiAddDecorator(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1143,7 +1155,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
 
     if (GetJsonStringField(Payload, TEXT("parentNodeId")).IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("add_decorator requires parentNodeId (a node id from add_node/get_info, or 'root')"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -1152,7 +1164,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
     FString TypeName = GetJsonStringField(Payload, TEXT("decoratorType"));
     if (TypeName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Missing decoratorType (an engine type like 'Blackboard'/'Cooldown', or 'Custom' with nodeClass)"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -1163,7 +1175,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
         SubnodeClass = GetJsonStringField(Payload, TEXT("nodeClass"));
         if (SubnodeClass.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("decoratorType 'Custom' requires nodeClass (class name or Blueprint class path)"),
                 TEXT("INVALID_PARAMS"));
             return true;
@@ -1176,16 +1188,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddDecorator(
     Delegated->SetStringField(TEXT("subnodeType"), TEXT("Decorator"));
     Delegated->SetStringField(TEXT("nodeClass"), SubnodeClass);
 
-    return HandleBehaviorTreeAddSubnode(RequestId, Delegated, RequestingSocket);
+    return McpHandlers::Ai::HandleBehaviorTreeAddSubnode(S, RequestId, Delegated, RequestingSocket);
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
+bool McpHandlers::Ai::HandleAiAddService(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1195,7 +1208,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
 
     if (GetJsonStringField(Payload, TEXT("parentNodeId")).IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("add_service requires parentNodeId (a node id from add_node/get_info, or 'root')"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -1204,7 +1217,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
     FString TypeName = GetJsonStringField(Payload, TEXT("serviceType"));
     if (TypeName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("Missing serviceType (an engine type like 'DefaultFocus'/'RunEQS', or 'Custom' with nodeClass)"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -1215,7 +1228,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
         SubnodeClass = GetJsonStringField(Payload, TEXT("nodeClass"));
         if (SubnodeClass.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("serviceType 'Custom' requires nodeClass (class name or Blueprint class path)"),
                 TEXT("INVALID_PARAMS"));
             return true;
@@ -1228,16 +1241,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddService(
     Delegated->SetStringField(TEXT("subnodeType"), TEXT("Service"));
     Delegated->SetStringField(TEXT("nodeClass"), SubnodeClass);
 
-    return HandleBehaviorTreeAddSubnode(RequestId, Delegated, RequestingSocket);
+    return McpHandlers::Ai::HandleBehaviorTreeAddSubnode(S, RequestId, Delegated, RequestingSocket);
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
+bool McpHandlers::Ai::HandleAiConfigureBtNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1249,7 +1263,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
 
     if (NodeId.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Missing nodeId parameter"),
                             TEXT("INVALID_PARAMS"));
         return true;
@@ -1258,7 +1272,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
     UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BTPath);
     if (!BT)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Behavior Tree not found: %s"), *BTPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1350,7 +1364,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
 
     if (!TargetNode)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Behavior Tree node not found: %s"), *NodeId),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1461,7 +1475,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
         bSaved = McpSafeAssetSave(BT);
         if (!bSaved)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                                 FString::Printf(TEXT("Failed to save Behavior Tree after configuring node: %s"), *BTPath),
                                 TEXT("SAVE_FAILED"));
             return true;
@@ -1484,7 +1498,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
     Result->SetArrayField(TEXT("configuredProperties"), ConfiguredPropertyValues);
     McpHandlerUtils::AddVerification(Result, BT);
 
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            ConfiguredPropertyCount > 0
                                ? TEXT("Behavior Tree node configured")
                                : TEXT("Behavior Tree node resolved; no properties supplied"),
@@ -1497,12 +1511,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureBtNode(
 // 16.4 Environment Query System - EQS (5 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateEqsQuery(
+bool McpHandlers::Ai::HandleAiCreateEqsQuery(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1514,7 +1529,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateEqsQuery(
 
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Missing name parameter"),
                             TEXT("INVALID_PARAMS"));
         return true;
@@ -1524,24 +1539,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateEqsQuery(
     UEnvQuery* Query = CreateEQSQueryAsset(Path, Name, Error);
     if (!Query)
     {
-        SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, Error, TEXT("CREATION_FAILED"));
         return true;
     }
 
     Result->SetStringField(TEXT("queryPath"), Query->GetPathName());
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Created EQS Query: %s"), *Name));
     McpHandlerUtils::AddVerification(Result, Query);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("EQS Query created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("EQS Query created"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
+bool McpHandlers::Ai::HandleAiAddEqsGenerator(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1554,7 +1570,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
     UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *QueryPath);
     if (!Query)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("EQS Query not found: %s"), *QueryPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1612,7 +1628,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
                 }
                 if (!SearchCenterContext || !SearchCenterContext->IsChildOf(UEnvQueryContext::StaticClass()))
                 {
-                    SendAutomationError(RequestingSocket, RequestId,
+                    S.SendAutomationError(RequestingSocket, RequestId,
                         FString::Printf(TEXT("searchCenter is not an EnvQueryContext class: %s"), *SearchCenterName),
                         TEXT("INVALID_ARGUMENT"));
                     return true;
@@ -1680,7 +1696,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
             }
             if (SearchCenterContext && !bSearchCenterApplied)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("searchCenter is not supported for generator type: %s"), *GeneratorType),
                     TEXT("INVALID_ARGUMENT"));
                 return true;
@@ -1690,7 +1706,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
         UEnvQueryOption* NewOption = NewObject<UEnvQueryOption>(Query);
         if (!NewOption)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                                 TEXT("Failed to create EQS option for generator"),
                                 TEXT("CREATION_FAILED"));
             return true;
@@ -1708,11 +1724,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
         }
         Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added %s generator"), *GeneratorType));
         McpHandlerUtils::AddVerification(Result, Query);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Generator added"), Result);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Generator added"), Result);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Failed to create generator: %s"), *GeneratorType),
                             TEXT("CREATION_FAILED"));
     }
@@ -1721,12 +1737,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsGenerator(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsContext(
+bool McpHandlers::Ai::HandleAiAddEqsContext(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1737,7 +1754,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsContext(
     UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *QueryPath);
     if (!Query)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("EQS Query not found: %s"), *QueryPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1745,7 +1762,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsContext(
 
     // Only marked the package dirty — no EnvQueryContext was created or assigned, and it never saved.
     (void)ContextType;
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("add_eqs_context is not implemented: it creates/assigns no EnvQueryContext. Author the "
              "context as a UEnvQueryContext subclass and reference it from the query's generator/tests."),
         TEXT("NOT_IMPLEMENTED"));
@@ -1753,12 +1770,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsContext(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
+bool McpHandlers::Ai::HandleAiAddEqsTest(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1766,7 +1784,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
 
 #if !MCP_HAS_ENVQUERY_TESTS
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("EQS Test creation requires UE 5.1+"),
                         TEXT("NOT_SUPPORTED"));
     return true;
@@ -1777,7 +1795,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
     UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *QueryPath);
     if (!Query)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("EQS Query not found: %s"), *QueryPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1816,7 +1834,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
             UEnvQueryOption* NewOption = NewObject<UEnvQueryOption>(Query);
             if (!NewOption)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                                     TEXT("Failed to create EQS option for test"),
                                     TEXT("CREATION_FAILED"));
                 return true;
@@ -1832,11 +1850,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
         Result->SetStringField(TEXT("testType"), TestType);
         Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Added %s test"), *TestType));
         McpHandlerUtils::AddVerification(Result, Query);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Test added"), Result);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Test added"), Result);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("Failed to create test: %s"), *TestType),
                             TEXT("CREATION_FAILED"));
     }
@@ -1846,12 +1864,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddEqsTest(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
+bool McpHandlers::Ai::HandleAiConfigureTestScoring(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -1863,7 +1882,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
 
     if (TestIndex < 0)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("testIndex must be zero or greater"),
                             TEXT("INVALID_PARAMS"));
         return true;
@@ -1872,7 +1891,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
     UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *QueryPath);
     if (!Query)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("EQS Query not found: %s"), *QueryPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -1917,7 +1936,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
 
     if (!TargetTest)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             FString::Printf(TEXT("EQS test index %d was not found on query: %s"), TestIndex, *QueryPath),
                             TEXT("NOT_FOUND"));
         return true;
@@ -2051,7 +2070,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
     Result->SetBoolField(TEXT("configured"), Report.AnyApplied());
     Result->SetStringField(TEXT("message"), TEXT("Test scoring configured"));
 
-    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, RequestingSocket, RequestId, Report, Result,
                                    TEXT("Scoring configured"), Query);
 #endif
 }
@@ -2060,12 +2079,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureTestScoring(
 // 16.5 Perception System (5 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddAiPerceptionComponent(
+bool McpHandlers::Ai::HandleAiAddAiPerceptionComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2078,18 +2098,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddAiPerceptionComponent(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
     if (!Blueprint) return true;
 
     USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
     if (!SCS)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Blueprint has no SimpleConstructionScript"),
                             TEXT("INVALID_BLUEPRINT"));
         return true;
@@ -2105,11 +2125,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddAiPerceptionComponent(
         Result->SetStringField(TEXT("componentName"), TEXT("AIPerception"));
         Result->SetStringField(TEXT("message"), TEXT("AI Perception component added"));
         McpHandlerUtils::AddVerification(Result, Blueprint);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Perception component added"), Result);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Perception component added"), Result);
     }
     else
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to create AI Perception component"),
                             TEXT("CREATION_FAILED"));
     }
@@ -2118,12 +2138,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddAiPerceptionComponent(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
+bool McpHandlers::Ai::HandleAiConfigureSightConfig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2136,12 +2157,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
     if (!Blueprint) return true;
 
     // Get sight config parameters
@@ -2165,7 +2186,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
         {
             if (NumberValue < 0.0 && NumberValue != -1.0)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     TEXT("autoSuccessRange must be >= 0, or -1 to disable"), TEXT("INVALID_ARGUMENT"));
                 return false;
             }
@@ -2175,7 +2196,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
         {
             if (NumberValue < 0.0)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     TEXT("pointOfViewBackwardOffset must be >= 0"), TEXT("INVALID_ARGUMENT"));
                 return false;
             }
@@ -2185,7 +2206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
         {
             if (NumberValue < 0.0)
             {
-                SendAutomationError(RequestingSocket, RequestId,
+                S.SendAutomationError(RequestingSocket, RequestId,
                     TEXT("nearClippingRadius must be >= 0"), TEXT("INVALID_ARGUMENT"));
                 return false;
             }
@@ -2222,14 +2243,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
     }
     if (MaxAge < 0.0)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("maxAge must be >= 0 (0 = never expires)"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     if (!Blueprint->SimpleConstructionScript)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
         return true;
     }
 
@@ -2252,7 +2273,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
             UAIPerceptionComponent::StaticClass(), TEXT("AIPerceptionComponent"));
         if (!PerceptionNode)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
             return true;
         }
         Blueprint->SimpleConstructionScript->AddNode(PerceptionNode);
@@ -2261,7 +2282,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
 
     if (!PerceptionComp)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
         return true;
     }
 
@@ -2311,17 +2332,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSightConfig(
     }
     Result->SetStringField(TEXT("message"), TEXT("Sight sense configured"));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sight config set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Sight config set"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
+bool McpHandlers::Ai::HandleAiConfigureHearingConfig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2334,12 +2356,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
     if (!Blueprint) return true;
 
     double HearingRange = GetJsonNumberField(Payload, TEXT("hearingRange"), 3000.0);
@@ -2351,7 +2373,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
 
     if (!Blueprint->SimpleConstructionScript)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
         return true;
     }
 
@@ -2374,7 +2396,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
             UAIPerceptionComponent::StaticClass(), TEXT("AIPerceptionComponent"));
         if (!PerceptionNode)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
             return true;
         }
         Blueprint->SimpleConstructionScript->AddNode(PerceptionNode);
@@ -2383,7 +2405,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
 
     if (!PerceptionComp)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
         return true;
     }
 
@@ -2399,17 +2421,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureHearingConfig(
     Result->SetNumberField(TEXT("hearingRange"), HearingRange);
     Result->SetStringField(TEXT("message"), TEXT("Hearing sense configured"));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hearing config set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Hearing config set"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
+bool McpHandlers::Ai::HandleAiConfigureDamageSenseConfig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2422,12 +2445,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
     if (!Blueprint) return true;
 
     double MaxAge = 10.0;
@@ -2439,7 +2462,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
 
     if (!Blueprint->SimpleConstructionScript)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
         return true;
     }
 
@@ -2462,7 +2485,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
             UAIPerceptionComponent::StaticClass(), TEXT("AIPerceptionComponent"));
         if (!PerceptionNode)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
             return true;
         }
         Blueprint->SimpleConstructionScript->AddNode(PerceptionNode);
@@ -2471,7 +2494,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
 
     if (!PerceptionComp)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
         return true;
     }
 
@@ -2483,17 +2506,18 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureDamageSenseConfig(
     Result->SetNumberField(TEXT("maxAge"), MaxAge);
     Result->SetStringField(TEXT("message"), TEXT("Damage sense configured"));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage config set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Damage config set"), Result);
     return true;
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiSetPerceptionTeam(
+bool McpHandlers::Ai::HandleAiSetPerceptionTeam(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2507,12 +2531,12 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetPerceptionTeam(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(BlueprintPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *Blueprint = ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
+    UBlueprint *Blueprint = S.ResolveBlueprintOrError(BlueprintPath, RequestId, RequestingSocket);
     if (!Blueprint) return true;
 
     bool bAppliedToGenericTeamAgent = false;
@@ -2558,7 +2582,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetPerceptionTeam(
     Result->SetBoolField(TEXT("storedBlueprintVariable"), bStoredBlueprintVariable);
     Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Team ID set to %d"), TeamId));
     McpHandlerUtils::AddVerification(Result, Blueprint);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Team set"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Team set"), Result);
     return true;
 #endif
 }
@@ -2567,12 +2591,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetPerceptionTeam(
 // 16.6 State Trees - UE5.3+ (4 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
+bool McpHandlers::Ai::HandleAiCreateStateTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2585,7 +2610,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     // but the plugin is not enabled in the target project at runtime
     if (!IsStateTreeModuleAvailable())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("StateTree plugin is not enabled in this project. Enable the StateTree plugin to use State Tree features."),
             TEXT("STATETREE_PLUGIN_NOT_ENABLED"));
         return true;
@@ -2597,7 +2622,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("State Tree name is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("State Tree name is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -2606,7 +2631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     UPackage* Package = CreatePackage(*FullPath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Failed to create package: %s"), *FullPath), TEXT("CREATION_FAILED"));
         return true;
     }
@@ -2615,7 +2640,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     if (!StateTree)
     {
         Package->MarkAsGarbage();  // Prevent orphaned package leak
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create StateTree asset"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create StateTree asset"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -2625,7 +2650,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     {
         StateTree->ConditionalBeginDestroy();  // Clean up StateTree before marking package as garbage
         Package->MarkAsGarbage();  // Prevent orphaned package leak
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create StateTree EditorData"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create StateTree EditorData"), TEXT("CREATION_FAILED"));
         return true;
     }
     StateTree->EditorData = EditorData;
@@ -2649,14 +2674,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
     Result->SetStringField(TEXT("rootStateName"), TEXT("Root"));
     Result->SetStringField(TEXT("message"), TEXT("State Tree created with root state"));
     McpHandlerUtils::AddVerification(Result, StateTree);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State Tree created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State Tree created"), Result);
 #elif MCP_HAS_STATE_TREE
     // StateTree headers were not present at compile time, so no asset can be created.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("State Tree creation is unavailable: StateTree editor headers were not present when this plugin was compiled. Rebuild the bridge with the StateTree plugin enabled."),
         TEXT("STATETREE_HEADERS_UNAVAILABLE"));
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("State Trees require UE 5.3+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -2664,12 +2689,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateStateTree(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
+bool McpHandlers::Ai::HandleAiAddStateTreeState(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2684,7 +2710,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
     
     if (StateTreePath.IsEmpty() || StateName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath and stateName are required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath and stateName are required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -2692,7 +2718,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
     UStateTree* StateTree = LoadObject<UStateTree>(nullptr, *StateTreePath);
     if (!StateTree)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("StateTree not found: %s"), *StateTreePath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2700,7 +2726,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
     UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(StateTree->EditorData);
     if (!EditorData)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
         return true;
     }
     
@@ -2729,7 +2755,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
     
     if (!ParentState)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Parent state '%s' not found"), *ParentStateName), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2765,14 +2791,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
     Result->SetStringField(TEXT("stateType"), StateType);
     Result->SetStringField(TEXT("message"), TEXT("State added to StateTree"));
     McpHandlerUtils::AddVerification(Result, StateTree);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State added"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("State added"), Result);
 #elif MCP_HAS_STATE_TREE
     // StateTree headers were not present at compile time, so no state can be added.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Adding a State Tree state is unavailable: StateTree editor headers were not present when this plugin was compiled. Rebuild the bridge with the StateTree plugin enabled."),
         TEXT("STATETREE_HEADERS_UNAVAILABLE"));
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("State Trees require UE 5.3+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -2780,12 +2806,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeState(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
+bool McpHandlers::Ai::HandleAiAddStateTreeTransition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2800,7 +2827,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     
     if (StateTreePath.IsEmpty() || FromState.IsEmpty() || ToState.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath, fromState, and toState are required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath, fromState, and toState are required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -2808,7 +2835,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     UStateTree* StateTree = LoadObject<UStateTree>(nullptr, *StateTreePath);
     if (!StateTree)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("StateTree not found: %s"), *StateTreePath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2816,7 +2843,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(StateTree->EditorData);
     if (!EditorData)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
         return true;
     }
     
@@ -2850,14 +2877,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     
     if (!SourceState)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Source state '%s' not found"), *FromState), TEXT("NOT_FOUND"));
         return true;
     }
     
     if (!TargetState)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Target state '%s' not found"), *ToState), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2888,7 +2915,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     Result->SetStringField(TEXT("triggerType"), TriggerType);
     Result->SetStringField(TEXT("transitionId"), Transition.ID.ToString());
     Result->SetStringField(TEXT("message"), TEXT("Transition added"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Transition added"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Transition added"), Result);
 #elif MCP_HAS_STATE_TREE
     FString StateTreePath = GetJsonStringField(Payload, TEXT("stateTreePath"));
     FString FromState = GetJsonStringField(Payload, TEXT("fromState"));
@@ -2897,9 +2924,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
     Result->SetStringField(TEXT("toState"), ToState);
     Result->SetStringField(TEXT("message"), TEXT("Transition registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Transition registered"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Transition registered"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("State Trees require UE 5.3+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -2907,12 +2934,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddStateTreeTransition(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
+bool McpHandlers::Ai::HandleAiConfigureStateTreeTask(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -2926,7 +2954,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     
     if (StateTreePath.IsEmpty() || StateName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath and stateName are required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("stateTreePath and stateName are required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -2934,7 +2962,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     UStateTree* StateTree = LoadObject<UStateTree>(nullptr, *StateTreePath);
     if (!StateTree)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("StateTree not found: %s"), *StateTreePath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -2942,7 +2970,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(StateTree->EditorData);
     if (!EditorData)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("StateTree has no EditorData"), TEXT("INVALID_STATE"));
         return true;
     }
     
@@ -2973,7 +3001,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     
     if (!FoundState)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("State '%s' not found"), *StateName), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3098,7 +3126,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     Result->SetStringField(TEXT("message"), bTaskAdded
         ? TEXT("Task added to state")
         : TEXT("State task configuration updated (no taskType supplied)"));
-    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, RequestingSocket, RequestId, Report, Result,
                                    TEXT("Task configured"), nullptr);
 #elif MCP_HAS_STATE_TREE
     FString StateTreePath = GetJsonStringField(Payload, TEXT("stateTreePath"));
@@ -3106,9 +3134,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
     Result->SetStringField(TEXT("stateName"), StateName);
     Result->SetStringField(TEXT("message"), TEXT("Task configuration registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Task configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Task configured"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("State Trees require UE 5.3+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3120,12 +3148,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureStateTreeTask(
 // 16.7 Smart Objects (4 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
+bool McpHandlers::Ai::HandleAiCreateSmartObjectDefinition(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3136,7 +3165,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
     // Runtime check: Verify SmartObjects module is actually loaded
     if (!IsSmartObjectsModuleAvailable())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("SmartObjects plugin is not enabled in this project. Enable the SmartObjects plugin to use Smart Object features."),
             TEXT("SMARTOBJECTS_PLUGIN_NOT_ENABLED"));
         return true;
@@ -3147,7 +3176,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
     
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Smart Object Definition name is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Smart Object Definition name is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3156,7 +3185,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
     UPackage* Package = CreatePackage(*FullPath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Failed to create package: %s"), *FullPath), TEXT("CREATION_FAILED"));
         return true;
     }
@@ -3164,7 +3193,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
     USmartObjectDefinition* Definition = NewObject<USmartObjectDefinition>(Package, *Name, RF_Public | RF_Standalone);
     if (!Definition)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create SmartObjectDefinition asset"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create SmartObjectDefinition asset"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -3176,14 +3205,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
     Result->SetStringField(TEXT("message"), TEXT("Smart Object Definition created"));
     Result->SetBoolField(TEXT("success"), true);
     McpHandlerUtils::AddVerification(Result, Definition); // existsAfter/assetPath, matching other creates
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Definition created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Definition created"), Result);
 #elif MCP_HAS_SMART_OBJECTS
     // SmartObjects headers were not present at compile time, so no asset can be created.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Smart Object Definition creation is unavailable: SmartObjects headers were not present when this plugin was compiled. Rebuild the bridge with the SmartObjects plugin enabled."),
         TEXT("SMARTOBJECTS_HEADERS_UNAVAILABLE"));
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Smart Objects require UE 5.0+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3191,12 +3220,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateSmartObjectDefinition(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectSlot(
+bool McpHandlers::Ai::HandleAiAddSmartObjectSlot(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3211,7 +3241,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectSlot(
     
     if (DefinitionPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("definitionPath is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("definitionPath is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3219,7 +3249,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectSlot(
     USmartObjectDefinition* Definition = LoadObject<USmartObjectDefinition>(nullptr, *DefinitionPath);
     if (!Definition)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("SmartObjectDefinition not found: %s"), *DefinitionPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3259,15 +3289,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectSlot(
     Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
     Result->SetStringField(TEXT("definitionPath"), DefinitionPath);
     Result->SetStringField(TEXT("message"), TEXT("Slot added to Smart Object Definition"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Slot added"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Slot added"), Result);
 #elif MCP_HAS_SMART_OBJECTS
     FString DefinitionPath = GetJsonStringField(Payload, TEXT("definitionPath"));
     Result->SetNumberField(TEXT("slotIndex"), 0);
     Result->SetStringField(TEXT("message"), TEXT("Slot addition registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Slot registered"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Slot registered"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Smart Objects require UE 5.0+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3275,12 +3305,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectSlot(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
+bool McpHandlers::Ai::HandleAiConfigureSlotBehavior(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3294,7 +3325,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
     
     if (DefinitionPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("definitionPath is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("definitionPath is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3302,7 +3333,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
     USmartObjectDefinition* Definition = LoadObject<USmartObjectDefinition>(nullptr, *DefinitionPath);
     if (!Definition)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("SmartObjectDefinition not found: %s"), *DefinitionPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3310,7 +3341,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
     if (!Definition->IsValidSlotIndex(SlotIndex))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Invalid slot index: %d"), SlotIndex), TEXT("INVALID_PARAMS"));
         return true;
     }
@@ -3362,11 +3393,11 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
     Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
     Result->SetNumberField(TEXT("behaviorCount"), Slot.BehaviorDefinitions.Num());
     Result->SetStringField(TEXT("message"), TEXT("Slot behavior configured"));
-    return SendWriteReportResponse(this, RequestingSocket, RequestId, Report, Result,
+    return SendWriteReportResponse(&S, RequestingSocket, RequestId, Report, Result,
                                    TEXT("Behavior configured"), nullptr);
 #else
     // UE 5.0: SmartObject API is limited - skip slot configuration
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("SmartObject slot configuration requires UE 5.1+"), TEXT("UNSUPPORTED_VERSION"));
     return true;
 #endif
@@ -3376,9 +3407,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
     Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
     Result->SetStringField(TEXT("message"), TEXT("Slot behavior configuration registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior configured"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Smart Objects require UE 5.0+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3386,12 +3417,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureSlotBehavior(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
+bool McpHandlers::Ai::HandleAiAddSmartObjectComponent(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3405,7 +3437,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
     
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("blueprintPath is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("blueprintPath is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3414,7 +3446,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
     UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, NormalizedPath, LoadError);
     if (!Blueprint)
     {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("NOT_FOUND"));
         return true;
     }
     
@@ -3429,7 +3461,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
     USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
     if (!SCS)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
         return true;
     }
     
@@ -3437,7 +3469,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
     USCS_Node* NewNode = SCS->CreateNode(USmartObjectComponent::StaticClass(), FName(*ComponentName));
     if (!NewNode)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create SCS node for SmartObjectComponent"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create SCS node for SmartObjectComponent"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -3460,15 +3492,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
         Result->SetStringField(TEXT("definitionPath"), DefinitionPath);
     }
     Result->SetStringField(TEXT("message"), TEXT("Smart Object component added to blueprint"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Component added"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Component added"), Result);
 #elif MCP_HAS_SMART_OBJECTS
     FString BlueprintPath = GetJsonStringField(Payload, TEXT("blueprintPath"));
     Result->SetStringField(TEXT("componentName"), TEXT("SmartObject"));
     Result->SetStringField(TEXT("message"), TEXT("Smart Object component addition registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Component registered"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Component registered"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Smart Objects require UE 5.0+"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3480,12 +3512,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddSmartObjectComponent(
 // 16.8 Mass AI / Crowds (3 actions)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
+bool McpHandlers::Ai::HandleAiCreateMassEntityConfig(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3496,7 +3529,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
     // Runtime check: Verify MassEntity module is actually loaded
     if (!IsMassModuleAvailable())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("MassEntity plugin is not enabled in this project. Enable the MassEntity plugin to use Mass AI features."),
             TEXT("MASS_PLUGIN_NOT_ENABLED"));
         return true;
@@ -3507,7 +3540,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
     
     if (Name.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Mass Entity Config name is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Mass Entity Config name is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3516,7 +3549,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
     UPackage* Package = CreatePackage(*FullPath);
     if (!Package)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Failed to create package: %s"), *FullPath), TEXT("CREATION_FAILED"));
         return true;
     }
@@ -3524,7 +3557,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
     UMassEntityConfigAsset* ConfigAsset = NewObject<UMassEntityConfigAsset>(Package, *Name, RF_Public | RF_Standalone);
     if (!ConfigAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create MassEntityConfigAsset"), TEXT("CREATION_FAILED"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create MassEntityConfigAsset"), TEXT("CREATION_FAILED"));
         return true;
     }
     
@@ -3536,14 +3569,14 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
     Result->SetStringField(TEXT("message"), TEXT("Mass Entity Config created"));
     Result->SetBoolField(TEXT("success"), true);
     McpHandlerUtils::AddVerification(Result, ConfigAsset); // existsAfter/assetPath, matching other creates
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Config created"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Config created"), Result);
 #elif MCP_HAS_MASS_AI
     // MassEntity headers were not present at compile time, so no asset can be created.
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Mass Entity Config creation is unavailable: MassEntity headers were not present when this plugin was compiled. Rebuild the bridge with the MassEntity plugin enabled."),
         TEXT("MASS_HEADERS_UNAVAILABLE"));
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Mass AI requires UE 5.0+ with MassEntity plugin"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3551,12 +3584,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiCreateMassEntityConfig(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
+bool McpHandlers::Ai::HandleAiConfigureMassEntity(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3569,7 +3603,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
     
     if (ConfigPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("configPath is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("configPath is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3577,7 +3611,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(ConfigPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("MassEntityConfigAsset not found: %s"), *ConfigPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3586,7 +3620,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
     UMassEntityConfigAsset* ConfigAsset = LoadObject<UMassEntityConfigAsset>(nullptr, *ConfigPath);
     if (!ConfigAsset)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("MassEntityConfigAsset not found: %s"), *ConfigPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -3630,15 +3664,15 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
     Result->SetStringField(TEXT("configPath"), ConfigPath);
     Result->SetNumberField(TEXT("traitCount"), Config.GetTraits().Num());
     Result->SetStringField(TEXT("message"), TEXT("Mass Entity configured"));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Entity configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Entity configured"), Result);
 #elif MCP_HAS_MASS_AI
     FString ConfigPath = GetJsonStringField(Payload, TEXT("configPath"));
     Result->SetStringField(TEXT("configPath"), ConfigPath);
     Result->SetStringField(TEXT("message"), TEXT("Mass Entity configuration registered (headers unavailable)"));
     Result->SetBoolField(TEXT("headersUnavailable"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Entity configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Entity configured"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Mass AI requires UE 5.0+ with MassEntity plugin"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3646,12 +3680,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiConfigureMassEntity(
 #endif
 }
 
-bool UMcpAutomationBridgeSubsystem::HandleAiAddMassSpawner(
+bool McpHandlers::Ai::HandleAiAddMassSpawner(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3666,7 +3701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddMassSpawner(
     
     if (BlueprintPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("blueprintPath is required"), TEXT("INVALID_PARAMS"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("blueprintPath is required"), TEXT("INVALID_PARAMS"));
         return true;
     }
     
@@ -3675,7 +3710,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddMassSpawner(
     UBlueprint* Blueprint = LoadBlueprintAsset(BlueprintPath, NormalizedPath, LoadError);
     if (!Blueprint)
     {
-        SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("NOT_FOUND"));
+        S.SendAutomationError(RequestingSocket, RequestId, LoadError, TEXT("NOT_FOUND"));
         return true;
     }
     
@@ -3695,9 +3730,9 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddMassSpawner(
         Result->SetStringField(TEXT("configPath"), ConfigPath);
     }
     Result->SetStringField(TEXT("message"), TEXT("Mass Spawner configuration added. Note: For high-performance crowd spawning, use AMassSpawner actor directly."));
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawner configured"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Spawner configured"), Result);
 #else
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Mass AI requires UE 5.0+ with MassEntity plugin"),
                         TEXT("UNSUPPORTED_VERSION"));
 #endif
@@ -3709,12 +3744,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiAddMassSpawner(
 // Utility (1 action)
 // =========================================================================
 
-bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
+bool McpHandlers::Ai::HandleAiGetAiInfo(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -3741,7 +3777,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
         if (!Asset)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Asset not found: %s"), *AssetPath),
                 TEXT("ASSET_NOT_FOUND"));
             return true;
@@ -3752,7 +3788,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         else if (Asset->IsA<UBlueprint>()) { BlueprintPath = AssetPath; }
         else
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Unsupported asset type '%s' for get_info; expected a Behavior Tree, Blackboard, EQS query, or Blueprint"),
                     *Asset->GetClass()->GetName()),
                 TEXT("UNSUPPORTED_ASSET_TYPE"));
@@ -3763,7 +3799,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
     if (BlueprintPath.IsEmpty() && ControllerPath.IsEmpty() && BTPath.IsEmpty() &&
         BBPath.IsEmpty() && QueryPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             TEXT("get_info requires one of: assetPath, blueprintPath, controllerPath, behaviorTreePath, blackboardPath, queryPath"),
             TEXT("INVALID_PARAMS"));
         return true;
@@ -3775,7 +3811,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         BlueprintPath = SanitizeProjectRelativePath(BlueprintPath);
         if (BlueprintPath.IsEmpty())
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 TEXT("Invalid blueprintPath: must be a valid project-relative path"),
                 TEXT("INVALID_PATH"));
             return true;
@@ -3783,7 +3819,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
         if (!BP)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath),
                 TEXT("BLUEPRINT_NOT_FOUND"));
             return true;
@@ -3817,7 +3853,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UBlueprint* Controller = LoadObject<UBlueprint>(nullptr, *ControllerPath);
         if (!Controller)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Controller blueprint not found: %s"), *ControllerPath),
                 TEXT("CONTROLLER_NOT_FOUND"));
             return true;
@@ -3832,7 +3868,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BTPath);
         if (!BT)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Behavior Tree not found: %s"), *BTPath),
                 TEXT("ASSET_NOT_FOUND"));
             return true;
@@ -4018,7 +4054,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BBPath);
         if (!BB)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("Blackboard not found: %s"), *BBPath),
                 TEXT("NOT_FOUND"));
             return true;
@@ -4043,7 +4079,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
         UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *QueryPath);
         if (!Query)
         {
-            SendAutomationError(RequestingSocket, RequestId,
+            S.SendAutomationError(RequestingSocket, RequestId,
                 FString::Printf(TEXT("EQS query not found: %s"), *QueryPath),
                 TEXT("NOT_FOUND"));
             return true;
@@ -4052,7 +4088,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
     }
 
     Result->SetObjectField(TEXT("aiInfo"), AIInfo);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI info retrieved"), Result);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI info retrieved"), Result);
     return true;
 #endif
 }
@@ -4062,12 +4098,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetAiInfo(
 // =========================================================================
 
 // Alias: setup_perception -> add_perception_component (same logic)
-bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
+bool McpHandlers::Ai::HandleAiSetupPerception(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4079,7 +4116,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
     }
     if (ControllerPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath or controllerPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blueprintPath or controllerPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4087,17 +4124,17 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
     // LoadObject may return non-null for invalid paths due to UE's path resolution behavior
     if (!UEditorAssetLibrary::DoesAssetExist(ControllerPath))
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blueprint not found: %s"), *ControllerPath), TEXT("NOT_FOUND"));
         return true;
     }
 
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket);
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket);
     if (!ControllerBP) return true;
 
     if (!ControllerBP->SimpleConstructionScript)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Blueprint has no SimpleConstructionScript"), TEXT("INVALID_STATE"));
         return true;
     }
 
@@ -4123,7 +4160,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
             UAIPerceptionComponent::StaticClass(), TEXT("AIPerceptionComponent"));
         if (!PerceptionNode)
         {
-            SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
+            S.SendAutomationError(RequestingSocket, RequestId, TEXT("Failed to create perception component node"), TEXT("CREATION_FAILED"));
             return true;
         }
         ControllerBP->SimpleConstructionScript->AddNode(PerceptionNode);
@@ -4133,7 +4170,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
 
     if (!PerceptionComp)
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Perception component is null"), TEXT("NULL_COMPONENT"));
         return true;
     }
 
@@ -4217,18 +4254,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetupPerception(
         PerceptionResult->SetStringField(TEXT("dominantSense"), DominantSense);
     }
 
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI perception configured via setup_perception"), PerceptionResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("AI perception configured via setup_perception"), PerceptionResult);
     return true;
 #endif
 }
 
 // set_focus - Set focus actor variable on AI controller blueprint
-bool UMcpAutomationBridgeSubsystem::HandleAiSetFocus(
+bool McpHandlers::Ai::HandleAiSetFocus(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4236,7 +4274,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetFocus(
     FString ControllerPath = GetJsonStringField(Payload, TEXT("controllerPath"));
     if (ControllerPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4246,7 +4284,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetFocus(
         FocusActorName = GetJsonStringField(Payload, TEXT("targetActor"));
     }
 
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
     if (!ControllerBP) return true;
 
     // Add a FocusActor variable to the BP
@@ -4261,24 +4299,25 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetFocus(
     FocusResult->SetStringField(TEXT("controllerPath"), ControllerPath);
     FocusResult->SetStringField(TEXT("focusActorName"), FocusActorName);
     FocusResult->SetBoolField(TEXT("focusSet"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Focus actor variable set on controller"), FocusResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Focus actor variable set on controller"), FocusResult);
     return true;
 #endif
 }
 
 // clear_focus - Clear focus actor variable on AI controller blueprint
-bool UMcpAutomationBridgeSubsystem::HandleAiClearFocus(
+bool McpHandlers::Ai::HandleAiClearFocus(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
 #else
     FString ControllerPath = GetJsonStringField(Payload, TEXT("controllerPath"));
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
     if (!ControllerBP) return true;
 
     FBlueprintEditorUtils::RemoveMemberVariable(ControllerBP, TEXT("FocusActor"));
@@ -4288,18 +4327,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAiClearFocus(
     TSharedPtr<FJsonObject> ClearResult = McpHandlerUtils::CreateResultObject();
     ClearResult->SetStringField(TEXT("controllerPath"), ControllerPath);
     ClearResult->SetBoolField(TEXT("focusCleared"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Focus cleared on controller"), ClearResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Focus cleared on controller"), ClearResult);
     return true;
 #endif
 }
 
 // set_blackboard_value - Set a default key value on a blackboard asset
-bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
+bool McpHandlers::Ai::HandleAiSetBlackboardValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4307,21 +4347,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
     FString BBPath = GetJsonStringField(Payload, TEXT("blackboardPath"));
     if (BBPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blackboardPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blackboardPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString KeyName = GetJsonStringField(Payload, TEXT("keyName"));
     if (KeyName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing keyName"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing keyName"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlackboardData* BBData = LoadObject<UBlackboardData>(nullptr, *BBPath);
     if (!BBData)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blackboard not found: %s"), *BBPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -4396,7 +4436,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
 
     if (!bKeyFound)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Key '%s' not found in blackboard"), *KeyName), TEXT("KEY_NOT_FOUND"));
         return true;
     }
@@ -4410,10 +4450,10 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
     SetResult->SetBoolField(TEXT("valueSet"), bValueSet);
     
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         bValueSet ? TEXT("Blackboard value set") : TEXT("Key found but value not set (unsupported type)"), SetResult);
 #else
-    SendAutomationResponse(RequestingSocket, RequestId, true, 
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, 
         TEXT("Key found. Note: set_blackboard_value requires UE 5.5+ for value setting."), SetResult);
 #endif
     return true;
@@ -4421,12 +4461,13 @@ bool UMcpAutomationBridgeSubsystem::HandleAiSetBlackboardValue(
 }
 
 // get_blackboard_value - Get a key's info from a blackboard asset
-bool UMcpAutomationBridgeSubsystem::HandleAiGetBlackboardValue(
+bool McpHandlers::Ai::HandleAiGetBlackboardValue(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4434,21 +4475,21 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetBlackboardValue(
     FString BBPath = GetJsonStringField(Payload, TEXT("blackboardPath"));
     if (BBPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blackboardPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing blackboardPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString KeyName = GetJsonStringField(Payload, TEXT("keyName"));
     if (KeyName.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing keyName"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing keyName"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     UBlackboardData* BBData = LoadObject<UBlackboardData>(nullptr, *BBPath);
     if (!BBData)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Blackboard not found: %s"), *BBPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -4474,7 +4515,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetBlackboardValue(
 
     if (!bKeyFound)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Key '%s' not found in blackboard"), *KeyName), TEXT("KEY_NOT_FOUND"));
         return true;
     }
@@ -4484,18 +4525,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAiGetBlackboardValue(
     GetResult->SetStringField(TEXT("keyName"), KeyName);
     GetResult->SetStringField(TEXT("keyType"), KeyType);
     GetResult->SetBoolField(TEXT("instanceSynced"), bInstanceSynced);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard value retrieved"), GetResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard value retrieved"), GetResult);
     return true;
 #endif
 }
 
 // run_behavior_tree - Alias for assign_behavior_tree
-bool UMcpAutomationBridgeSubsystem::HandleAiRunBehaviorTree(
+bool McpHandlers::Ai::HandleAiRunBehaviorTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4503,24 +4545,24 @@ bool UMcpAutomationBridgeSubsystem::HandleAiRunBehaviorTree(
     FString ControllerPath = GetJsonStringField(Payload, TEXT("controllerPath"));
     if (ControllerPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
     FString BTPath = GetJsonStringField(Payload, TEXT("behaviorTreePath"));
     if (BTPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing behaviorTreePath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing behaviorTreePath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
-    UBlueprint *ControllerBP = ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
+    UBlueprint *ControllerBP = S.ResolveBlueprintOrError(ControllerPath, RequestId, RequestingSocket, TEXT("controllerPath"));
     if (!ControllerBP) return true;
 
     UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BTPath);
     if (!BT)
     {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
             FString::Printf(TEXT("Behavior tree not found: %s"), *BTPath), TEXT("NOT_FOUND"));
         return true;
     }
@@ -4537,18 +4579,19 @@ bool UMcpAutomationBridgeSubsystem::HandleAiRunBehaviorTree(
     RunResult->SetStringField(TEXT("controllerPath"), ControllerPath);
     RunResult->SetStringField(TEXT("behaviorTreePath"), BTPath);
     RunResult->SetBoolField(TEXT("assigned"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree assigned for running"), RunResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree assigned for running"), RunResult);
     return true;
 #endif
 }
 
 // stop_behavior_tree - Remove behavior tree assignment from controller
-bool UMcpAutomationBridgeSubsystem::HandleAiStopBehaviorTree(
+bool McpHandlers::Ai::HandleAiStopBehaviorTree(
+    UMcpAutomationBridgeSubsystem& S,
     const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
     FMcpResponseHandle RequestingSocket)
 {
 #if !WITH_EDITOR
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("AI management is only available in editor builds"),
                         TEXT("EDITOR_ONLY"));
     return true;
@@ -4556,7 +4599,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiStopBehaviorTree(
     FString ControllerPath = GetJsonStringField(Payload, TEXT("controllerPath"));
     if (ControllerPath.IsEmpty())
     {
-        SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing controllerPath"), TEXT("INVALID_ARGUMENT"));
         return true;
     }
 
@@ -4566,7 +4609,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiStopBehaviorTree(
         TSharedPtr<FJsonObject> StopResult = McpHandlerUtils::CreateResultObject();
         StopResult->SetStringField(TEXT("controllerPath"), ControllerPath);
         StopResult->SetBoolField(TEXT("stopped"), false);
-        SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree stopped (controller not found)"), StopResult);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree stopped (controller not found)"), StopResult);
         return true;
     }
 
@@ -4578,7 +4621,7 @@ bool UMcpAutomationBridgeSubsystem::HandleAiStopBehaviorTree(
     TSharedPtr<FJsonObject> StopResult = McpHandlerUtils::CreateResultObject();
     StopResult->SetStringField(TEXT("controllerPath"), ControllerPath);
     StopResult->SetBoolField(TEXT("stopped"), true);
-    SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree stopped"), StopResult);
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Behavior tree stopped"), StopResult);
     return true;
 #endif
 }

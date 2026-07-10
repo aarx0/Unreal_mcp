@@ -44,6 +44,7 @@
 #include "McpHandlerUtils.h"
 #include "McpAutomationBridgeHelpers.h"
 #include "McpAutomationBridgeSubsystem.h"
+#include "McpAutomationBridge_BehaviorTreeHandlers.h"
 #include "Dom/JsonObject.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
@@ -105,7 +106,8 @@
 // ===========================================================================
 // SubAction: create - Create new Behavior Tree asset
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
+bool McpHandlers::Ai::HandleBehaviorTreeCreate(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -125,7 +127,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -134,7 +136,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
 
   FString Name;
   if (!Payload->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("name required for create"),
                         TEXT("INVALID_ARGUMENT"));
     return true;
@@ -158,7 +160,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
 
   // Validate path before CreatePackage (prevents crashes from // and path traversal)
   if (!IsValidAssetPath(PackagePath)) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Invalid asset path: '%s'. Path must start with '/', cannot contain '..' or '//'."),
                         *PackagePath),
@@ -168,7 +170,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
 
   // Check if already exists
   if (UEditorAssetLibrary::DoesAssetExist(PackagePath)) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Behavior Tree already exists at %s"),
                         *PackagePath),
@@ -184,7 +186,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
   if (!BlackboardPath.IsEmpty()) {
     Blackboard = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
     if (!Blackboard) {
-      SendAutomationError(
+      S.SendAutomationError(
           RequestingSocket, RequestId,
           FString::Printf(TEXT("Blackboard not found: %s"), *BlackboardPath),
           TEXT("BLACKBOARD_NOT_FOUND"));
@@ -195,7 +197,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
   // Create the behavior tree asset
   UPackage *Package = CreatePackage(*PackagePath);
   if (!Package) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create package"),
                         TEXT("PACKAGE_FAILED"));
     return true;
@@ -204,7 +206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
   UBehaviorTree *NewBT =
       NewObject<UBehaviorTree>(Package, UBehaviorTree::StaticClass(), FName(*Name), RF_Public | RF_Standalone);
   if (!NewBT) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Failed to create Behavior Tree"),
                         TEXT("CREATE_FAILED"));
     return true;
@@ -256,11 +258,11 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
   }
   McpHandlerUtils::AddVerification(Result, NewBT);
 
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Behavior Tree created."), Result);
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -269,7 +271,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeCreate(
 // ===========================================================================
 // SubAction: add_node - Add node to Behavior Tree graph
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
+bool McpHandlers::Ai::HandleBehaviorTreeAddNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -286,7 +289,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -305,7 +308,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -314,7 +317,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -326,7 +329,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -383,7 +386,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Behavior Tree graph editing requires UE 5.3+"),
                       TEXT("NOT_SUPPORTED"));
   return true;
@@ -400,14 +403,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
   // Check specifically if field exists but as wrong type using HasField + wrong-type detection
   if (Payload->HasField(TEXT("x")) && !bHasX) {
     // x field is present but not a number - this is invalid input
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("Invalid value for 'x': expected number"),
         TEXT("INVALID_ARGUMENT"));
     return true;
   }
   if (Payload->HasField(TEXT("y")) && !bHasY) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         TEXT("Invalid value for 'y': expected number"),
         TEXT("INVALID_ARGUMENT"));
@@ -498,7 +501,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
   }
 
   if (NodeInstanceClass && NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Node class %s is abstract and cannot be instantiated"),
                         *NodeInstanceClass->GetName()),
@@ -542,7 +545,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
 
       if (NodeInstanceClass && !NewNode->NodeInstance) {
         BTGraph->RemoveNode(NewNode);
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
                             TEXT("Failed to initialize Behavior Tree node instance."),
                             TEXT("CREATE_FAILED"));
         return true;
@@ -583,7 +586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
         }
         if (!Parent || Parent == NewNode) {
           BTGraph->RemoveNode(NewNode);
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               FString::Printf(TEXT("Parent node not found: %s"),
                               *ParentNodeIdStr),
@@ -593,7 +596,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
         if (!ParentOut || !ChildIn ||
             !BTGraph->GetSchema()->TryCreateConnection(ParentOut, ChildIn)) {
           BTGraph->RemoveNode(NewNode);
-          SendAutomationError(
+          S.SendAutomationError(
               RequestingSocket, RequestId,
               FString::Printf(
                   TEXT("Cannot connect a '%s' node under parent '%s' (rejected "
@@ -615,15 +618,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
       }
       McpHandlerUtils::AddVerification(Result, BT);
 
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node added."), Result);
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to create node object."),
                           TEXT("CREATE_FAILED"));
     }
   } else {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(TEXT("Unknown node type '%s'"), *NodeType),
         TEXT("UNKNOWN_TYPE"));
@@ -631,7 +634,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
   return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -640,7 +643,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddNode(
 // ===========================================================================
 // SubAction: connect_nodes - Connect parent to child node
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
+bool McpHandlers::Ai::HandleBehaviorTreeConnectNodes(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -657,7 +661,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -676,7 +680,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -685,7 +689,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -697,7 +701,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -754,7 +758,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Behavior Tree graph editing requires UE 5.3+"),
                       TEXT("NOT_SUPPORTED"));
   return true;
@@ -777,7 +781,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
       }
     }
     if (!Parent) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Root graph node not found for parentNodeId 'root'."),
                           TEXT("NODE_NOT_FOUND"));
       return true;
@@ -788,7 +792,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
   UEdGraphNode *Child = FindGraphNodeByIdOrName(ChildNodeId);
 
   if (!Parent || !Child) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Parent or child node not found."),
                         TEXT("NODE_NOT_FOUND"));
     return true;
@@ -820,21 +824,21 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
       UpdateBehaviorTreeAsset();
       TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
       McpHandlerUtils::AddVerification(Resp, BT);
-      SendAutomationResponse(RequestingSocket, RequestId, true,
+      S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Nodes connected."), Resp);
     } else {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("Failed to connect nodes."),
                           TEXT("CONNECT_FAILED"));
     }
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Could not find valid pins for connection."),
                         TEXT("PIN_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -843,7 +847,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeConnectNodes(
 // ===========================================================================
 // SubAction: remove_node - Remove node from graph
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
+bool McpHandlers::Ai::HandleBehaviorTreeRemoveNode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -860,7 +865,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -879,7 +884,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -888,7 +893,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -900,7 +905,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -957,7 +962,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Behavior Tree graph editing requires UE 5.3+"),
                       TEXT("NOT_SUPPORTED"));
   return true;
@@ -976,15 +981,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
     UpdateBehaviorTreeAsset();
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Resp, BT);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node removed."), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -993,7 +998,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeRemoveNode(
 // ===========================================================================
 // SubAction: break_connections - Break all connections on a node
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
+bool McpHandlers::Ai::HandleBehaviorTreeBreakConnections(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1010,7 +1016,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -1029,7 +1035,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -1038,7 +1044,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -1050,7 +1056,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -1107,7 +1113,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Behavior Tree graph editing requires UE 5.3+"),
                       TEXT("NOT_SUPPORTED"));
   return true;
@@ -1125,15 +1131,15 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
     UpdateBehaviorTreeAsset();
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Resp, BT);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Connections broken."), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -1142,7 +1148,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeBreakConnections(
 // ===========================================================================
 // SubAction: set_node_properties - Set properties on node instance
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
+bool McpHandlers::Ai::HandleBehaviorTreeSetNodeProperties(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1159,7 +1166,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -1178,7 +1185,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -1187,7 +1194,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -1199,7 +1206,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -1256,7 +1263,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
                       TEXT("Behavior Tree graph editing requires UE 5.3+"),
                       TEXT("NOT_SUPPORTED"));
   return true;
@@ -1348,7 +1355,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
                 // wrong key name, see success: true, and have a silently broken
                 // decorator at PIE time.
                 if (!Selector->IsSet()) {
-                  SendAutomationError(RequestingSocket, RequestId,
+                  S.SendAutomationError(RequestingSocket, RequestId,
                     FString::Printf(TEXT("BlackboardKey '%s' not found in BT's assigned BB '%s' (typo or missing add_blackboard_key call?)"),
                       *Pair.Value->AsString(), *BB->GetPathName()),
                     TEXT("BB_KEY_NOT_FOUND"));
@@ -1380,16 +1387,16 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Resp, BT);
-    SendAutomationResponse(RequestingSocket, RequestId, true,
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node properties updated."), Resp);
   } else {
-    SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Node not found."),
                         TEXT("NODE_NOT_FOUND"));
   }
   return true;
 #endif
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
@@ -1399,7 +1406,8 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeSetNodeProperties(
 // SubAction: add_subnode — Add decorator/service as a subnode attached to a
 // parent graph node (uses "root" sentinel for root-level decorators).
 // ===========================================================================
-bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
+bool McpHandlers::Ai::HandleBehaviorTreeAddSubnode(
+    UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
@@ -1416,7 +1424,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
       if (!FModuleManager::Get().ModuleExists(TEXT("BehaviorTreeEditor")) ||
           !FModuleManager::Get().LoadModule(TEXT("BehaviorTreeEditor")))
       {
-          SendAutomationError(RequestingSocket, RequestId,
+          S.SendAutomationError(RequestingSocket, RequestId,
               TEXT("BehaviorTreeEditor plugin is not enabled in this project. Enable the Behavior Tree Editor plugin to use Behavior Tree graph editing features."),
               TEXT("BEHAVIORTREEEDITOR_PLUGIN_NOT_ENABLED"));
           return true;
@@ -1435,7 +1443,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     }
   }
   if (AssetPath.IsEmpty()) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
                         TEXT("Missing 'assetPath' (or 'behaviorTreePath'/'path'). Use 'create' subAction to "
                              "create a new Behavior Tree first."),
                         TEXT("INVALID_ARGUMENT"));
@@ -1444,7 +1452,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
 
   UBehaviorTree *BT = LoadObject<UBehaviorTree>(nullptr, *AssetPath);
   if (!BT) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Could not load Behavior Tree at '%s'. Use 'create' subAction "
@@ -1456,7 +1464,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
 
   UEdGraph *BTGraph = BT->BTGraph;
   if (!BTGraph) {
-    SendAutomationError(
+    S.SendAutomationError(
         RequestingSocket, RequestId,
         FString::Printf(
             TEXT("Behavior Tree '%s' has no graph, so it cannot be edited here. "
@@ -1513,7 +1521,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
   };
 
 #if !MCP_HAS_BEHAVIOR_TREE_GRAPH
-  SendAutomationError(RequestingSocket, RequestId,
+  S.SendAutomationError(RequestingSocket, RequestId,
     TEXT("add_subnode requires UE 5.3+ Behavior Tree graph editing support."),
     TEXT("NOT_SUPPORTED"));
   return true;
@@ -1522,7 +1530,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
   if (!Payload->TryGetStringField(TEXT("parentNodeId"), ParentNodeIdStr) ||
       !Payload->TryGetStringField(TEXT("subnodeType"), SubnodeType) ||
       !Payload->TryGetStringField(TEXT("nodeClass"), NodeClass)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
       TEXT("add_subnode requires assetPath, parentNodeId, subnodeType, nodeClass"),
       TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1543,14 +1551,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
       }
     }
     if (!RootNode) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Root graph node not found for root sentinel parentNodeId"),
         TEXT("INVALID_PARENT"));
       return true;
     }
     UEdGraphPin::ResolveAllPinReferences();
     if (RootNode->Pins.Num() == 0 || !RootNode->Pins[0] || RootNode->Pins[0]->LinkedTo.Num() == 0) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Root graph node has no linked child; connect the root to a Behavior Tree node before adding a root subnode"),
         TEXT("INVALID_PARENT"));
       return true;
@@ -1558,7 +1566,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     UEdGraphPin* LinkedPin = RootNode->Pins[0]->LinkedTo[0];
     ParentNode = LinkedPin ? Cast<UBehaviorTreeGraphNode>(LinkedPin->GetOwningNode()) : nullptr;
     if (!ParentNode) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Root graph node's linked child is not a Behavior Tree graph node"),
         TEXT("INVALID_PARENT"));
       return true;
@@ -1566,7 +1574,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
   } else {
     FGuid ParentGuid;
     if (!FGuid::Parse(ParentNodeIdStr, ParentGuid)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Invalid parentNodeId: %s (must be 'root' or a GUID)"), *ParentNodeIdStr),
         TEXT("INVALID_PARENT"));
       return true;
@@ -1578,7 +1586,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     if (UEdGraphNode* Found = FindGraphNodeByIdOrName(ParentNodeIdStr)) {
       if (Cast<UBehaviorTreeGraphNode_Decorator>(Found) ||
           Cast<UBehaviorTreeGraphNode_Service>(Found)) {
-        SendAutomationError(RequestingSocket, RequestId,
+        S.SendAutomationError(RequestingSocket, RequestId,
           FString::Printf(TEXT("Parent node %s is a Decorator/Service subnode and cannot host other subnodes"),
             *ParentNodeIdStr),
           TEXT("INVALID_PARENT_FOR_SUBNODE"));
@@ -1588,7 +1596,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     }
   }
   if (!ParentNode) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
       FString::Printf(TEXT("Parent node not found: %s"), *ParentNodeIdStr),
       TEXT("INVALID_PARENT"));
     return true;
@@ -1612,7 +1620,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     NodeInstanceClass = UClass::TryFindTypeSlow<UClass>(Prefixed);
   }
   if (!NodeInstanceClass) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
       FString::Printf(TEXT("Subnode class not found: %s. Use an engine class "
                            "name (e.g. 'BTDecorator_Blackboard', "
                            "'BTService_DefaultFocus'), a short name that "
@@ -1623,7 +1631,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     return true;
   }
   if (NodeInstanceClass->HasAnyClassFlags(CLASS_Abstract)) {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
       FString::Printf(TEXT("Subnode class %s is abstract and cannot be instantiated"),
                       *NodeInstanceClass->GetName()),
       TEXT("INVALID_CLASS"));
@@ -1634,7 +1642,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
   UClass* SubnodeGraphClass = nullptr;
   if (SubnodeType.Equals(TEXT("Decorator"), ESearchCase::IgnoreCase)) {
     if (!NodeInstanceClass->IsChildOf(UBTDecorator::StaticClass())) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Class %s is not a UBTDecorator subclass"), *NodeClass),
         TEXT("INVALID_CLASS"));
       return true;
@@ -1642,7 +1650,7 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     SubnodeGraphClass = UBehaviorTreeGraphNode_Decorator::StaticClass();
   } else if (SubnodeType.Equals(TEXT("Service"), ESearchCase::IgnoreCase)) {
     if (!NodeInstanceClass->IsChildOf(UBTService::StaticClass())) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         FString::Printf(TEXT("Class %s is not a UBTService subclass"), *NodeClass),
         TEXT("INVALID_CLASS"));
       return true;
@@ -1651,14 +1659,14 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
     // (UE editor convention — root only accepts decorators). Fail before
     // constructing rather than producing a graph the editor rejects.
     if (bRootSentinelParent || Cast<UBehaviorTreeGraphNode_Root>(ParentNode)) {
-      SendAutomationError(RequestingSocket, RequestId,
+      S.SendAutomationError(RequestingSocket, RequestId,
         TEXT("Service subnode cannot be attached to the root graph node — use Decorator, or attach the Service to a composite/task child."),
         TEXT("INVALID_PARENT_FOR_SUBNODE"));
       return true;
     }
     SubnodeGraphClass = UBehaviorTreeGraphNode_Service::StaticClass();
   } else {
-    SendAutomationError(RequestingSocket, RequestId,
+    S.SendAutomationError(RequestingSocket, RequestId,
       FString::Printf(TEXT("subnodeType must be 'Decorator' or 'Service' (got: %s)"), *SubnodeType),
       TEXT("INVALID_ARGUMENT"));
     return true;
@@ -1685,12 +1693,12 @@ bool UMcpAutomationBridgeSubsystem::HandleBehaviorTreeAddSubnode(
   Result->SetStringField(TEXT("nodeClass"), NodeInstanceClass->GetName());
   Result->SetStringField(TEXT("parentNodeId"), ParentNodeIdStr);
   Result->SetStringField(TEXT("subnodeType"), SubnodeType);
-  SendAutomationResponse(RequestingSocket, RequestId, true,
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Subnode added."), Result);
   return true;
 #endif  // MCP_HAS_BEHAVIOR_TREE_GRAPH
 #else
-  SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
+  S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."),
                       TEXT("EDITOR_ONLY"));
   return true;
 #endif
