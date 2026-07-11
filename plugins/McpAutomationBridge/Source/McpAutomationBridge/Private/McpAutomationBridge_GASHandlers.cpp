@@ -2901,10 +2901,17 @@ bool McpHandlers::Gas::HandleGasSetModifierMagnitude(
         SetByCaller.DataTag = DataTag;
         EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(SetByCaller);
     }
-    else
+    else if (MagnitudeTypeToken == TEXT("scalablefloat"))
     {
         // Note: SetValue doesn't exist in UE 5.6. Use FScalableFloat constructor.
         EffectCDO->Modifiers[ModifierIndex].ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
+    }
+    else
+    {
+        S.SendAutomationError(Socket, RequestId,
+            FString::Printf(TEXT("Unsupported magnitudeType '%s'; supported values are 'ScalableFloat' and 'SetByCaller'."), *MagnitudeType),
+            TEXT("INVALID_ARGUMENT"));
+        return true;
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);

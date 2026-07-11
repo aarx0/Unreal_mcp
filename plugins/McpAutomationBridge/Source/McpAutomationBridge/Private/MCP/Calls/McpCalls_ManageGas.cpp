@@ -345,9 +345,7 @@ static void S_SetModifierMagnitude(FMcpSchemaBuilder& B)
 	 .String(TEXT("magnitudeType"), TEXT("set_modifier_magnitude: alias for magnitudeCalculationType (checked first)."))
 	 .StringEnum(TEXT("magnitudeCalculationType"), {
 		TEXT("ScalableFloat"),
-		TEXT("AttributeBased"),
-		TEXT("SetByCaller"),
-		TEXT("CustomCalculationClass")
+		TEXT("SetByCaller")
 	 }, TEXT("How magnitude is calculated."))
 	 .String(TEXT("setByCallerTag"), TEXT("add_effect_modifier/set_modifier_magnitude: registered gameplay tag for a "
 		"SetByCaller modifier magnitude; mutually exclusive with a numeric magnitude."));
