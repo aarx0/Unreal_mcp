@@ -34,6 +34,17 @@ as they land.
 >   HandleAnimPhysConfigureVehicle). Mutation on a no-changes response. Move creation behind the
 >   any-field-requested check (same shape as the camera-rig fix in ConfigureCameraComponent).
 
+> **[ ] Found 2026-07-11 (pillar-field gym work): `control_editor open_level` →
+> HANDLER_NO_RESPONSE on a real map switch.** Repro: editor sitting in HubWorld,
+> `control_editor {action:"open_level", levelPath:"/Game/Maps/L_CombatGym"}` — the load
+> SUCCEEDS (world switches; `manage_level get_current_level` confirms) but the client gets
+> HANDLER_NO_RESPONSE and the log shows `McpSafeLoadMap: Current world 'HubWorld' has World
+> Partition - tick cleanup may be incomplete` followed by `Response for <id> has no route
+> (origin unresolved, no pending native request) and was dropped.` The map transition tears
+> down whatever routes the pending response. Needs: send the response BEFORE initiating the
+> load (or re-route after world switch); today every cross-map open_level reads as a failure
+> that actually worked.
+
 > **[ ] Dogfood finds 2026-07-08 (inspect read actions, direct-HTTP):**
 > - **`inspect get_editor_settings` fake-success stub** — returns `{success:true, message:"Editor
 >   settings retrieved"}` with NO data (EnvironmentHandlers.cpp:1590; the non-editor build is an
