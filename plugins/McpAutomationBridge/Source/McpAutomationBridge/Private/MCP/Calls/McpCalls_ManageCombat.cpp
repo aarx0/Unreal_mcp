@@ -34,10 +34,10 @@ static void S_CreateWeaponBlueprint(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier: asset name for create actions; hitbox component name for setup_hitbox_component."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("weaponMeshPath"), TEXT("Path to weapon static/skeletal mesh."))
-	 .Number(TEXT("baseDamage"), TEXT(""))
-	 .Number(TEXT("fireRate"), TEXT(""))
-	 .Number(TEXT("range"), TEXT(""))
-	 .Number(TEXT("spread"), TEXT(""))
+	 .Number(TEXT("baseDamage"), TEXT("create_weapon_blueprint/set_weapon_stats: weapon damage written to the BaseDamage variable default (default 25)."))
+	 .Number(TEXT("fireRate"), TEXT("create_weapon_blueprint/set_weapon_stats: fire rate written to the FireRate variable default (default 600)."))
+	 .Number(TEXT("range"), TEXT("create_weapon_blueprint/set_weapon_stats: weapon range written to the Range variable default (default 10000)."))
+	 .Number(TEXT("spread"), TEXT("create_weapon_blueprint/set_weapon_stats: shot spread written to the Spread variable default (default 2)."))
 	 .Required({TEXT("name")});
 }
 
@@ -52,10 +52,10 @@ static void S_ConfigureWeaponMesh(FMcpSchemaBuilder& B)
 static void S_SetWeaponStats(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("baseDamage"), TEXT(""))
-	 .Number(TEXT("fireRate"), TEXT(""))
-	 .Number(TEXT("range"), TEXT(""))
-	 .Number(TEXT("spread"), TEXT(""))
+	 .Number(TEXT("baseDamage"), TEXT("create_weapon_blueprint/set_weapon_stats: weapon damage written to the BaseDamage variable default (default 25)."))
+	 .Number(TEXT("fireRate"), TEXT("create_weapon_blueprint/set_weapon_stats: fire rate written to the FireRate variable default (default 600)."))
+	 .Number(TEXT("range"), TEXT("create_weapon_blueprint/set_weapon_stats: weapon range written to the Range variable default (default 10000)."))
+	 .Number(TEXT("spread"), TEXT("create_weapon_blueprint/set_weapon_stats: shot spread written to the Spread variable default (default 2)."))
 	 .Number(TEXT("criticalMultiplier"), TEXT("Critical hit damage multiplier (consumed by configure_damage_execution, not set_weapon_stats)."))
 	 .Number(TEXT("headshotMultiplier"), TEXT("Headshot damage multiplier (consumed by configure_damage_execution, not set_weapon_stats)."))
 	 .Required({TEXT("blueprintPath")});
@@ -70,26 +70,26 @@ static void S_CreateProjectileBlueprint(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier: asset name for create actions; hitbox component name for setup_hitbox_component."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
-	 .Number(TEXT("collisionRadius"), TEXT(""))
+	 .Number(TEXT("collisionRadius"), TEXT("create_projectile_blueprint/configure_projectile_collision: sphere radius of the projectile's CollisionComponent (default 5)."))
 	 .String(TEXT("projectileMeshPath"), TEXT("Path to projectile mesh."))
-	 .Number(TEXT("projectileSpeed"), TEXT(""))
-	 .Number(TEXT("projectileGravityScale"), TEXT(""))
+	 .Number(TEXT("projectileSpeed"), TEXT("create_projectile_blueprint/configure_projectile_movement: ProjectileMovement InitialSpeed and MaxSpeed (default 5000)."))
+	 .Number(TEXT("projectileGravityScale"), TEXT("create_projectile_blueprint/configure_projectile_movement: ProjectileMovement gravity scale; 0 disables gravity (default 0)."))
 	 .Required({TEXT("name")});
 }
 
 static void S_ConfigureProjectileMovement(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("projectileSpeed"), TEXT(""))
-	 .Number(TEXT("projectileGravityScale"), TEXT(""))
-	 .Number(TEXT("projectileLifespan"), TEXT(""))
+	 .Number(TEXT("projectileSpeed"), TEXT("create_projectile_blueprint/configure_projectile_movement: ProjectileMovement InitialSpeed and MaxSpeed (default 5000)."))
+	 .Number(TEXT("projectileGravityScale"), TEXT("create_projectile_blueprint/configure_projectile_movement: ProjectileMovement gravity scale; 0 disables gravity (default 0)."))
+	 .Number(TEXT("projectileLifespan"), TEXT("configure_projectile_movement: projectile actor InitialLifeSpan in seconds (default 5)."))
 	 .Required({TEXT("blueprintPath")});
 }
 
 static void S_ConfigureProjectileCollision(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("collisionRadius"), TEXT(""))
+	 .Number(TEXT("collisionRadius"), TEXT("create_projectile_blueprint/configure_projectile_collision: sphere radius of the projectile's CollisionComponent (default 5)."))
 	 .Bool(TEXT("bounceEnabled"), TEXT("Enable projectile bouncing."))
 	 .Number(TEXT("bounceVelocityRatio"), TEXT("Velocity retained on bounce (0-1)."))
 	 .Required({TEXT("blueprintPath")});

@@ -40,7 +40,12 @@ namespace McpCalls::ManageLevelStructure
 
 static void S_CreateLevel(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name of the new level asset (no path separators; "
+			"created under levelPath, default /Game/Maps). "
+			"configure_level_streaming/set_streaming_distance: streaming-level "
+			"name or /Game/ path (substring match; a streaming reference is "
+			"auto-created when the level exists on disk)."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."))
 	 .Bool(TEXT("bCreateWorldPartition"), TEXT("Create with World Partition enabled."))
 	 .Bool(TEXT("bUseExternalActors"), TEXT("Enable One File Per Actor (OFPA/External Actors) for Data Layer "
@@ -61,7 +66,12 @@ static void S_CreateSublevel(FMcpSchemaBuilder& B)
 
 static void S_ConfigureLevelStreaming(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name of the new level asset (no path separators; "
+			"created under levelPath, default /Game/Maps). "
+			"configure_level_streaming/set_streaming_distance: streaming-level "
+			"name or /Game/ path (substring match; a streaming reference is "
+			"auto-created when the level exists on disk)."))
 	 .StringEnum(TEXT("streamingMethod"), {
 		TEXT("Blueprint"), TEXT("AlwaysLoaded"), TEXT("Disabled")
 	 }, TEXT("Level streaming method."))
@@ -73,7 +83,12 @@ static void S_ConfigureLevelStreaming(FMcpSchemaBuilder& B)
 
 static void S_SetStreamingDistance(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name of the new level asset (no path separators; "
+			"created under levelPath, default /Game/Maps). "
+			"configure_level_streaming/set_streaming_distance: streaming-level "
+			"name or /Game/ path (substring match; a streaming reference is "
+			"auto-created when the level exists on disk)."))
 	 .Number(TEXT("streamingDistance"), TEXT("Distance/radius for streaming volume "
 		"(creates ALevelStreamingVolume)."))
 	 .StringEnum(TEXT("streamingUsage"), {

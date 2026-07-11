@@ -42,8 +42,8 @@ static void S_ConfigureCapsuleComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("capsuleRadius"), TEXT(""))
-	 .Number(TEXT("capsuleHalfHeight"), TEXT(""))
+	 .Number(TEXT("capsuleRadius"), TEXT("Capsule radius in cm; writes the CapsuleComponent unscaled radius (clamped against half-height)."))
+	 .Number(TEXT("capsuleHalfHeight"), TEXT("Capsule half-height in cm; writes the CapsuleComponent unscaled half-height."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -70,7 +70,7 @@ static void S_ConfigureCameraComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("springArmLength"), TEXT(""))
+	 .Number(TEXT("springArmLength"), TEXT("Camera boom length in cm; writes the SpringArm TargetArmLength (component created if missing)."))
 	 .Bool(TEXT("cameraUsePawnControlRotation"), TEXT("Camera follows controller rotation."))
 	 .Bool(TEXT("springArmLagEnabled"), TEXT("Enable camera lag."))
 	 .Number(TEXT("springArmLagSpeed"), TEXT("Camera lag speed."))
@@ -85,12 +85,12 @@ static void S_ConfigureMovementSpeeds(FMcpSchemaBuilder& B)
 	 .Number(TEXT("walkSpeed"), TEXT("Ground speed; writes CharacterMovement MaxWalkSpeed."))
 	 .Number(TEXT("runSpeed"), TEXT("Run speed; writes MaxWalkSpeed when walkSpeed is absent, otherwise stored as the RunSpeed variable default."))
 	 .Number(TEXT("sprintSpeed"), TEXT("Sprint speed; stored as the SprintSpeed variable default (no CharacterMovement property)."))
-	 .Number(TEXT("crouchSpeed"), TEXT(""))
-	 .Number(TEXT("swimSpeed"), TEXT(""))
-	 .Number(TEXT("flySpeed"), TEXT(""))
-	 .Number(TEXT("acceleration"), TEXT(""))
-	 .Number(TEXT("deceleration"), TEXT(""))
-	 .Number(TEXT("groundFriction"), TEXT(""))
+	 .Number(TEXT("crouchSpeed"), TEXT("Crouched walk speed; writes CharacterMovement MaxWalkSpeedCrouched."))
+	 .Number(TEXT("swimSpeed"), TEXT("Swim speed; writes CharacterMovement MaxSwimSpeed."))
+	 .Number(TEXT("flySpeed"), TEXT("Fly speed; writes CharacterMovement MaxFlySpeed."))
+	 .Number(TEXT("acceleration"), TEXT("Writes CharacterMovement MaxAcceleration."))
+	 .Number(TEXT("deceleration"), TEXT("Writes CharacterMovement BrakingDecelerationWalking."))
+	 .Number(TEXT("groundFriction"), TEXT("Writes CharacterMovement GroundFriction."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -99,11 +99,11 @@ static void S_ConfigureJump(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("gravityScale"), TEXT(""))
+	 .Number(TEXT("gravityScale"), TEXT("Gravity multiplier; writes CharacterMovement GravityScale."))
 	 .Number(TEXT("jumpHeight"), TEXT("Desired jump apex height in cm; converted to JumpZVelocity via sqrt(2*g*h) using effective gravity."))
-	 .Number(TEXT("airControl"), TEXT(""))
+	 .Number(TEXT("airControl"), TEXT("Air steering fraction 0-1; writes CharacterMovement AirControl."))
 	 .Number(TEXT("fallingLateralFriction"), TEXT("Air friction."))
-	 .Integer(TEXT("maxJumpCount"), TEXT(""))
+	 .Integer(TEXT("maxJumpCount"), TEXT("Writes Character JumpMaxCount (2 = double jump)."))
 	 .Number(TEXT("jumpHoldTime"), TEXT("Max hold time for variable jump."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -117,7 +117,7 @@ static void S_ConfigureRotation(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("useControllerRotationYaw"), TEXT("Use controller yaw rotation."))
 	 .Bool(TEXT("useControllerRotationPitch"), TEXT("Use controller pitch rotation."))
 	 .Bool(TEXT("useControllerRotationRoll"), TEXT("Use controller roll rotation."))
-	 .Number(TEXT("rotationRate"), TEXT(""))
+	 .Number(TEXT("rotationRate"), TEXT("Yaw turn rate in degrees/second; writes CharacterMovement RotationRate (pitch/roll zeroed)."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -137,8 +137,8 @@ static void S_ConfigureNavMovement(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("navAgentRadius"), TEXT(""))
-	 .Number(TEXT("navAgentHeight"), TEXT(""))
+	 .Number(TEXT("navAgentRadius"), TEXT("Nav agent radius in cm; writes NavAgentProps.AgentRadius."))
+	 .Number(TEXT("navAgentHeight"), TEXT("Nav agent height in cm; writes NavAgentProps.AgentHeight."))
 	 .Bool(TEXT("avoidanceEnabled"), TEXT("Enable AI avoidance."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -188,7 +188,7 @@ static void S_SetupMovement(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Number(TEXT("walkSpeed"), TEXT("Ground speed; writes CharacterMovement MaxWalkSpeed."))
 	 .Number(TEXT("runSpeed"), TEXT("Run speed; writes MaxWalkSpeed when walkSpeed is absent, otherwise stored as the RunSpeed variable default."))
-	 .Number(TEXT("acceleration"), TEXT(""))
+	 .Number(TEXT("acceleration"), TEXT("Writes CharacterMovement MaxAcceleration."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -215,7 +215,7 @@ static void S_SetGravityScale(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("gravityScale"), TEXT(""))
+	 .Number(TEXT("gravityScale"), TEXT("Gravity multiplier; writes CharacterMovement GravityScale."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -224,7 +224,7 @@ static void S_SetGroundFriction(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("groundFriction"), TEXT(""))
+	 .Number(TEXT("groundFriction"), TEXT("Writes CharacterMovement GroundFriction."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -242,7 +242,7 @@ static void S_ConfigureCrouch(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name of the asset to create."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("crouchSpeed"), TEXT(""))
+	 .Number(TEXT("crouchSpeed"), TEXT("Crouched walk speed; writes CharacterMovement MaxWalkSpeedCrouched."))
 	 .Number(TEXT("crouchedHalfHeight"), TEXT("configure_crouch: capsule half-height while crouched (default 44)."))
 	 .Bool(TEXT("canCrouch"), TEXT("configure_crouch: whether the character can crouch (default true)."))
 	 .Required({TEXT("blueprintPath")});

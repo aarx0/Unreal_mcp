@@ -39,21 +39,33 @@ static void S_AddFoliageInstances(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("foliageTypePath"),
 		TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("foliageType"), TEXT(""))
-	 .ArrayOfObjects(TEXT("transforms"), TEXT(""))
-	 .ArrayOfObjects(TEXT("locations"), TEXT(""));
+	 .String(TEXT("foliageType"),
+		TEXT("FoliageType or StaticMesh asset path (alias of foliageTypePath; "
+			"bare names resolve under /Game/Foliage/)."))
+	 .ArrayOfObjects(TEXT("transforms"),
+		TEXT("add_foliage_instances: per-instance transforms, each with "
+			"'location' ({x,y,z} or [x,y,z]) plus optional 'rotation' and "
+			"'scale'/'uniformScale'."))
+	 .ArrayOfObjects(TEXT("locations"),
+		TEXT("Array of {x, y, z} world locations to place foliage instances at "
+			"(add_foliage_instances: legacy fallback when 'transforms' is "
+			"absent)."));
 }
 
 static void S_GetFoliageInstances(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("foliageType"), TEXT(""))
+	B.String(TEXT("foliageType"),
+		TEXT("FoliageType or StaticMesh asset path (alias of foliageTypePath; "
+			"bare names resolve under /Game/Foliage/)."))
 	 .String(TEXT("foliageTypePath"),
 		TEXT("Asset path (e.g., /Game/Path/Asset)."));
 }
 
 static void S_RemoveFoliage(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("foliageType"), TEXT(""))
+	B.String(TEXT("foliageType"),
+		TEXT("FoliageType or StaticMesh asset path (alias of foliageTypePath; "
+			"bare names resolve under /Game/Foliage/)."))
 	 .Bool(TEXT("removeAll"),
 		TEXT("remove_foliage: remove all foliage instances of every type."))
 	 .String(TEXT("foliageTypePath"),
@@ -64,8 +76,13 @@ static void S_PaintFoliage(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("foliageTypePath"),
 		TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("foliageType"), TEXT(""))
-	 .ArrayOfObjects(TEXT("locations"), TEXT(""))
+	 .String(TEXT("foliageType"),
+		TEXT("FoliageType or StaticMesh asset path (alias of foliageTypePath; "
+			"bare names resolve under /Game/Foliage/)."))
+	 .ArrayOfObjects(TEXT("locations"),
+		TEXT("Array of {x, y, z} world locations to place foliage instances at "
+			"(add_foliage_instances: legacy fallback when 'transforms' is "
+			"absent)."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
@@ -81,21 +98,46 @@ static void S_PaintFoliage(FMcpSchemaBuilder& B)
 static void S_CreateProceduralFoliage(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
-	 .Object(TEXT("bounds"), TEXT(""))
-	 .ArrayOfObjects(TEXT("foliageTypes"), TEXT(""))
+	 .Object(TEXT("bounds"),
+		TEXT("create_procedural_foliage: spawn bounds — optional 'location' "
+			"{x,y,z} and 'size' {x,y,z} or [x,y,z] (default 1000x1000x1000 at "
+			"the origin)."))
+	 .ArrayOfObjects(TEXT("foliageTypes"),
+		TEXT("create_procedural_foliage: foliage type configs, each {meshPath, "
+			"density (default 10)}; may be empty."))
 	 .ArrayOfObjects(TEXT("types"),
 		TEXT("create_procedural_foliage: alias of 'foliageTypes'."))
-	 .Integer(TEXT("seed"), TEXT(""))
-	 .Number(TEXT("tileSize"), TEXT(""));
+	 .Integer(TEXT("seed"),
+		TEXT("create_procedural_foliage: random seed for the spawner "
+			"(default 12345)."))
+	 .Number(TEXT("tileSize"),
+		TEXT("create_procedural_foliage: spawner tile size in world units "
+			"(default 1000, min 1)."));
 }
 
 static void S_CreateProceduralTerrain(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("sizeX"), TEXT(""))
-	 .Number(TEXT("sizeY"), TEXT(""))
-	 .Number(TEXT("spacing"), TEXT(""))
-	 .Number(TEXT("heightScale"), TEXT(""))
-	 .Integer(TEXT("subdivisions"), TEXT(""))
+	B.Number(TEXT("sizeX"),
+		TEXT("create_procedural_terrain: grid cells along X — world width = "
+			"sizeX*spacing (clamped 2-1000, default 100). create_landscape: "
+			"world-unit size hint — componentsX defaults to floor(sizeX/1000) "
+			"when no component count is given."))
+	 .Number(TEXT("sizeY"),
+		TEXT("create_procedural_terrain: grid cells along Y — world depth = "
+			"sizeY*spacing (clamped 2-1000, default 100). create_landscape: "
+			"world-unit size hint — componentsY defaults to floor(sizeY/1000) "
+			"when no component count is given."))
+	 .Number(TEXT("spacing"),
+		TEXT("create_procedural_terrain: distance between grid vertices in "
+			"world units (default 100, min 1). scatter_meshes_along_spline: "
+			"distance between instances along the spline (default 100, must "
+			"be > 0)."))
+	 .Number(TEXT("heightScale"),
+		TEXT("create_procedural_terrain: amplitude of the generated height "
+			"noise in world units (default 500)."))
+	 .Integer(TEXT("subdivisions"),
+		TEXT("create_procedural_terrain: vertex grid resolution per axis "
+			"(clamped 2-200, default 50)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -113,12 +155,25 @@ static void S_AddFoliage(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
-	 .Number(TEXT("density"), TEXT(""))
-	 .Number(TEXT("minScale"), TEXT(""))
-	 .Number(TEXT("maxScale"), TEXT(""))
-	 .Bool(TEXT("alignToNormal"), TEXT(""))
-	 .Bool(TEXT("randomYaw"), TEXT(""))
-	 .Number(TEXT("cullDistance"), TEXT(""))
+	 .Number(TEXT("density"),
+		TEXT("add_foliage: foliage paint density (default 100, non-negative). "
+			"create_landscape_grass_type: grass density (default 1)."))
+	 .Number(TEXT("minScale"),
+		TEXT("Minimum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 0.8)."))
+	 .Number(TEXT("maxScale"),
+		TEXT("Maximum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 1.2)."))
+	 .Bool(TEXT("alignToNormal"),
+		TEXT("add_foliage: align instances to the surface normal "
+			"(default true)."))
+	 .Bool(TEXT("randomYaw"),
+		TEXT("add_foliage: apply random yaw to instances (default true)."))
+	 .Number(TEXT("cullDistance"),
+		TEXT("add_foliage: max draw distance for instances; 0 leaves culling "
+			"disabled (default 0)."))
 	 .Required({TEXT("name"), TEXT("meshPath")});
 }
 
@@ -148,17 +203,32 @@ static void S_CreateLandscape(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x")).Number(TEXT("y"));
 		})
-	 .Number(TEXT("sizeX"), TEXT(""))
-	 .Number(TEXT("sizeY"), TEXT(""))
+	 .Number(TEXT("sizeX"),
+		TEXT("create_procedural_terrain: grid cells along X — world width = "
+			"sizeX*spacing (clamped 2-1000, default 100). create_landscape: "
+			"world-unit size hint — componentsX defaults to floor(sizeX/1000) "
+			"when no component count is given."))
+	 .Number(TEXT("sizeY"),
+		TEXT("create_procedural_terrain: grid cells along Y — world depth = "
+			"sizeY*spacing (clamped 2-1000, default 100). create_landscape: "
+			"world-unit size hint — componentsY defaults to floor(sizeY/1000) "
+			"when no component count is given."))
 	 .Integer(TEXT("quadsPerComponent"),
 		TEXT("create_landscape: quads per component (alias: "
 			"quadsPerSection/sectionSize)."))
-	 .Integer(TEXT("quadsPerSection"), TEXT(""))
-	 .Integer(TEXT("sectionSize"), TEXT(""))
-	 .Integer(TEXT("sectionsPerComponent"), TEXT(""))
+	 .Integer(TEXT("quadsPerSection"),
+		TEXT("create_landscape: alias of quadsPerComponent (default 63)."))
+	 .Integer(TEXT("sectionSize"),
+		TEXT("create_landscape: alias of quadsPerComponent (default 63)."))
+	 .Integer(TEXT("sectionsPerComponent"),
+		TEXT("create_landscape: sections per component (default 1); subsection "
+			"quads = quadsPerComponent/sectionsPerComponent."))
 	 .String(TEXT("materialPath"), TEXT("Material asset path."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
-	 .String(TEXT("landscapeName"), TEXT(""));
+	 .String(TEXT("landscapeName"),
+		TEXT("create_landscape: alias of 'name' — label for the new landscape. "
+			"sculpt/modify_heightmap/paint_landscape/set_landscape_material: "
+			"target landscape actor label (alternative to landscapePath)."));
 }
 
 static void S_PaintLandscape(FMcpSchemaBuilder& B)
@@ -167,8 +237,13 @@ static void S_PaintLandscape(FMcpSchemaBuilder& B)
 		TEXT("sculpt/modify_heightmap/paint_landscape/"
 			"set_landscape_material: landscape asset/actor path (alternative "
 			"to landscapeName)."))
-	 .String(TEXT("landscapeName"), TEXT(""))
-	 .String(TEXT("layerName"), TEXT(""))
+	 .String(TEXT("landscapeName"),
+		TEXT("create_landscape: alias of 'name' — label for the new landscape. "
+			"sculpt/modify_heightmap/paint_landscape/set_landscape_material: "
+			"target landscape actor label (alternative to landscapePath)."))
+	 .String(TEXT("layerName"),
+		TEXT("paint_landscape: weight-map layer name to paint; auto-created "
+			"on the landscape if missing."))
 	 .Object(TEXT("region"),
 		TEXT("modify_heightmap/paint_landscape: sub-region to affect "
 			"(minX, minY, maxX, maxY); defaults to top-level minX/minY/"
@@ -177,11 +252,25 @@ static void S_PaintLandscape(FMcpSchemaBuilder& B)
 			S.Integer(TEXT("minX")).Integer(TEXT("minY"))
 				.Integer(TEXT("maxX")).Integer(TEXT("maxY"));
 		})
-	 .Integer(TEXT("minX"), TEXT(""))
-	 .Integer(TEXT("minY"), TEXT(""))
-	 .Integer(TEXT("maxX"), TEXT(""))
-	 .Integer(TEXT("maxY"), TEXT(""))
-	 .Number(TEXT("strength"), TEXT(""))
+	 .Integer(TEXT("minX"),
+		TEXT("modify_heightmap/paint_landscape: region min X in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("minY"),
+		TEXT("modify_heightmap/paint_landscape: region min Y in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("maxX"),
+		TEXT("modify_heightmap/paint_landscape: region max X in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("maxY"),
+		TEXT("modify_heightmap/paint_landscape: region max Y in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Number(TEXT("strength"),
+		TEXT("paint_landscape: layer weight 0-1 (default 1). sculpt: brush "
+			"strength (default 0.1)."))
 	 .Bool(TEXT("skipFlush"),
 		TEXT("modify_heightmap/sculpt/paint_landscape: "
 			"skip the GPU flush for batched edits."))
@@ -194,7 +283,10 @@ static void S_Sculpt(FMcpSchemaBuilder& B)
 		TEXT("sculpt/modify_heightmap/paint_landscape/"
 			"set_landscape_material: landscape asset/actor path (alternative "
 			"to landscapeName)."))
-	 .String(TEXT("landscapeName"), TEXT(""))
+	 .String(TEXT("landscapeName"),
+		TEXT("create_landscape: alias of 'name' — label for the new landscape. "
+			"sculpt/modify_heightmap/paint_landscape/set_landscape_material: "
+			"target landscape actor label (alternative to landscapePath)."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
@@ -211,14 +303,22 @@ static void S_Sculpt(FMcpSchemaBuilder& B)
 		TEXT("Flatten")
 	 }, TEXT("sculpt: sculpt tool (default: Raise). Alias of "
 		"'tool'."))
-	 .String(TEXT("tool"), TEXT(""))
+	 .String(TEXT("tool"),
+		TEXT("sculpt: alias of toolMode."))
 	 .Number(TEXT("brushRadius"),
 		TEXT("sculpt: brush radius (alias: radius)."))
-	 .Number(TEXT("radius"), TEXT(""))
+	 .Number(TEXT("radius"),
+		TEXT("sculpt: alias of brushRadius (default 1000). "
+			"set_ambient_occlusion: ambient occlusion radius on the global "
+			"post-process volume."))
 	 .Number(TEXT("brushFalloff"),
 		TEXT("sculpt: brush falloff (alias: falloff)."))
-	 .Number(TEXT("falloff"), TEXT(""))
-	 .Number(TEXT("strength"), TEXT(""))
+	 .Number(TEXT("falloff"),
+		TEXT("sculpt: alias of brushFalloff (default 0.5, fraction of the "
+			"brush radius)."))
+	 .Number(TEXT("strength"),
+		TEXT("paint_landscape: layer weight 0-1 (default 1). sculpt: brush "
+			"strength (default 0.1)."))
 	 .Bool(TEXT("skipFlush"),
 		TEXT("modify_heightmap/sculpt/paint_landscape: "
 			"skip the GPU flush for batched edits."));
@@ -230,7 +330,10 @@ static void S_ModifyHeightmap(FMcpSchemaBuilder& B)
 		TEXT("sculpt/modify_heightmap/paint_landscape/"
 			"set_landscape_material: landscape asset/actor path (alternative "
 			"to landscapeName)."))
-	 .String(TEXT("landscapeName"), TEXT(""))
+	 .String(TEXT("landscapeName"),
+		TEXT("create_landscape: alias of 'name' — label for the new landscape. "
+			"sculpt/modify_heightmap/paint_landscape/set_landscape_material: "
+			"target landscape actor label (alternative to landscapePath)."))
 	 .StringEnum(TEXT("operation"), {
 		TEXT("raise"),
 		TEXT("lower"),
@@ -246,15 +349,33 @@ static void S_ModifyHeightmap(FMcpSchemaBuilder& B)
 			S.Integer(TEXT("minX")).Integer(TEXT("minY"))
 				.Integer(TEXT("maxX")).Integer(TEXT("maxY"));
 		})
-	 .Integer(TEXT("minX"), TEXT(""))
-	 .Integer(TEXT("minY"), TEXT(""))
-	 .Integer(TEXT("maxX"), TEXT(""))
-	 .Integer(TEXT("maxY"), TEXT(""))
-	 .Array(TEXT("heightData"), TEXT(""), TEXT("number"))
+	 .Integer(TEXT("minX"),
+		TEXT("modify_heightmap/paint_landscape: region min X in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("minY"),
+		TEXT("modify_heightmap/paint_landscape: region min Y in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("maxX"),
+		TEXT("modify_heightmap/paint_landscape: region max X in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Integer(TEXT("maxY"),
+		TEXT("modify_heightmap/paint_landscape: region max Y in landscape "
+			"vertex coordinates (used when the 'region' object is absent; "
+			"omitted = full extent)."))
+	 .Array(TEXT("heightData"),
+		TEXT("modify_heightmap: height samples 0-65535 (32768 = mid). 'set' "
+			"writes the array across the region; 'flatten' targets the first "
+			"value; 'raise'/'lower' derive their delta from the first value."),
+		TEXT("number"))
 	 .Bool(TEXT("skipFlush"),
 		TEXT("modify_heightmap/sculpt/paint_landscape: "
 			"skip the GPU flush for batched edits."))
-	 .Bool(TEXT("updateNormals"), TEXT(""));
+	 .Bool(TEXT("updateNormals"),
+		TEXT("modify_heightmap: recalculate normals when writing height data "
+			"(default false)."));
 }
 
 static void S_SetLandscapeMaterial(FMcpSchemaBuilder& B)
@@ -263,7 +384,10 @@ static void S_SetLandscapeMaterial(FMcpSchemaBuilder& B)
 		TEXT("sculpt/modify_heightmap/paint_landscape/"
 			"set_landscape_material: landscape asset/actor path (alternative "
 			"to landscapeName)."))
-	 .String(TEXT("landscapeName"), TEXT(""))
+	 .String(TEXT("landscapeName"),
+		TEXT("create_landscape: alias of 'name' — label for the new landscape. "
+			"sculpt/modify_heightmap/paint_landscape/set_landscape_material: "
+			"target landscape actor label (alternative to landscapePath)."))
 	 .String(TEXT("materialPath"), TEXT("Material asset path."))
 	 .Required({TEXT("materialPath")});
 }
@@ -273,9 +397,17 @@ static void S_CreateLandscapeGrassType(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
 	 .String(TEXT("staticMesh"), TEXT("Mesh asset path."))
-	 .Number(TEXT("density"), TEXT(""))
-	 .Number(TEXT("minScale"), TEXT(""))
-	 .Number(TEXT("maxScale"), TEXT(""))
+	 .Number(TEXT("density"),
+		TEXT("add_foliage: foliage paint density (default 100, non-negative). "
+			"create_landscape_grass_type: grass density (default 1)."))
+	 .Number(TEXT("minScale"),
+		TEXT("Minimum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 0.8)."))
+	 .Number(TEXT("maxScale"),
+		TEXT("Maximum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 1.2)."))
 	 .Required({TEXT("name")});
 }
 
@@ -288,11 +420,15 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 	 .String(TEXT("assetPath"),
 		TEXT("generate_lods: single static-mesh asset path (alternative to "
 			"assetPaths/assets)."))
-	 .Array(TEXT("assetPaths"), TEXT(""))
-	 .Array(TEXT("assets"), TEXT(""))
+	 .Array(TEXT("assetPaths"),
+		TEXT("generate_lods: static-mesh asset paths to process "
+			"(alias: assets)."))
+	 .Array(TEXT("assets"),
+		TEXT("generate_lods: alias of assetPaths."))
 	 .Integer(TEXT("lodCount"),
 		TEXT("generate_lods: number of LODs to generate (alias: numLODs)."))
-	 .Integer(TEXT("numLODs"), TEXT(""))
+	 .Integer(TEXT("numLODs"),
+		TEXT("generate_lods: alias of lodCount (default 4, clamped 1-50)."))
 	 .Object(TEXT("reductionSettings"),
 		TEXT("generate_lods: per-LOD FMeshReductionSettings overrides "
 			"(percentTriangles, percentVertices, maxDeviation, pixelError, "
@@ -302,7 +438,10 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 
 static void S_BakeLightmap(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("quality"), TEXT(""));
+	B.String(TEXT("quality"),
+		TEXT("Lighting build quality: preview|medium|high|production "
+			"(bake_lightmap default preview; build_lighting default "
+			"production, digits 0-3 accepted)."));
 }
 
 static void S_ExportSnapshot(FMcpSchemaBuilder& B)
@@ -319,7 +458,9 @@ static void S_ImportSnapshot(FMcpSchemaBuilder& B)
 
 static void S_Delete(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("names"), TEXT(""))
+	B.Array(TEXT("names"),
+		TEXT("delete: actor labels to remove from the level (matched "
+			"case-insensitively)."))
 	 .Required({TEXT("names")});
 }
 
@@ -330,8 +471,11 @@ static void S_CreateSkySphere(FMcpSchemaBuilder& B)
 
 static void S_SetTimeOfDay(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("time"), TEXT(""))
-	 .Number(TEXT("hour"), TEXT(""));
+	B.Number(TEXT("time"),
+		TEXT("set_time_of_day: hour of day passed to the sky sphere's "
+			"SetTimeOfDay function (default 12)."))
+	 .Number(TEXT("hour"),
+		TEXT("set_time_of_day: alias of 'time'."));
 }
 
 static void S_CreateFogVolume(FMcpSchemaBuilder& B)
@@ -407,7 +551,9 @@ static void S_CreateSkyLight(FMcpSchemaBuilder& B)
 	 .String(TEXT("cubemapPath"),
 		TEXT("create_sky_light: cubemap asset path when "
 			"sourceType is SpecifiedCubemap."))
-	 .Number(TEXT("intensity"), TEXT(""))
+	 .Number(TEXT("intensity"),
+		TEXT("create_sky_light: sky light intensity. set_ambient_occlusion: "
+			"ambient occlusion intensity on the global post-process volume."))
 	 .Bool(TEXT("recapture"),
 		TEXT("create_sky_light/ensure_single_sky_light: "
 			"recapture the scene into the sky light."));
@@ -415,7 +561,10 @@ static void S_CreateSkyLight(FMcpSchemaBuilder& B)
 
 static void S_BuildLighting(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("quality"), TEXT(""));
+	B.String(TEXT("quality"),
+		TEXT("Lighting build quality: preview|medium|high|production "
+			"(bake_lightmap default preview; build_lighting default "
+			"production, digits 0-3 accepted)."));
 }
 
 static void S_EnsureSingleSkyLight(FMcpSchemaBuilder& B)
@@ -482,8 +631,13 @@ static void S_SetAmbientOcclusion(FMcpSchemaBuilder& B)
 {
 	B.Bool(TEXT("enabled"),
 		TEXT("set_ambient_occlusion: enable/disable ambient occlusion."))
-	 .Number(TEXT("intensity"), TEXT(""))
-	 .Number(TEXT("radius"), TEXT(""));
+	 .Number(TEXT("intensity"),
+		TEXT("create_sky_light: sky light intensity. set_ambient_occlusion: "
+			"ambient occlusion intensity on the global post-process volume."))
+	 .Number(TEXT("radius"),
+		TEXT("sculpt: alias of brushRadius (default 1000). "
+			"set_ambient_occlusion: ambient occlusion radius on the global "
+			"post-process volume."));
 }
 
 static void S_CreateLightingEnabledLevel(FMcpSchemaBuilder& B)
@@ -703,7 +857,11 @@ static void S_ScatterMeshesAlongSpline(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("alignToSpline"),
 		TEXT("scatter_meshes_along_spline: orient meshes to the spline "
 			"tangent."))
-	 .Number(TEXT("spacing"), TEXT(""))
+	 .Number(TEXT("spacing"),
+		TEXT("create_procedural_terrain: distance between grid vertices in "
+			"world units (default 100, min 1). scatter_meshes_along_spline: "
+			"distance between instances along the spline (default 100, must "
+			"be > 0)."))
 	 .Bool(TEXT("useRandomOffset"),
 		TEXT("scatter_meshes_along_spline/configure_mesh_spacing: "
 			"randomize mesh spacing along the spline."))
@@ -713,8 +871,14 @@ static void S_ScatterMeshesAlongSpline(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("randomizeScale"),
 		TEXT("scatter_meshes_along_spline/configure_mesh_randomization: "
 			"randomize instance scale between minScale/maxScale."))
-	 .Number(TEXT("minScale"), TEXT(""))
-	 .Number(TEXT("maxScale"), TEXT(""))
+	 .Number(TEXT("minScale"),
+		TEXT("Minimum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 0.8)."))
+	 .Number(TEXT("maxScale"),
+		TEXT("Maximum random instance scale (add_foliage default 1; "
+			"create_landscape_grass_type/scatter_meshes_along_spline "
+			"default 1.2)."))
 	 .Bool(TEXT("randomizeRotation"),
 		TEXT("scatter_meshes_along_spline/configure_mesh_randomization: "
 			"randomize instance yaw."))

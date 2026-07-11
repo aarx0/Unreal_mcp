@@ -48,7 +48,7 @@ static void S_List(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("directoryPath"), TEXT("Path to a directory."))
 	 .Bool(TEXT("recursive"), TEXT("list: recurse into subfolders (default true)."))
-	 .Bool(TEXT("recursivePaths"), TEXT(""))
+	 .Bool(TEXT("recursivePaths"), TEXT("list/search_assets: recurse into subfolders (default true; list: alias for recursive)."))
 	 .Object(TEXT("pagination"), TEXT("list: pagination window."),
 		[](FMcpSchemaBuilder& S) { S.Integer(TEXT("offset")).Integer(TEXT("limit")); })
 	 .Integer(TEXT("depth"), TEXT("list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited)."));
@@ -88,8 +88,8 @@ static void S_Move(FMcpSchemaBuilder& B) { S_Rename(B); }
 
 static void S_Delete(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("paths"), TEXT(""))
-	 .Array(TEXT("assetPaths"), TEXT(""))
+	B.Array(TEXT("paths"), TEXT("delete: asset or folder paths to delete (alias of assetPaths)."))
+	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .RequiredAnyOf({TEXT("paths"), TEXT("assetPaths"), TEXT("path"), TEXT("assetPath")});
@@ -104,14 +104,14 @@ static void S_CreateFolder(FMcpSchemaBuilder& B)
 
 static void S_SearchAssets(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("classNames"), TEXT(""))
-	 .Array(TEXT("packagePaths"), TEXT(""))
+	B.Array(TEXT("classNames"), TEXT("search_assets: class filters — full class paths ('/Script/Engine.StaticMesh') or supported short names (Blueprint, StaticMesh, Material, Texture2D, ...)."))
+	 .Array(TEXT("packagePaths"), TEXT("search_assets: content directories to search (default /Game)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("searchText"), TEXT(""))
-	 .Bool(TEXT("recursivePaths"), TEXT(""))
-	 .Bool(TEXT("recursiveClasses"), TEXT(""))
-	 .Integer(TEXT("offset"), TEXT(""))
-	 .Integer(TEXT("limit"), TEXT(""));
+	 .String(TEXT("searchText"), TEXT("search_assets: case-insensitive substring filter on asset names. bulk_rename: text to find in each asset name (replaced with replaceText, case-insensitive)."))
+	 .Bool(TEXT("recursivePaths"), TEXT("list/search_assets: recurse into subfolders (default true; list: alias for recursive)."))
+	 .Bool(TEXT("recursiveClasses"), TEXT("search_assets: also match subclasses of the classNames filters (default false)."))
+	 .Integer(TEXT("offset"), TEXT("search_assets: pagination — results to skip (default 0). create_pattern_texture: Brick rows' alternating horizontal shift in tile widths (default 0.5)."))
+	 .Integer(TEXT("limit"), TEXT("search_assets: pagination — max results returned (default 100)."));
 }
 
 static void S_GetDependencies(FMcpSchemaBuilder& B)
@@ -159,7 +159,7 @@ static void S_SetAssetProperty(FMcpSchemaBuilder& B)
 static void S_GetSourceControlState(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .RequiredAnyOf({TEXT("assetPath"), TEXT("assetPaths")});
 }
 
@@ -173,15 +173,15 @@ static void S_AnalyzeGraph(FMcpSchemaBuilder& B)
 static void S_GetAssetGraph(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Integer(TEXT("maxDepth"), TEXT(""))
+	 .Integer(TEXT("maxDepth"), TEXT("get_asset_graph: dependency BFS depth limit (default 3)."))
 	 .Required({TEXT("assetPath")});
 }
 
 static void S_CreateThumbnail(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
 	 .String(TEXT("outputPath"), TEXT("create_thumbnail/generate_report: file path (relative to project dir) to write output to. channel_extract: destination texture path."))
 	 .Required({TEXT("assetPath")});
 }
@@ -189,7 +189,7 @@ static void S_CreateThumbnail(FMcpSchemaBuilder& B)
 static void S_SetTags(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Array(TEXT("tags"), TEXT(""))
+	 .Array(TEXT("tags"), TEXT("set_tags: tag names to apply; each is written as package metadata key=true and registered as an asset-registry tag for find_by_tag."))
 	 .Required({TEXT("assetPath")});
 }
 
@@ -202,7 +202,7 @@ static void S_GetMetadata(FMcpSchemaBuilder& B)
 static void S_SetMetadata(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Object(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT("set_metadata: key/value pairs written to the asset's package metadata (non-string values are stringified)."))
 	 .Required({TEXT("assetPath")});
 }
 
@@ -216,7 +216,7 @@ static void S_FixupRedirectors(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("directoryPath"), TEXT("Path to a directory."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .Bool(TEXT("checkoutFiles"), TEXT(""))
+	 .Bool(TEXT("checkoutFiles"), TEXT("fixup_redirectors/bulk_rename: check out affected packages from source control first (default false)."))
 	 .RequiredAnyOf({TEXT("directoryPath"), TEXT("path")});
 }
 
@@ -304,7 +304,7 @@ static void S_ImportDataTable(FMcpSchemaBuilder& B)
 	 .String(TEXT("csv"), TEXT("import_data_table: alias for sourceText (CSV)."))
 	 .String(TEXT("json"), TEXT("import_data_table: alias for sourceText (JSON)."))
 	 .String(TEXT("content"), TEXT("import_data_table: alias for sourceText."))
-	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted)."));
+	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted); create_render_target: pixel format — RGBA8 (default)|RGBA16F|RGBA32F|R8|RG8|R16F|RG16F|R32F|RG32F|RGB10A2."));
 }
 
 static void S_CreateRenderTarget(FMcpSchemaBuilder& B)
@@ -312,9 +312,9 @@ static void S_CreateRenderTarget(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("renderTargetPath"), TEXT("create_render_target: full asset path (alternative to name+path)."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
-	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted)."))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
+	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted); create_render_target: pixel format — RGBA8 (default)|RGBA16F|RGBA32F|R8|RG8|R16F|RG16F|R32F|RG32F|RGB10A2."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .RequiredAnyOf({TEXT("name"), TEXT("renderTargetPath")});
 }
@@ -323,9 +323,9 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("landscapePath"), TEXT("generate_lods: landscape asset path (alternative to assetPath/assetPaths)."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Array(TEXT("assetPaths"), TEXT(""))
+	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .Array(TEXT("assets"), TEXT("generate_lods: alias for assetPaths."))
-	 .Integer(TEXT("lodCount"), TEXT(""))
+	 .Integer(TEXT("lodCount"), TEXT("generate_lods: number of LOD levels to build (default 4, clamped 1-50)."))
 	 .Integer(TEXT("numLODs"), TEXT("generate_lods: alias for lodCount."))
 	 .Object(TEXT("reductionSettings"), TEXT("generate_lods: FMeshReductionSettings overrides for every generated LOD (percentTriangles/percentVertices 0-1 replace the progressive defaults)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("percentTriangles")).Number(TEXT("percentVertices")).Number(TEXT("maxDeviation")).Number(TEXT("pixelError")).Number(TEXT("weldingThreshold")).Number(TEXT("hardAngleThreshold")).Integer(TEXT("baseLODModel")).Bool(TEXT("recalculateNormals")); });
@@ -383,21 +383,21 @@ static void S_NaniteRebuildMesh(FMcpSchemaBuilder& B)
 
 static void S_BulkRename(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("prefix"), TEXT(""))
-	 .String(TEXT("suffix"), TEXT(""))
-	 .String(TEXT("searchText"), TEXT(""))
-	 .String(TEXT("replaceText"), TEXT(""))
-	 .Bool(TEXT("checkoutFiles"), TEXT(""))
-	 .Array(TEXT("assetPaths"), TEXT(""))
+	B.String(TEXT("prefix"), TEXT("bulk_rename: text prepended to each asset name."))
+	 .String(TEXT("suffix"), TEXT("bulk_rename: text appended to each asset name."))
+	 .String(TEXT("searchText"), TEXT("search_assets: case-insensitive substring filter on asset names. bulk_rename: text to find in each asset name (replaced with replaceText, case-insensitive)."))
+	 .String(TEXT("replaceText"), TEXT("bulk_rename: replacement for searchText matches (empty removes them)."))
+	 .Bool(TEXT("checkoutFiles"), TEXT("fixup_redirectors/bulk_rename: check out affected packages from source control first (default false)."))
+	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .RequiredAnyOf({TEXT("assetPaths"), TEXT("path")});
 }
 
 static void S_BulkDelete(FMcpSchemaBuilder& B)
 {
-	B.Bool(TEXT("showConfirmation"), TEXT(""))
-	 .Bool(TEXT("fixupRedirectors"), TEXT(""))
-	 .Array(TEXT("assetPaths"), TEXT(""))
+	B.Bool(TEXT("showConfirmation"), TEXT("bulk_delete: show the editor's delete-confirmation dialog instead of deleting silently (default false)."))
+	 .Bool(TEXT("fixupRedirectors"), TEXT("bulk_delete: after deleting, fix up all redirectors' referencers project-wide (default true)."))
+	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("pattern"), TEXT("bulk_delete: substring filter applied to matching asset names when deleting by path."))
 	 .RequiredAnyOf({TEXT("assetPaths"), TEXT("path")});
@@ -405,16 +405,16 @@ static void S_BulkDelete(FMcpSchemaBuilder& B)
 
 static void S_SourceControlCheckout(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("assetPaths"), TEXT(""))
+	B.Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .RequiredAnyOf({TEXT("assetPaths"), TEXT("assetPath")});
 }
 
 static void S_SourceControlSubmit(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("assetPaths"), TEXT(""))
+	B.Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("description"), TEXT(""))
+	 .String(TEXT("description"), TEXT("source_control_submit: changelist description (default 'Automated submission via MCP Automation Bridge'). add_custom_expression/update_custom_expression: the Custom node's Description caption. create_material_function: the function's Description text."))
 	 .RequiredAnyOf({TEXT("assetPaths"), TEXT("assetPath")});
 }
 
@@ -465,8 +465,8 @@ static void S_SetMaterialDomain(FMcpSchemaBuilder& B)
 static void S_AddTextureSample(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("texturePath"), TEXT("Texture asset path."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .String(TEXT("samplerType"), TEXT("add_texture_sample: Color|LinearColor|Normal|Masks|Alpha (default Color)."))
@@ -477,9 +477,9 @@ static void S_AddTextureSample(FMcpSchemaBuilder& B)
 static void S_AddTextureCoordinate(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
-	 .Integer(TEXT("coordinateIndex"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
+	 .Integer(TEXT("coordinateIndex"), TEXT("add_texture_coordinate: UV channel index (default 0)."))
 	 .Number(TEXT("uTiling"), TEXT("add_texture_coordinate: horizontal tiling (default 1)."))
 	 .Number(TEXT("vTiling"), TEXT("add_texture_coordinate: vertical tiling (default 1)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
@@ -489,8 +489,8 @@ static void S_AddTextureCoordinate(FMcpSchemaBuilder& B)
 static void S_AddScalarParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .Number(TEXT("floatValue"), TEXT("Default value for the new scalar parameter (optional)."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
@@ -501,8 +501,8 @@ static void S_AddScalarParameter(FMcpSchemaBuilder& B)
 static void S_AddVectorParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
 	 .Object(TEXT("colorValue"), TEXT("Default RGBA color, each channel 0..1 (optional)."),
@@ -514,8 +514,8 @@ static void S_AddVectorParameter(FMcpSchemaBuilder& B)
 static void S_AddStaticSwitchParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .Bool(TEXT("boolValue"), TEXT("Default value for the new static switch parameter (optional)."))
 	 .String(TEXT("group"), TEXT("add_scalar_parameter/add_vector_parameter/add_static_switch_parameter: UI group name."))
@@ -526,8 +526,8 @@ static void S_AddStaticSwitchParameter(FMcpSchemaBuilder& B)
 static void S_AddMathNode(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("operation"), TEXT("add_math_node: Add|Subtract|Multiply|Divide|Lerp|Clamp|Power|Frac|OneMinus|Append."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("operation")});
@@ -536,8 +536,8 @@ static void S_AddMathNode(FMcpSchemaBuilder& B)
 static void S_AddWorldPosition(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -545,8 +545,8 @@ static void S_AddWorldPosition(FMcpSchemaBuilder& B)
 static void S_AddVertexNormal(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -554,8 +554,8 @@ static void S_AddVertexNormal(FMcpSchemaBuilder& B)
 static void S_AddPixelDepth(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -563,8 +563,8 @@ static void S_AddPixelDepth(FMcpSchemaBuilder& B)
 static void S_AddFresnel(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -572,8 +572,8 @@ static void S_AddFresnel(FMcpSchemaBuilder& B)
 static void S_AddReflectionVector(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -581,8 +581,8 @@ static void S_AddReflectionVector(FMcpSchemaBuilder& B)
 static void S_AddPanner(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -590,8 +590,8 @@ static void S_AddPanner(FMcpSchemaBuilder& B)
 static void S_AddRotator(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -599,8 +599,8 @@ static void S_AddRotator(FMcpSchemaBuilder& B)
 static void S_AddNoise(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -608,8 +608,8 @@ static void S_AddNoise(FMcpSchemaBuilder& B)
 static void S_AddVoronoi(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -617,8 +617,8 @@ static void S_AddVoronoi(FMcpSchemaBuilder& B)
 static void S_AddIf(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -626,8 +626,8 @@ static void S_AddIf(FMcpSchemaBuilder& B)
 static void S_AddSwitch(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -635,11 +635,11 @@ static void S_AddSwitch(FMcpSchemaBuilder& B)
 static void S_AddCustomExpression(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("code"), TEXT("add_custom_expression/update_custom_expression: HLSL source code body."))
 	 .String(TEXT("outputType"), TEXT("add_custom_expression/update_custom_expression: Float1|Float2|Float3|Float4|MaterialAttributes (default Float1)."))
-	 .String(TEXT("description"), TEXT(""))
+	 .String(TEXT("description"), TEXT("source_control_submit: changelist description (default 'Automated submission via MCP Automation Bridge'). add_custom_expression/update_custom_expression: the Custom node's Description caption. create_material_function: the function's Description text."))
 	 .ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
 	 .ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
@@ -649,8 +649,8 @@ static void S_AddCustomExpression(FMcpSchemaBuilder& B)
 static void S_ConnectNodes(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("sourceNodeId"), TEXT("ID of the source node."))
 	 .String(TEXT("targetNodeId"), TEXT("ID of the target node."))
 	 .String(TEXT("inputName"), TEXT("Name of the pin."))
@@ -662,8 +662,8 @@ static void S_ConnectNodes(FMcpSchemaBuilder& B)
 static void S_DisconnectNodes(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
@@ -674,7 +674,7 @@ static void S_CreateMaterialFunction(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .String(TEXT("description"), TEXT(""))
+	 .String(TEXT("description"), TEXT("source_control_submit: changelist description (default 'Automated submission via MCP Automation Bridge'). add_custom_expression/update_custom_expression: the Custom node's Description caption. create_material_function: the function's Description text."))
 	 .Bool(TEXT("exposeToLibrary"), TEXT("create_material_function: show in the Material Function Library picker (default true)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("name")});
@@ -685,8 +685,8 @@ static void S_AddFunctionInput(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("inputName"), TEXT("Name of the pin."))
 	 .String(TEXT("inputType"), TEXT("add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("functionPath"), TEXT("use_material_function: material function asset path to call."))
 	 .Required({TEXT("assetPath"), TEXT("inputName")});
@@ -697,8 +697,8 @@ static void S_AddFunctionOutput(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("inputName"), TEXT("Name of the pin."))
 	 .String(TEXT("inputType"), TEXT("add_function_input/add_function_output: Float1|Float2|Float3|Float4|Texture2D|TextureCube|Bool|MaterialAttributes."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("inputName")});
 }
@@ -706,8 +706,8 @@ static void S_AddFunctionOutput(FMcpSchemaBuilder& B)
 static void S_UseMaterialFunction(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("functionPath"), TEXT("use_material_function: material function asset path to call."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("functionPath")});
@@ -798,8 +798,8 @@ static void S_ConfigureLayerBlend(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("materialPath"), TEXT("Material asset path."))
 	 .ArrayOfObjects(TEXT("layers"), TEXT("configure_layer_blend: layers to add, e.g. [{\"name\":\"Rock\",\"blendType\":\"...\"}]."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("layers")});
 }
@@ -824,9 +824,9 @@ static void S_GetMaterialInfo(FMcpSchemaBuilder& B)
 static void S_FindNode(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
-	 .String(TEXT("nodeType"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
+	 .String(TEXT("nodeType"), TEXT("find_node: substring matched against expression class names. add_material_node: expression type to create — short name (TextureSample|Add|Multiply|Constant|Constant3Vector|Lerp|...) or any MaterialExpression class name."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Required({TEXT("assetPath")});
 }
@@ -834,8 +834,8 @@ static void S_FindNode(FMcpSchemaBuilder& B)
 static void S_GetNodeConnections(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("direction"), TEXT("get_node_connections: inputs|outputs|both (default both)."))
 	 .Integer(TEXT("depth"), TEXT("list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited)."))
@@ -847,8 +847,8 @@ static void S_GetNodeConnections(FMcpSchemaBuilder& B)
 static void S_GetNodeProperties(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .Required({TEXT("assetPath"), TEXT("nodeId")});
 }
@@ -856,8 +856,8 @@ static void S_GetNodeProperties(FMcpSchemaBuilder& B)
 static void S_SetNodeValue(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .Number(TEXT("floatValue"), TEXT("set_node_value: scalar value for a Constant / named-float property / arithmetic ConstA."))
 	 .Number(TEXT("r"), TEXT("set_node_value: red/X channel of a Constant2/3/4Vector or VectorParameter default."))
@@ -881,8 +881,8 @@ static void S_SetStaticSwitchParameterValue(FMcpSchemaBuilder& B)
 static void S_DeleteNode(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .Array(TEXT("nodeIds"), TEXT("delete_node: batch-delete multiple node IDs (alternative to nodeId)."))
 	 .Required({TEXT("assetPath")});
@@ -891,11 +891,11 @@ static void S_DeleteNode(FMcpSchemaBuilder& B)
 static void S_UpdateCustomExpression(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("code"), TEXT("add_custom_expression/update_custom_expression: HLSL source code body."))
-	 .String(TEXT("description"), TEXT(""))
+	 .String(TEXT("description"), TEXT("source_control_submit: changelist description (default 'Automated submission via MCP Automation Bridge'). add_custom_expression/update_custom_expression: the Custom node's Description caption. create_material_function: the function's Description text."))
 	 .String(TEXT("outputType"), TEXT("add_custom_expression/update_custom_expression: Float1|Float2|Float3|Float4|MaterialAttributes (default Float1)."))
 	 .ArrayOfObjects(TEXT("inputs"), TEXT("add_custom_expression/update_custom_expression: named HLSL input pins, e.g. [{\"name\":\"UV\"}]. Each name becomes a connect_nodes inputName."))
 	 .ArrayOfObjects(TEXT("additionalOutputs"), TEXT("add_custom_expression/update_custom_expression: extra named outputs beyond the primary return, e.g. [{\"name\":\"Mask\",\"type\":\"Float1\"}]."))
@@ -905,8 +905,8 @@ static void S_UpdateCustomExpression(FMcpSchemaBuilder& B)
 static void S_GetNodeChain(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("startNodeId"), TEXT("get_node_chain: node ID to trace the signal path from."))
 	 .String(TEXT("endNodeId"), TEXT("get_node_chain: node ID (or \"Main\") to trace the signal path to."))
 	 .String(TEXT("endPin"), TEXT("get_node_chain: named material main-pin to trace to, e.g. 'BaseColor' (alternative to endNodeId)."))
@@ -916,8 +916,8 @@ static void S_GetNodeChain(FMcpSchemaBuilder& B)
 static void S_GetConnectedSubgraph(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("orphansOnly"), TEXT("get_connected_subgraph: return all nodes not connected to any output, ignoring nodeId."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .Required({TEXT("assetPath")});
@@ -926,8 +926,8 @@ static void S_GetConnectedSubgraph(FMcpSchemaBuilder& B)
 static void S_ArrangeGraph(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath")});
 }
@@ -935,9 +935,9 @@ static void S_ArrangeGraph(FMcpSchemaBuilder& B)
 static void S_AddMaterialNode(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("nodeType"), TEXT(""))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .String(TEXT("nodeType"), TEXT("find_node: substring matched against expression class names. add_material_node: expression type to create — short name (TextureSample|Add|Multiply|Constant|Constant3Vector|Lerp|...) or any MaterialExpression class name."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("assetPath"), TEXT("nodeType")});
@@ -955,7 +955,7 @@ static void S_SetMaterialParameter(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .String(TEXT("parameterType"), TEXT(""))
+	 .String(TEXT("parameterType"), TEXT("set_material_parameter: unused — the action always fails with AMBIGUOUS_ACTION; call set_scalar_parameter_value/set_vector_parameter_value/set_texture_parameter_value instead."))
 	 .Required({TEXT("assetPath"), TEXT("parameterName")});
 }
 
@@ -987,8 +987,8 @@ static void S_CreateNoiseTexture(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("noiseType"), TEXT("create_noise_texture: Perlin (default) — FBM noise type."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
 	 .Number(TEXT("scale"), TEXT("create_noise_texture: noise frequency scale (default 1)."))
 	 .Integer(TEXT("octaves"), TEXT("create_noise_texture: FBM octave count (default 4)."))
 	 .Number(TEXT("persistence"), TEXT("create_noise_texture: FBM amplitude falloff per octave (default 0.5)."))
@@ -1005,8 +1005,8 @@ static void S_CreateGradientTexture(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("gradientType"), TEXT("create_gradient_texture: Linear (default)|Radial|Angular."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
 	 .Number(TEXT("angle"), TEXT("create_gradient_texture: Linear gradient direction in degrees (default 0)."))
 	 .Number(TEXT("centerX"), TEXT("create_gradient_texture: Radial/Angular center U 0-1 (default 0.5)."))
 	 .Number(TEXT("centerY"), TEXT("create_gradient_texture: Radial/Angular center V 0-1 (default 0.5)."))
@@ -1025,13 +1025,13 @@ static void S_CreatePatternTexture(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("patternType"), TEXT("create_pattern_texture: Checker (default)|Grid|Brick|Stripes|Dots."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
 	 .Integer(TEXT("tilesX"), TEXT("create_pattern_texture: horizontal tile count (default 8)."))
 	 .Integer(TEXT("tilesY"), TEXT("create_pattern_texture: vertical tile count (default 8)."))
 	 .Number(TEXT("lineWidth"), TEXT("create_pattern_texture: Grid/Brick line thickness 0-1 (default 0.02)."))
 	 .Number(TEXT("brickRatio"), TEXT("create_pattern_texture: Brick length-to-height ratio (default 2)."))
-	 .Number(TEXT("offset"), TEXT(""))
+	 .Number(TEXT("offset"), TEXT("search_assets: pagination — results to skip (default 0). create_pattern_texture: Brick rows' alternating horizontal shift in tile widths (default 0.5)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Object(TEXT("primaryColor"), TEXT("create_pattern_texture: foreground color, channels 0..1 (default white)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
@@ -1058,8 +1058,8 @@ static void S_CreateAoFromMesh(FMcpSchemaBuilder& B)
 	B.String(TEXT("meshPath"), TEXT("Mesh asset path."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
-	 .Integer(TEXT("width"), TEXT(""))
-	 .Integer(TEXT("height"), TEXT(""))
+	 .Integer(TEXT("width"), TEXT("Output width in pixels (default 1024; create_thumbnail 512)."))
+	 .Integer(TEXT("height"), TEXT("Output height in pixels (default 1024; create_thumbnail 512)."))
 	 .Integer(TEXT("sampleCount"), TEXT("create_ao_from_mesh: vertex samples per pixel (default 64)."))
 	 .Number(TEXT("rayDistance"), TEXT("create_ao_from_mesh: occlusion ray distance (default 100)."))
 	 .Number(TEXT("bias"), TEXT("create_ao_from_mesh: AO bias (default 0.01)."))

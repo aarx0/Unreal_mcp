@@ -97,12 +97,12 @@ static void AppendObjectDetailAliases(FMcpSchemaBuilder& B)
 // Global reads (EnvironmentHandlers.cpp)
 static void S_FindObjects(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT(""))
+	B.String(TEXT("className"), TEXT("find_objects: class to match (IsA semantics unless exactClass); loaded short name or fully-qualified path."))
 	 .String(TEXT("pathContains"), TEXT("find_objects: case-insensitive substring filter on the object's full path."))
 	 .Bool(TEXT("exactClass"), TEXT("find_objects: require the exact class (default false = IsA semantics)."))
 	 .Bool(TEXT("includeCdo"), TEXT("find_objects: include class default objects (default false)."))
 	 .Integer(TEXT("limit"), TEXT("find_objects: max objects returned (default 50, cap 200)."))
-	 .Array(TEXT("propertyNames"), TEXT(""))
+	 .Array(TEXT("propertyNames"), TEXT("find_objects: property names to read back per matched object (unresolved names return null)."))
 	 .Required({TEXT("className")});
 }
 
@@ -124,7 +124,7 @@ static void S_ListObjects(FMcpSchemaBuilder& B)
 
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT(""))
+	B.String(TEXT("className"), TEXT("find_by_class: case-insensitive exact class name or class-path substring to match actors against (no IsA/inheritance matching)."))
 	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
 	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Integer(TEXT("limit"), TEXT("find_by_class: max actors returned (default 50, cap 200)."));
@@ -138,21 +138,21 @@ static void S_FindByTag(FMcpSchemaBuilder& B)
 
 static void S_InspectClass(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT(""))
+	B.String(TEXT("className"), TEXT("inspect_class: class to inspect; loaded short name, /Script path, Blueprint asset path, or its _C class path."))
 	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Bool(TEXT("detailed"), TEXT(""));
+	 .Bool(TEXT("detailed"), TEXT("inspect_class: include the reflected property list and function names (default false)."));
 }
 
 static void S_RuntimeReport(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("filter"), TEXT(""))
+	B.String(TEXT("filter"), TEXT("runtime_report/pie_report: case-insensitive substring filter over actor label, name, class name, or path."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT(""))
-	 .Array(TEXT("propertyNames"), TEXT(""));
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."))
+	 .Array(TEXT("propertyNames"), TEXT("runtime_report/pie_report: property names to read back on each reported component."));
 }
 
 // pie_report shares runtime_report's contract and implementation.
@@ -174,10 +174,10 @@ static void S_InspectCdo(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .Bool(TEXT("detailed"), TEXT(""))
+	 .Bool(TEXT("detailed"), TEXT("inspect_cdo: dump full default properties for the CDO and each component (default false; propertyNames/propertyPath switch to targeted readback)."))
 	 .Array(TEXT("componentNames"), TEXT("Component names to include detailed property readback for."))
-	 .String(TEXT("propertyPath"), TEXT(""))
-	 .Array(TEXT("propertyNames"), TEXT(""))
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."))
+	 .Array(TEXT("propertyNames"), TEXT("inspect_cdo: restrict the CDO/component property readback to these names."))
 	 .Required({TEXT("blueprintPath")});
 }
 
@@ -199,7 +199,7 @@ static void S_GetComponentProperty(FMcpSchemaBuilder& B)
 	AppendActorAliases(B);
 	B.String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT(""))
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."))
 	 .Required({TEXT("componentName")});
 }
 
@@ -209,7 +209,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	B.String(TEXT("componentName"), TEXT("Name of the component."))
 	 .Object(TEXT("properties"), TEXT("set_component_property: map of component property name to value (alternative to a single propertyName/value pair)."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT(""))
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."))
 	 // Discriminated value (single propertyName/value form): populate exactly ONE.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
 	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
@@ -232,7 +232,7 @@ static void S_AddTag(FMcpSchemaBuilder& B)
 static void S_CreateSnapshot(FMcpSchemaBuilder& B)
 {
 	AppendActorAliases(B);
-	B.String(TEXT("snapshotName"), TEXT(""))
+	B.String(TEXT("snapshotName"), TEXT("create_snapshot/restore_snapshot: name keying the actor's saved transform snapshot (in-memory, transform only)."))
 	 .Required({TEXT("snapshotName")});
 }
 
@@ -256,7 +256,7 @@ static void S_SetProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT(""))
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."))
 	 // Discriminated value: populate exactly ONE typed field matching the target property.
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
 	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
@@ -280,7 +280,7 @@ static void S_GetProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT(""));
+	 .String(TEXT("propertyPath"), TEXT("Alias of propertyName: a single property name, read when propertyName is absent."));
 }
 
 // ─── Classes ─────────────────────────────────────────────────────────────────

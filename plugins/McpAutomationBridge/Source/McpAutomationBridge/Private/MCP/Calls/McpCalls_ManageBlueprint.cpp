@@ -56,7 +56,7 @@ static void S_Create(FMcpSchemaBuilder& B)
 	 .String(TEXT("folder"), TEXT("Destination folder fallback after path/savePath."))
 	 .String(TEXT("parentClass"), TEXT("Path or name of the parent class."))
 	 .String(TEXT("blueprintType"), TEXT("Path or name of the parent class."))
-	 .Object(TEXT("properties"), TEXT(""))
+	 .Object(TEXT("properties"), TEXT("create: class-default (CDO) property values applied to the new blueprint, keyed by property name; failures are reported in failedProperties."))
 	 .Bool(TEXT("waitForCompletion"), TEXT("create/create_blueprint: wait for a coalesced concurrent creation to finish before responding."))
 	 .Required({TEXT("name")});
 }
@@ -77,7 +77,7 @@ static void S_Compile(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .Bool(TEXT("saveAfterCompile"), TEXT(""))
+	 .Bool(TEXT("saveAfterCompile"), TEXT("compile: save the blueprint to disk after compiling, bypassing the save throttle (default false; save is an alias)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."));
 }
 
@@ -86,7 +86,7 @@ static void S_AddComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
-	 .String(TEXT("componentType"), TEXT(""))
+	 .String(TEXT("componentType"), TEXT("add_component: component class to add to the blueprint's SCS (StaticMeshComponent, SceneComponent, ArrowComponent, or a loadable UActorComponent class path)."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .Required({TEXT("componentType"), TEXT("componentName")});
 }
@@ -141,7 +141,7 @@ static void S_ModifyScs(FMcpSchemaBuilder& B)
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
-	 .ArrayOfObjects(TEXT("operations"), TEXT(""))
+	 .ArrayOfObjects(TEXT("operations"), TEXT("modify_scs: SCS edits; each item needs type (add_component|remove_component|modify_component|attach_component) plus componentName and per-type keys — componentClass/attachTo (add), transform{location,rotation,scale} (modify), parentComponent/attachTo (attach)."))
 	 .Bool(TEXT("compile"), TEXT("Compile the blueprint(s) after the operation."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("operations")});
@@ -159,11 +159,11 @@ static void S_AddScsComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("blueprint_path"), TEXT("snake_case alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("component_class"), TEXT("snake_case alias of componentClass."))
-	 .String(TEXT("componentClass"), TEXT(""))
+	 .String(TEXT("componentClass"), TEXT("add_scs_component: UActorComponent subclass to add (short name or class path, e.g. StaticMeshComponent)."))
 	 .String(TEXT("component_name"), TEXT("snake_case alias of componentName."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("parent_component"), TEXT("snake_case alias of parentComponent."))
-	 .String(TEXT("parentComponent"), TEXT(""))
+	 .String(TEXT("parentComponent"), TEXT("add_scs_component: variable name of the existing SCS component to attach under; omitted = added as a root node."))
 	 .String(TEXT("mesh_path"), TEXT("snake_case alias of meshPath."))
 	 .String(TEXT("meshPath"), TEXT("Mesh asset path."))
 	 .String(TEXT("material_path"), TEXT("snake_case alias of materialPath."))
@@ -185,7 +185,7 @@ static void S_ReparentScsComponent(FMcpSchemaBuilder& B)
 	 .String(TEXT("component_name"), TEXT("snake_case alias of componentName."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("new_parent"), TEXT("snake_case alias of newParent."))
-	 .String(TEXT("newParent"), TEXT(""));
+	 .String(TEXT("newParent"), TEXT("reparent_scs_component: SCS component to become the new parent; Root/RootComponent/DefaultSceneRoot target the root node."));
 }
 
 static void S_SetScsTransform(FMcpSchemaBuilder& B)
@@ -282,9 +282,9 @@ static void S_AddVariable(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .Object(TEXT("structValue"), TEXT("Default for a struct / instanced subobject variable."))
 	 .Array(TEXT("arrayValue"), TEXT("Default for an array variable."), TEXT("object"))
-	 .String(TEXT("category"), TEXT(""))
-	 .Bool(TEXT("isReplicated"), TEXT(""))
-	 .Bool(TEXT("isPublic"), TEXT(""))
+	 .String(TEXT("category"), TEXT("add_variable: editor category for the variable (default none)."))
+	 .Bool(TEXT("isReplicated"), TEXT("add_variable: mark the variable replicated (sets CPF_Net; default false)."))
+	 .Bool(TEXT("isPublic"), TEXT("add_variable: make the variable instance-editable (the editor's eyeball; default false)."))
 	 .Required({TEXT("variableName")});
 }
 
@@ -306,7 +306,7 @@ static void S_RenameVariable(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .String(TEXT("oldName"), TEXT(""))
+	 .String(TEXT("oldName"), TEXT("rename_variable: current name of the variable to rename."))
 	 .String(TEXT("newName"), TEXT("New name for renaming."))
 	 .Required({TEXT("oldName"), TEXT("newName")});
 }
@@ -319,10 +319,10 @@ static void S_AddFunction(FMcpSchemaBuilder& B)
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
 	 .String(TEXT("functionName"), TEXT("Name of the function."))
-	 .String(TEXT("memberName"), TEXT(""))
-	 .ArrayOfObjects(TEXT("inputs"), TEXT(""))
-	 .ArrayOfObjects(TEXT("outputs"), TEXT(""))
-	 .Bool(TEXT("isPublic"), TEXT(""))
+	 .String(TEXT("memberName"), TEXT("add_function: alias of functionName (checked after functionName and name)."))
+	 .ArrayOfObjects(TEXT("inputs"), TEXT("add_function: input parameters; items are {name, type} objects (ignored when override is true)."))
+	 .ArrayOfObjects(TEXT("outputs"), TEXT("add_function: output parameters; items are {name, type} objects (ignored when override is true)."))
+	 .Bool(TEXT("isPublic"), TEXT("add_function: recorded as the function's public flag in the response/registry only — does not change the graph's access specifier (default false)."))
 	 .Bool(TEXT("override"), TEXT("add_function: implement an inherited BlueprintImplementableEvent/BlueprintNativeEvent instead of creating a new function."));
 }
 
@@ -334,7 +334,7 @@ static void S_RemoveFunction(FMcpSchemaBuilder& B)
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
 	 .String(TEXT("functionName"), TEXT("Name of the function."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("functionName")});
 }
 
 static void S_AddEvent(FMcpSchemaBuilder& B)
@@ -344,10 +344,10 @@ static void S_AddEvent(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .String(TEXT("eventType"), TEXT(""))
+	 .String(TEXT("eventType"), TEXT("add_event: \"custom\" (default) for a custom event, or a parent event name to override (BeginPlay/Tick/EndPlay alias to Receive*)."))
 	 .String(TEXT("customEventName"), TEXT("Name of the event."))
 	 .String(TEXT("eventName"), TEXT("Name of the event."))
-	 .ArrayOfObjects(TEXT("parameters"), TEXT(""))
+	 .ArrayOfObjects(TEXT("parameters"), TEXT("add_event: custom-event parameters; items are {name, type} objects added as output data pins."))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
 	 .Object(TEXT("location"), TEXT("2D graph-node position (x, y)."),
@@ -356,8 +356,8 @@ static void S_AddEvent(FMcpSchemaBuilder& B)
 			 .Number(TEXT("y"), TEXT("Y coordinate."))
 			 .Required({TEXT("x"), TEXT("y")});
 		})
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""));
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate (fallback after posX/location)."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (fallback after posY/location)."));
 }
 
 static void S_RemoveEvent(FMcpSchemaBuilder& B)
@@ -388,7 +388,7 @@ static void S_SetVariableMetadata(FMcpSchemaBuilder& B)
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
 	 .String(TEXT("variableName"), TEXT("Name of the variable."))
-	 .Object(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT("set_variable_metadata: metadata key/value pairs to set on the variable (e.g. tooltip, ExposeOnSpawn); an empty value removes the key."))
 	 .Required({TEXT("variableName"), TEXT("metadata")});
 }
 
@@ -399,7 +399,7 @@ static void S_SetMetadata(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .Object(TEXT("metadata"), TEXT(""))
+	 .Object(TEXT("metadata"), TEXT("set_blueprint_metadata: metadata key/value pairs (string/bool/number) set on the blueprint's generated class."))
 	 .Required({TEXT("metadata")});
 }
 
@@ -410,18 +410,18 @@ static void S_AddNode(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .String(TEXT("nodeType"), TEXT(""))
+	 .String(TEXT("nodeType"), TEXT("add_node: node type — CallFunction (or a \"Class::Function\" spec), VariableGet, VariableSet, CustomEvent, Literal, Cast, or an UEdGraphNode class name; Cast/variable/memberName forms delegate to create_node."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("functionName"), TEXT("Name of the function."))
 	 .String(TEXT("variableName"), TEXT("Name of the variable."))
 	 .String(TEXT("nodeName"), TEXT("add_node: name for a CustomEvent node (nodeType=CustomEvent)."))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
-	 .String(TEXT("memberName"), TEXT(""))
+	 .String(TEXT("memberName"), TEXT("add_node: member spec for the delegated create_node forms — the function to call (CallFunction, with optional memberClass) or the variable name (VariableGet/VariableSet)."))
 	 .Bool(TEXT("autoConnect"), TEXT("add_node: auto-wire the new node's exec-in to an open event chain (default false)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate (alias of posX on the delegated create_node forms)."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (alias of posY on the delegated create_node forms)."))
 	 .Required({TEXT("nodeType")});
 }
 
@@ -432,18 +432,18 @@ static void S_CreateNode(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
-	 .String(TEXT("nodeType"), TEXT(""))
-	 .Number(TEXT("x"), TEXT(""))
+	 .String(TEXT("nodeType"), TEXT("create_node: node type — CallFunction, VariableGet/VariableSet, Event, CustomEvent, Cast/CastTo<Class>, InputAxisEvent, a shorthand function (PrintString, Delay, ...), a flow alias (Branch, Sequence, ForLoop, ...), or any K2Node class name."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate (checked before posX)."))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (checked before posY)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
 	 .String(TEXT("variableName"), TEXT("Name of the variable."))
-	 .String(TEXT("memberClass"), TEXT(""))
-	 .String(TEXT("memberName"), TEXT(""))
+	 .String(TEXT("memberClass"), TEXT("create_node: owning class that memberName/eventName/variableName is looked up on (CallFunction, Event, VariableGet/VariableSet); restricts the search to that class's chain."))
+	 .String(TEXT("memberName"), TEXT("create_node: UFUNCTION name for a CallFunction node; without memberClass only the blueprint's class, KismetSystemLibrary, GameplayStatics and KismetMathLibrary are searched."))
 	 .String(TEXT("eventName"), TEXT("Name of the event."))
-	 .ArrayOfObjects(TEXT("parameters"), TEXT(""))
-	 .String(TEXT("targetClass"), TEXT(""))
-	 .String(TEXT("inputAxisName"), TEXT(""))
+	 .ArrayOfObjects(TEXT("parameters"), TEXT("create_node: CustomEvent parameters; items are {name, type} objects (both keys required) added as output data pins."))
+	 .String(TEXT("targetClass"), TEXT("create_node: class for a Cast node's TargetType (required for Cast/DynamicCast) or for a ConstructObjectFromClass node's Class pin (SpawnActorFromClass, CreateWidget, ...)."))
+	 .String(TEXT("inputAxisName"), TEXT("create_node: legacy input axis mapping name for an InputAxisEvent node (required for that nodeType)."))
 	 .Required({TEXT("nodeType")})
 	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
@@ -505,9 +505,9 @@ static void S_CreateRerouteNode(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
-	 .Number(TEXT("x"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate (checked before posX)."))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (checked before posY)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
 	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
@@ -981,8 +981,8 @@ static void S_SetPosition(FMcpSchemaBuilder& B)
 		})
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("set_position: canvas slot X position in pixels (fallback after position/posX)."))
+	 .Number(TEXT("y"), TEXT("set_position: canvas slot Y position in pixels (fallback after position/posY)."))
 	 .Required({TEXT("widgetPath")})
 	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
@@ -995,8 +995,8 @@ static void S_SetSize(FMcpSchemaBuilder& B)
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .Object(TEXT("size"), TEXT("set_size: canvas slot pixel size as an {x,y} object."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")); })
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("set_size: canvas slot width in pixels (alternative to size)."))
+	 .Number(TEXT("y"), TEXT("set_size: canvas slot height in pixels (alternative to size)."))
 	 .Bool(TEXT("fill"), TEXT("set_size: stretch a HBox/VBox child to fill (vs Automatic)."))
 	 .Number(TEXT("fillWeight"), TEXT("set_size: fill weight when fill is true."))
 	 .Required({TEXT("widgetPath")})
@@ -1237,8 +1237,8 @@ static void S_AddHealthBar(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("parentName"), TEXT("Name of an existing panel widget to attach into (add_widget_component, add_health_bar/add_crosshair/add_minimap/etc.)."))
-	 .Number(TEXT("x"), TEXT(""))
-	 .Number(TEXT("y"), TEXT(""))
+	 .Number(TEXT("x"), TEXT("add_health_bar: canvas X position in pixels (default 20)."))
+	 .Number(TEXT("y"), TEXT("add_health_bar: canvas Y position in pixels (default 20)."))
 	 .Number(TEXT("width"), TEXT("add_health_bar: bar width in pixels."))
 	 .Number(TEXT("height"), TEXT("add_health_bar: bar height in pixels."))
 	 .Required({TEXT("widgetPath")});
@@ -1345,14 +1345,14 @@ static void S_ReparentWidget(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
-	 .String(TEXT("newParent"), TEXT(""))
+	 .String(TEXT("newParent"), TEXT("reparent_widget: name of the panel widget to move the target widget under."))
 	 .Required({TEXT("widgetPath"), TEXT("slotName"), TEXT("newParent")});
 }
 
 static void S_RenameWidget(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
-	 .String(TEXT("oldName"), TEXT(""))
+	 .String(TEXT("oldName"), TEXT("rename_widget: current name of the widget to rename (slotName/name accepted as aliases)."))
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("newName"), TEXT("New name for renaming."))
@@ -1403,7 +1403,7 @@ static void S_ShowWidget(FMcpSchemaBuilder& B)
 static void S_AddWidgetComponent(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("widgetPath"), TEXT("Widget Blueprint asset path (widget-authoring actions)."))
-	 .String(TEXT("componentType"), TEXT(""))
+	 .String(TEXT("componentType"), TEXT("add_widget_component: UMG widget class to add (TextBlock, Button, Image, ProgressBar, Slider, CheckBox, ComboBox, panel types, ... or any UWidget class name)."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("parentName"), TEXT("Name of an existing panel widget to attach into (add_widget_component, add_health_bar/add_crosshair/add_minimap/etc.)."))
 	 .Number(TEXT("positionX"), TEXT("add_widget_component: X position in pixels."))

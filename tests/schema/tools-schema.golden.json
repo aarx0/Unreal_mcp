@@ -123,6 +123,7 @@
           "type": "array"
         },
         "artifacts": {
+          "description": "cleanup: asset paths to delete; existing assets are force-deleted, missing paths count as already clean.",
           "items": {
             "type": "string"
           },
@@ -172,6 +173,7 @@
           "type": "number"
         },
         "axisName": {
+          "description": "create_blend_space_1d: blend axis name (default Speed); set_axis_settings: new axis display name (unchanged when omitted).",
           "type": "string"
         },
         "basePoseAnimation": {
@@ -313,6 +315,7 @@
           "type": "number"
         },
         "curveName": {
+          "description": "set_curve_key: float curve to key (created when missing if createIfMissing).",
           "type": "string"
         },
         "deltas": {
@@ -335,6 +338,7 @@
           "type": "string"
         },
         "dragCoefficient": {
+          "description": "configure_vehicle: aerodynamic drag coefficient; also applied as linear damping on the root primitive.",
           "type": "number"
         },
         "enableRootMotion": {
@@ -358,6 +362,7 @@
           "type": "boolean"
         },
         "frame": {
+          "description": "set_bone_key/set_curve_key/add_notify/add_sync_marker: frame index at the asset's sampling frame rate (default 0).",
           "type": "integer"
         },
         "frameRate": {
@@ -409,6 +414,7 @@
           "type": "number"
         },
         "interpolationType": {
+          "description": "set_interpolation_settings: currently ignored; only targetWeightInterpolationSpeed is applied.",
           "type": "string"
         },
         "intValue": {
@@ -460,6 +466,7 @@
           "type": "string"
         },
         "mass": {
+          "description": "configure_vehicle/configure_physics_body: mass override in kg (vehicle: must be > 0; physics body: must be >= 0.001).",
           "type": "number"
         },
         "maxValue": {
@@ -527,6 +534,7 @@
           "type": "string"
         },
         "notifyName": {
+          "description": "add_notify/add_notify_state/add_montage_notify: notify event name, also written to the notify object's NotifyName so PlayMontageNotify name-matching fires (one of notifyName/notifyClass required); bind_animation_notify: notify whose AnimNotify_<name> event is created and bound.",
           "type": "string"
         },
         "numFrames": {
@@ -550,6 +558,7 @@
           "type": "string"
         },
         "parentClass": {
+          "description": "create_animation_blueprint: currently ignored; the AnimBlueprint is always parented to AnimInstance.",
           "type": "string"
         },
         "path": {
@@ -569,12 +578,15 @@
           "type": "number"
         },
         "playRate": {
+          "description": "play_montage: playback rate multiplier (default 1).",
           "type": "number"
         },
         "positionX": {
+          "description": "Graph node X coordinate.",
           "type": "number"
         },
         "positionY": {
+          "description": "Graph node Y coordinate.",
           "type": "number"
         },
         "priorityOrder": {
@@ -709,6 +721,7 @@
           "type": "integer"
         },
         "sectionName": {
+          "description": "add_montage_section: name for the new section; set_section_timing: existing section to retime.",
           "type": "string"
         },
         "simulatePhysics": {
@@ -724,6 +737,7 @@
           "type": "string"
         },
         "slotName": {
+          "description": "create_montage/add_montage_slot: montage slot track name, renamed or created as needed (default DefaultSlot); add_slot_node: anim slot for the new Slot node (stored as '<groupName>.<slotName>').",
           "type": "string"
         },
         "socketName": {
@@ -767,6 +781,7 @@
           "type": "string"
         },
         "stateName": {
+          "description": "add_state: name for the new state node (engine validation may adjust it).",
           "type": "string"
         },
         "states": {
@@ -829,6 +844,7 @@
           "type": "number"
         },
         "time": {
+          "description": "add_montage_section: section start time in seconds (alias of startTime); add_montage_notify: notify trigger time in seconds (default 0); set_blend_in/set_blend_out: alias of blendTime in seconds.",
           "type": "number"
         },
         "toSection": {
@@ -898,6 +914,7 @@
           "type": "string"
         },
         "vehicleType": {
+          "description": "configure_vehicle: type label echoed in the response (default WheeledVehicle4W); the movement component is always WheeledVehicleMovementComponent4W.",
           "type": "string"
         },
         "verticalAxisName": {
@@ -1011,6 +1028,7 @@
           "type": "string"
         },
         "alignToNormal": {
+          "description": "add_foliage: align instances to the surface normal (default true).",
           "type": "boolean"
         },
         "alignToSpline": {
@@ -1042,12 +1060,14 @@
           "type": "string"
         },
         "assetPaths": {
+          "description": "generate_lods: static-mesh asset paths to process (alias: assets).",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "assets": {
+          "description": "generate_lods: alias of assetPaths.",
           "items": {
             "type": "string"
           },
@@ -1062,6 +1082,7 @@
           "type": "string"
         },
         "bounds": {
+          "description": "create_procedural_foliage: spawn bounds — optional 'location' {x,y,z} and 'size' {x,y,z} or [x,y,z] (default 1000x1000x1000 at the origin).",
           "type": "object"
         },
         "brushFalloff": {
@@ -1105,9 +1126,11 @@
           "type": "string"
         },
         "cullDistance": {
+          "description": "add_foliage: max draw distance for instances; 0 leaves culling disabled (default 0).",
           "type": "number"
         },
         "density": {
+          "description": "add_foliage: foliage paint density (default 100, non-negative). create_landscape_grass_type: grass density (default 1).",
           "type": "number"
         },
         "enabled": {
@@ -1115,9 +1138,11 @@
           "type": "boolean"
         },
         "falloff": {
+          "description": "sculpt: alias of brushFalloff (default 0.5, fraction of the brush radius).",
           "type": "number"
         },
         "foliageType": {
+          "description": "FoliageType or StaticMesh asset path (alias of foliageTypePath; bare names resolve under /Game/Foliage/).",
           "type": "string"
         },
         "foliageTypePath": {
@@ -1125,6 +1150,7 @@
           "type": "string"
         },
         "foliageTypes": {
+          "description": "create_procedural_foliage: foliage type configs, each {meshPath, density (default 10)}; may be empty.",
           "items": {
             "type": "object"
           },
@@ -1140,15 +1166,18 @@
           "type": "string"
         },
         "heightData": {
+          "description": "modify_heightmap: height samples 0-65535 (32768 = mid). 'set' writes the array across the region; 'flatten' targets the first value; 'raise'/'lower' derive their delta from the first value.",
           "items": {
             "type": "number"
           },
           "type": "array"
         },
         "heightScale": {
+          "description": "create_procedural_terrain: amplitude of the generated height noise in world units (default 500).",
           "type": "number"
         },
         "hour": {
+          "description": "set_time_of_day: alias of 'time'.",
           "type": "number"
         },
         "index": {
@@ -1163,9 +1192,11 @@
           "type": "array"
         },
         "intensity": {
+          "description": "create_sky_light: sky light intensity. set_ambient_occlusion: ambient occlusion intensity on the global post-process volume.",
           "type": "number"
         },
         "landscapeName": {
+          "description": "create_landscape: alias of 'name' — label for the new landscape. sculpt/modify_heightmap/paint_landscape/set_landscape_material: target landscape actor label (alternative to landscapePath).",
           "type": "string"
         },
         "landscapePath": {
@@ -1173,6 +1204,7 @@
           "type": "string"
         },
         "layerName": {
+          "description": "paint_landscape: weight-map layer name to paint; auto-created on the landscape if missing.",
           "type": "string"
         },
         "leaveTangent": {
@@ -1231,6 +1263,7 @@
           "type": "object"
         },
         "locations": {
+          "description": "Array of {x, y, z} world locations to place foliage instances at (add_foliage_instances: legacy fallback when 'transforms' is absent).",
           "items": {
             "type": "object"
           },
@@ -1257,12 +1290,15 @@
           "type": "number"
         },
         "maxScale": {
+          "description": "Maximum random instance scale (add_foliage default 1; create_landscape_grass_type/scatter_meshes_along_spline default 1.2).",
           "type": "number"
         },
         "maxX": {
+          "description": "modify_heightmap/paint_landscape: region max X in landscape vertex coordinates (used when the 'region' object is absent; omitted = full extent).",
           "type": "integer"
         },
         "maxY": {
+          "description": "modify_heightmap/paint_landscape: region max Y in landscape vertex coordinates (used when the 'region' object is absent; omitted = full extent).",
           "type": "integer"
         },
         "meshPath": {
@@ -1285,12 +1321,15 @@
           "type": "number"
         },
         "minScale": {
+          "description": "Minimum random instance scale (add_foliage default 1; create_landscape_grass_type/scatter_meshes_along_spline default 0.8).",
           "type": "number"
         },
         "minX": {
+          "description": "modify_heightmap/paint_landscape: region min X in landscape vertex coordinates (used when the 'region' object is absent; omitted = full extent).",
           "type": "integer"
         },
         "minY": {
+          "description": "modify_heightmap/paint_landscape: region min Y in landscape vertex coordinates (used when the 'region' object is absent; omitted = full extent).",
           "type": "integer"
         },
         "name": {
@@ -1298,12 +1337,14 @@
           "type": "string"
         },
         "names": {
+          "description": "delete: actor labels to remove from the level (matched case-insensitively).",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "numLODs": {
+          "description": "generate_lods: alias of lodCount (default 4, clamped 1-50).",
           "type": "integer"
         },
         "operation": {
@@ -1401,12 +1442,15 @@
           "type": "integer"
         },
         "quadsPerSection": {
+          "description": "create_landscape: alias of quadsPerComponent (default 63).",
           "type": "integer"
         },
         "quality": {
+          "description": "Lighting build quality: preview|medium|high|production (bake_lightmap default preview; build_lighting default production, digits 0-3 accepted).",
           "type": "string"
         },
         "radius": {
+          "description": "sculpt: alias of brushRadius (default 1000). set_ambient_occlusion: ambient occlusion radius on the global post-process volume.",
           "type": "number"
         },
         "randomizeRotation": {
@@ -1422,6 +1466,7 @@
           "type": "number"
         },
         "randomYaw": {
+          "description": "add_foliage: apply random yaw to instances (default true).",
           "type": "boolean"
         },
         "rayTracedShadows": {
@@ -1482,12 +1527,15 @@
           "type": "boolean"
         },
         "sectionSize": {
+          "description": "create_landscape: alias of quadsPerComponent (default 63).",
           "type": "integer"
         },
         "sectionsPerComponent": {
+          "description": "create_landscape: sections per component (default 1); subsection quads = quadsPerComponent/sectionsPerComponent.",
           "type": "integer"
         },
         "seed": {
+          "description": "create_procedural_foliage: random seed for the spawner (default 12345).",
           "type": "integer"
         },
         "size": {
@@ -1511,9 +1559,11 @@
           "type": "object"
         },
         "sizeX": {
+          "description": "create_procedural_terrain: grid cells along X — world width = sizeX*spacing (clamped 2-1000, default 100). create_landscape: world-unit size hint — componentsX defaults to floor(sizeX/1000) when no component count is given.",
           "type": "number"
         },
         "sizeY": {
+          "description": "create_procedural_terrain: grid cells along Y — world depth = sizeY*spacing (clamped 2-1000, default 100). create_landscape: world-unit size hint — componentsY defaults to floor(sizeY/1000) when no component count is given.",
           "type": "number"
         },
         "skipFlush": {
@@ -1529,6 +1579,7 @@
           "type": "string"
         },
         "spacing": {
+          "description": "create_procedural_terrain: distance between grid vertices in world units (default 100, min 1). scatter_meshes_along_spline: distance between instances along the spline (default 100, must be > 0).",
           "type": "number"
         },
         "splineType": {
@@ -1547,18 +1598,23 @@
           "type": "string"
         },
         "strength": {
+          "description": "paint_landscape: layer weight 0-1 (default 1). sculpt: brush strength (default 0.1).",
           "type": "number"
         },
         "subdivisions": {
+          "description": "create_procedural_terrain: vertex grid resolution per axis (clamped 2-200, default 50).",
           "type": "integer"
         },
         "tileSize": {
+          "description": "create_procedural_foliage: spawner tile size in world units (default 1000, min 1).",
           "type": "number"
         },
         "time": {
+          "description": "set_time_of_day: hour of day passed to the sky sphere's SetTimeOfDay function (default 12).",
           "type": "number"
         },
         "tool": {
+          "description": "sculpt: alias of toolMode.",
           "type": "string"
         },
         "toolMode": {
@@ -1571,6 +1627,7 @@
           "type": "string"
         },
         "transforms": {
+          "description": "add_foliage_instances: per-instance transforms, each with 'location' ({x,y,z} or [x,y,z]) plus optional 'rotation' and 'scale'/'uniformScale'.",
           "items": {
             "type": "object"
           },
@@ -1588,6 +1645,7 @@
           "type": "array"
         },
         "updateNormals": {
+          "description": "modify_heightmap: recalculate normals when writing height data (default false).",
           "type": "boolean"
         },
         "useRandomOffset": {
@@ -1731,6 +1789,7 @@
           "type": "string"
         },
         "componentType": {
+          "description": "add_component: component class to add as an instance component (short class name or path; must be a UActorComponent subclass).",
           "type": "string"
         },
         "filter": {
@@ -1861,6 +1920,7 @@
           "type": "object"
         },
         "snapshotName": {
+          "description": "create_snapshot: name for the actor's saved transform snapshot (keyed per actor for later restore).",
           "type": "string"
         },
         "stringValue": {
@@ -1964,9 +2024,11 @@
           "type": "string"
         },
         "category": {
+          "description": "set_preferences: preference category; only 'LevelEditor' is meaningful (enables the non-CVar RealtimeAudio key).",
           "type": "string"
         },
         "deltaTime": {
+          "description": "set_fixed_delta_time: fixed frame time in seconds passed to r.FixedDeltaTime (default 0.01667, ~60fps).",
           "type": "number"
         },
         "device": {
@@ -1986,6 +2048,7 @@
           "type": "string"
         },
         "fov": {
+          "description": "set_camera_fov: viewport field of view in degrees, exclusive 1-179 (default 90).",
           "type": "number"
         },
         "id": {
@@ -1997,6 +2060,7 @@
           "type": "integer"
         },
         "inputAction": {
+          "description": "Alias for type used by simulate_input (action-style values pressed/released/click/move also accepted).",
           "type": "string"
         },
         "inputType": {
@@ -2004,6 +2068,7 @@
           "type": "string"
         },
         "key": {
+          "description": "simulate_nav: explicit FKey name to send instead of resolving direction/device (e.g. Gamepad_DPad_Up, Enter).",
           "type": "string"
         },
         "levelPath": {
@@ -2030,6 +2095,7 @@
           "type": "integer"
         },
         "mode": {
+          "description": "set_editor_mode: mode name passed verbatim to the 'mode <name>' editor console command (single token; the mode itself is not validated).",
           "type": "string"
         },
         "name": {
@@ -2045,9 +2111,11 @@
           "type": "string"
         },
         "preferences": {
+          "description": "set_preferences: object of console-variable name -> value (string/number/bool) pairs; unmatched names are reported in 'failed'.",
           "type": "object"
         },
         "realtime": {
+          "description": "set_viewport_realtime: enable realtime rendering for the active viewport (default true).",
           "type": "boolean"
         },
         "rotation": {
@@ -2070,6 +2138,7 @@
           "type": "string"
         },
         "speed": {
+          "description": "set_game_speed: world time-dilation multiplier, >0 and <=20 (default 1.0).",
           "type": "number"
         },
         "stabilizeFocus": {
@@ -2085,6 +2154,7 @@
           "type": "number"
         },
         "viewMode": {
+          "description": "set_view_mode: Lit|Unlit|Wireframe|DetailLighting|LightingOnly|LightComplexity|ShaderComplexity|LightmapDensity|StationaryLightOverlap|ReflectionOverride, or any other single token passed to the 'viewmode' console command.",
           "type": "string"
         },
         "x": {
@@ -2187,6 +2257,7 @@
           "type": "string"
         },
         "className": {
+          "description": "inspect_class: class to inspect; loaded short name, /Script path, Blueprint asset path, or its _C class path.",
           "type": "string"
         },
         "classPath": {
@@ -2223,6 +2294,7 @@
           "type": "array"
         },
         "detailed": {
+          "description": "inspect_cdo: dump full default properties for the CDO and each component (default false; propertyNames/propertyPath switch to targeted readback).",
           "type": "boolean"
         },
         "exactClass": {
@@ -2230,6 +2302,7 @@
           "type": "boolean"
         },
         "filter": {
+          "description": "runtime_report/pie_report: case-insensitive substring filter over actor label, name, class name, or path.",
           "type": "string"
         },
         "floatValue": {
@@ -2285,12 +2358,14 @@
           "type": "string"
         },
         "propertyNames": {
+          "description": "inspect_cdo: restrict the CDO/component property readback to these names.",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "propertyPath": {
+          "description": "Alias of propertyName: a single property name, read when propertyName is absent.",
           "type": "string"
         },
         "save": {
@@ -2298,6 +2373,7 @@
           "type": "boolean"
         },
         "snapshotName": {
+          "description": "create_snapshot/restore_snapshot: name keying the actor's saved transform snapshot (in-memory, transform only).",
           "type": "string"
         },
         "stringValue": {
@@ -2580,12 +2656,15 @@
           "description": "configure_sight_config: which affiliations to detect; top-level alias of sightConfig.detectionByAffiliation.",
           "properties": {
             "enemies": {
+              "description": "Detect enemy-affiliated targets (default true).",
               "type": "boolean"
             },
             "friendlies": {
+              "description": "Detect friendly-affiliated targets (default false).",
               "type": "boolean"
             },
             "neutrals": {
+              "description": "Detect neutral-affiliated targets (default true).",
               "type": "boolean"
             }
           },
@@ -2711,6 +2790,7 @@
           "description": "Generator-specific settings.",
           "properties": {
             "actorClass": {
+              "description": "Actor class the ActorsOfClass generator searches for.",
               "type": "string"
             },
             "gridSize": {
@@ -2723,6 +2803,7 @@
               "type": "number"
             },
             "searchCenter": {
+              "description": "EnvQueryContext class for the search origin (short names expand to EnvQueryContext_<name>); only ActorsOfClass and OnCircle generators accept it.",
               "type": "string"
             },
             "searchRadius": {
@@ -2752,6 +2833,7 @@
           "description": "AI hearing sense configuration.",
           "properties": {
             "detectFriendly": {
+              "description": "Accepted but ignored — affiliation detection is hard-coded (enemies+neutrals on, friendlies off).",
               "type": "boolean"
             },
             "hearingRange": {
@@ -3005,14 +3087,18 @@
               "type": "number"
             },
             "detectionByAffiliation": {
+              "description": "Which affiliations to detect (wins over the flat enemies/neutrals/friendlies aliases).",
               "properties": {
                 "enemies": {
+                  "description": "Detect enemy-affiliated targets (default true).",
                   "type": "boolean"
                 },
                 "friendlies": {
+                  "description": "Detect friendly-affiliated targets (default false).",
                   "type": "boolean"
                 },
                 "neutrals": {
+                  "description": "Detect neutral-affiliated targets (default true).",
                   "type": "boolean"
                 }
               },
@@ -3149,6 +3235,7 @@
               "type": "number"
             },
             "filterType": {
+              "description": "Filter mode for the test.",
               "enum": [
                 "Minimum",
                 "Maximum",
@@ -3163,6 +3250,7 @@
               "type": "number"
             },
             "scoringEquation": {
+              "description": "Score curve for the test.",
               "enum": [
                 "Linear",
                 "Square",
@@ -3388,6 +3476,7 @@
           "type": "string"
         },
         "assetPaths": {
+          "description": "Asset paths to operate on.",
           "items": {
             "type": "string"
           },
@@ -3449,9 +3538,11 @@
           "type": "string"
         },
         "checkoutFiles": {
+          "description": "fixup_redirectors/bulk_rename: check out affected packages from source control first (default false).",
           "type": "boolean"
         },
         "classNames": {
+          "description": "search_assets: class filters — full class paths ('/Script/Engine.StaticMesh') or supported short names (Blueprint, StaticMesh, Material, Texture2D, ...).",
           "items": {
             "type": "string"
           },
@@ -3496,6 +3587,7 @@
           "type": "string"
         },
         "coordinateIndex": {
+          "description": "add_texture_coordinate: UV channel index (default 0).",
           "type": "integer"
         },
         "csv": {
@@ -3511,6 +3603,7 @@
           "type": "integer"
         },
         "description": {
+          "description": "source_control_submit: changelist description (default 'Automated submission via MCP Automation Bridge'). add_custom_expression/update_custom_expression: the Custom node's Description caption. create_material_function: the function's Description text.",
           "type": "string"
         },
         "destinationPath": {
@@ -3576,6 +3669,7 @@
           "type": "string"
         },
         "fixupRedirectors": {
+          "description": "bulk_delete: after deleting, fix up all redirectors' referencers project-wide (default true).",
           "type": "boolean"
         },
         "flipY": {
@@ -3587,7 +3681,7 @@
           "type": "number"
         },
         "format": {
-          "description": "import_data_table: 'csv' or 'json' (inferred from sourceText if omitted).",
+          "description": "import_data_table: 'csv' or 'json' (inferred from sourceText if omitted); create_render_target: pixel format — RGBA8 (default)|RGBA16F|RGBA32F|R8|RG8|R16F|RG16F|R32F|RG32F|RGB10A2.",
           "type": "string"
         },
         "functionPath": {
@@ -3623,6 +3717,7 @@
           "type": "boolean"
         },
         "height": {
+          "description": "Output height in pixels (default 1024; create_thumbnail 512).",
           "type": "integer"
         },
         "inBlack": {
@@ -3716,6 +3811,7 @@
           "type": "array"
         },
         "limit": {
+          "description": "search_assets: pagination — max results returned (default 100).",
           "type": "integer"
         },
         "lineWidth": {
@@ -3727,6 +3823,7 @@
           "type": "integer"
         },
         "lodCount": {
+          "description": "generate_lods: number of LOD levels to build (default 4, clamped 1-50).",
           "type": "integer"
         },
         "luminanceFactors": {
@@ -3753,6 +3850,7 @@
           "type": "string"
         },
         "maxDepth": {
+          "description": "get_asset_graph: dependency BFS depth limit (default 3).",
           "type": "integer"
         },
         "maxResults": {
@@ -3764,6 +3862,7 @@
           "type": "string"
         },
         "metadata": {
+          "description": "set_metadata: key/value pairs written to the asset's package metadata (non-string values are stringified).",
           "type": "object"
         },
         "name": {
@@ -3798,6 +3897,7 @@
           "type": "array"
         },
         "nodeType": {
+          "description": "find_node: substring matched against expression class names. add_material_node: expression type to create — short name (TextureSample|Add|Multiply|Constant|Constant3Vector|Lerp|...) or any MaterialExpression class name.",
           "type": "string"
         },
         "noiseType": {
@@ -3817,6 +3917,7 @@
           "type": "integer"
         },
         "offset": {
+          "description": "search_assets: pagination — results to skip (default 0). create_pattern_texture: Brick rows' alternating horizontal shift in tile widths (default 0.5).",
           "type": "number"
         },
         "opacity": {
@@ -3880,6 +3981,7 @@
           "type": "string"
         },
         "packagePaths": {
+          "description": "search_assets: content directories to search (default /Game).",
           "items": {
             "type": "string"
           },
@@ -3902,6 +4004,7 @@
           "type": "string"
         },
         "parameterType": {
+          "description": "set_material_parameter: unused — the action always fails with AMBIGUOUS_ACTION; call set_scalar_parameter_value/set_vector_parameter_value/set_texture_parameter_value instead.",
           "type": "string"
         },
         "parentMaterial": {
@@ -3913,6 +4016,7 @@
           "type": "string"
         },
         "paths": {
+          "description": "delete: asset or folder paths to delete (alias of assetPaths).",
           "items": {
             "type": "string"
           },
@@ -3939,6 +4043,7 @@
           "type": "string"
         },
         "prefix": {
+          "description": "bulk_rename: text prepended to each asset name.",
           "type": "string"
         },
         "preserveArea": {
@@ -3984,9 +4089,11 @@
           "type": "boolean"
         },
         "recursiveClasses": {
+          "description": "search_assets: also match subclasses of the classNames filters (default false).",
           "type": "boolean"
         },
         "recursivePaths": {
+          "description": "list/search_assets: recurse into subfolders (default true; list: alias for recursive).",
           "type": "boolean"
         },
         "redTexture": {
@@ -4028,6 +4135,7 @@
           "type": "string"
         },
         "replaceText": {
+          "description": "bulk_rename: replacement for searchText matches (empty removes them).",
           "type": "string"
         },
         "reportType": {
@@ -4083,6 +4191,7 @@
           "type": "boolean"
         },
         "searchText": {
+          "description": "search_assets: case-insensitive substring filter on asset names. bulk_rename: text to find in each asset name (replaced with replaceText, case-insensitive).",
           "type": "string"
         },
         "secondaryColor": {
@@ -4112,6 +4221,7 @@
           "type": "string"
         },
         "showConfirmation": {
+          "description": "bulk_delete: show the editor's delete-confirmation dialog instead of deleting silently (default false).",
           "type": "boolean"
         },
         "sourceNodeId": {
@@ -4169,6 +4279,7 @@
           "type": "object"
         },
         "suffix": {
+          "description": "bulk_rename: text appended to each asset name.",
           "type": "string"
         },
         "tablePath": {
@@ -4180,6 +4291,7 @@
           "type": "string"
         },
         "tags": {
+          "description": "set_tags: tag names to apply; each is written as package metadata key=true and registered as an asset-registry tag for find_by_tag.",
           "items": {
             "type": "string"
           },
@@ -4265,12 +4377,15 @@
           "type": "boolean"
         },
         "width": {
+          "description": "Output width in pixels (default 1024; create_thumbnail 512).",
           "type": "integer"
         },
         "x": {
+          "description": "Graph node X coordinate.",
           "type": "number"
         },
         "y": {
+          "description": "Graph node Y coordinate.",
           "type": "number"
         }
       },
@@ -4375,6 +4490,7 @@
           "type": "string"
         },
         "attenuationShape": {
+          "description": "set_sound_attenuation: Sphere|Capsule|Box|Cone (default Sphere).",
           "type": "string"
         },
         "boolValue": {
@@ -4517,21 +4633,27 @@
           "type": "object"
         },
         "fadeInTime": {
+          "description": "set_sound_mix_class_override: fade-in seconds for the override (default 1.0); add_mix_modifier accepts but ignores it.",
           "type": "number"
         },
         "fadeOutTime": {
+          "description": "clear_sound_mix_class_override: fade-out seconds for the override (default 1.0); add_mix_modifier accepts but ignores it.",
           "type": "number"
         },
         "fadeTime": {
+          "description": "Fade duration in seconds (default 1.0; create_reverb_zone's reverb fade defaults to 2.0).",
           "type": "number"
         },
         "fadeType": {
+          "description": "fade_sound: FadeIn|FadeOut|FadeTo (default FadeTo — fades to targetVolume).",
           "type": "string"
         },
         "falloffDistance": {
+          "description": "Attenuation falloff distance in world units beyond the inner radius (default 3600).",
           "type": "number"
         },
         "falloffMode": {
+          "description": "set_sound_attenuation: Linear|Logarithmic|Inverse|NaturalSound (default Linear).",
           "type": "string"
         },
         "floatValue": {
@@ -4571,6 +4693,7 @@
           "type": "boolean"
         },
         "innerRadius": {
+          "description": "Attenuation inner radius in world units (full volume inside; default 400).",
           "type": "number"
         },
         "inputName": {
@@ -4578,6 +4701,7 @@
           "type": "string"
         },
         "inputType": {
+          "description": "add_metasound_input: MetaSound data type name for the input (default Float).",
           "type": "string"
         },
         "intValue": {
@@ -4629,6 +4753,7 @@
           "type": "number"
         },
         "lowPassFilterFrequency": {
+          "description": "set_class_properties: low-pass filter cutoff frequency in Hz.",
           "type": "number"
         },
         "midFrequency": {
@@ -4644,6 +4769,7 @@
           "type": "string"
         },
         "mixName": {
+          "description": "SoundMix asset path or bare asset name.",
           "type": "string"
         },
         "name": {
@@ -4655,6 +4781,7 @@
           "type": "string"
         },
         "nodeType": {
+          "description": "add_cue_node: wave_player|mixer|random|modulator|looping|attenuation|concatenator|delay|switch|branch (default wave_player); add_metasound_node: oscillator/sine|gain/multiply|multiply_audio|add|add_audio|wave_player shortcuts, other strings tried as a raw class name.",
           "type": "string"
         },
         "occlusionFilterScale": {
@@ -4682,6 +4809,7 @@
           "type": "string"
         },
         "outputType": {
+          "description": "add_metasound_output: MetaSound data type name for the output (default Audio).",
           "type": "string"
         },
         "packagePath": {
@@ -4689,6 +4817,7 @@
           "type": "string"
         },
         "parentClass": {
+          "description": "create_sound_class: parent SoundClass asset path.",
           "type": "string"
         },
         "parentPath": {
@@ -4700,6 +4829,7 @@
           "type": "string"
         },
         "pitch": {
+          "description": "Audio pitch multiplier (default 1.0).",
           "type": "number"
         },
         "pitchAdjuster": {
@@ -4711,6 +4841,7 @@
           "type": "string"
         },
         "properties": {
+          "description": "create_sound_class: initial class properties object ({volume, pitch} multipliers).",
           "type": "object"
         },
         "replace": {
@@ -4726,6 +4857,7 @@
           "type": "number"
         },
         "reverbEffect": {
+          "description": "create_reverb_zone: ReverbEffect asset path to apply inside the zone.",
           "type": "string"
         },
         "reverbWetLevelMax": {
@@ -4779,6 +4911,7 @@
           "type": "string"
         },
         "soundClassName": {
+          "description": "SoundClass asset path or bare asset name.",
           "type": "string"
         },
         "soundClassPath": {
@@ -4786,6 +4919,7 @@
           "type": "string"
         },
         "soundName": {
+          "description": "fade_sound: actor name/label owning the audio component (takes precedence over actorName).",
           "type": "string"
         },
         "soundPath": {
@@ -4825,6 +4959,7 @@
           "type": "string"
         },
         "startTime": {
+          "description": "Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it).",
           "type": "number"
         },
         "stringValue": {
@@ -4847,6 +4982,7 @@
           "type": "array"
         },
         "targetVolume": {
+          "description": "Volume multiplier to fade to (fade_sound_in default 1.0, fade_sound default 0.0; fade_sound_out ignores it and always fades to 0).",
           "type": "number"
         },
         "velocityScale": {
@@ -4858,6 +4994,7 @@
           "type": "number"
         },
         "volume": {
+          "description": "Volume multiplier (default 1.0).",
           "type": "number"
         },
         "volumeAdjuster": {
@@ -5183,6 +5320,7 @@
           "type": "array"
         },
         "category": {
+          "description": "add_variable: editor category for the variable (default none).",
           "type": "string"
         },
         "clipping": {
@@ -5242,6 +5380,7 @@
           "type": "string"
         },
         "componentClass": {
+          "description": "add_scs_component: UActorComponent subclass to add (short name or class path, e.g. StaticMeshComponent).",
           "type": "string"
         },
         "componentName": {
@@ -5249,6 +5388,7 @@
           "type": "string"
         },
         "componentType": {
+          "description": "add_widget_component: UMG widget class to add (TextBlock, Button, Image, ProgressBar, Slider, CheckBox, ComboBox, panel types, ... or any UWidget class name).",
           "type": "string"
         },
         "contentColorAndOpacity": {
@@ -5298,6 +5438,7 @@
           "type": "string"
         },
         "eventType": {
+          "description": "add_event: \"custom\" (default) for a custom event, or a parent event name to override (BeginPlay/Tick/EndPlay alias to Receive*).",
           "type": "string"
         },
         "fill": {
@@ -5399,9 +5540,11 @@
           "type": "object"
         },
         "inputAxisName": {
+          "description": "create_node: legacy input axis mapping name for an InputAxisEvent node (required for that nodeType).",
           "type": "string"
         },
         "inputs": {
+          "description": "add_function: input parameters; items are {name, type} objects (ignored when override is true).",
           "items": {
             "type": "object"
           },
@@ -5424,9 +5567,11 @@
           "type": "boolean"
         },
         "isPublic": {
+          "description": "add_function: recorded as the function's public flag in the response/registry only — does not change the graph's access specifier (default false).",
           "type": "boolean"
         },
         "isReplicated": {
+          "description": "add_variable: mark the variable replicated (sets CPF_Net; default false).",
           "type": "boolean"
         },
         "key": {
@@ -5484,9 +5629,11 @@
           "type": "number"
         },
         "memberClass": {
+          "description": "create_node: owning class that memberName/eventName/variableName is looked up on (CallFunction, Event, VariableGet/VariableSet); restricts the search to that class's chain.",
           "type": "string"
         },
         "memberName": {
+          "description": "create_node: UFUNCTION name for a CallFunction node; without memberClass only the blueprint's class, KismetSystemLibrary, GameplayStatics and KismetMathLibrary are searched.",
           "type": "string"
         },
         "mesh_path": {
@@ -5502,6 +5649,7 @@
           "type": "string"
         },
         "metadata": {
+          "description": "set_blueprint_metadata: metadata key/value pairs (string/bool/number) set on the blueprint's generated class.",
           "type": "object"
         },
         "minDesiredHeight": {
@@ -5545,6 +5693,7 @@
           "type": "string"
         },
         "newParent": {
+          "description": "reparent_widget: name of the panel widget to move the target widget under.",
           "type": "string"
         },
         "newWidgetClass": {
@@ -5560,12 +5709,15 @@
           "type": "string"
         },
         "nodeType": {
+          "description": "create_node: node type — CallFunction, VariableGet/VariableSet, Event, CustomEvent, Cast/CastTo<Class>, InputAxisEvent, a shorthand function (PrintString, Delay, ...), a flow alias (Branch, Sequence, ForLoop, ...), or any K2Node class name.",
           "type": "string"
         },
         "oldName": {
+          "description": "rename_widget: current name of the widget to rename (slotName/name accepted as aliases).",
           "type": "string"
         },
         "operations": {
+          "description": "modify_scs: SCS edits; each item needs type (add_component|remove_component|modify_component|attach_component) plus componentName and per-type keys — componentClass/attachTo (add), transform{location,rotation,scale} (modify), parentComponent/attachTo (attach).",
           "items": {
             "type": "object"
           },
@@ -5583,6 +5735,7 @@
           "type": "string"
         },
         "outputs": {
+          "description": "add_function: output parameters; items are {name, type} objects (ignored when override is true).",
           "items": {
             "type": "object"
           },
@@ -5639,6 +5792,7 @@
           "type": "string"
         },
         "parameters": {
+          "description": "create_node: CustomEvent parameters; items are {name, type} objects (both keys required) added as output data pins.",
           "items": {
             "type": "object"
           },
@@ -5653,6 +5807,7 @@
           "type": "string"
         },
         "parentComponent": {
+          "description": "add_scs_component: variable name of the existing SCS component to attach under; omitted = added as a root node.",
           "type": "string"
         },
         "parentName": {
@@ -5708,6 +5863,7 @@
           "type": "string"
         },
         "properties": {
+          "description": "create: class-default (CDO) property values applied to the new blueprint, keyed by property name; failures are reported in failedProperties.",
           "type": "object"
         },
         "property": {
@@ -5773,6 +5929,7 @@
           "type": "boolean"
         },
         "saveAfterCompile": {
+          "description": "compile: save the blueprint to disk after compiling, bypassing the save throttle (default false; save is an alias).",
           "type": "boolean"
         },
         "savePath": {
@@ -5920,6 +6077,7 @@
           "type": "string"
         },
         "targetClass": {
+          "description": "create_node: class for a Cast node's TargetType (required for Cast/DynamicCast) or for a ConstructObjectFromClass node's Class pin (SpawnActorFromClass, CreateWidget, ...).",
           "type": "string"
         },
         "targetFunction": {
@@ -6050,9 +6208,11 @@
           "type": "number"
         },
         "x": {
+          "description": "add_health_bar: canvas X position in pixels (default 20).",
           "type": "number"
         },
         "y": {
+          "description": "add_health_bar: canvas Y position in pixels (default 20).",
           "type": "number"
         },
         "zOrder": {
@@ -6073,6 +6233,7 @@
     "inputSchema": {
       "properties": {
         "acceleration": {
+          "description": "Writes CharacterMovement MaxAcceleration.",
           "type": "number"
         },
         "action": {
@@ -6100,6 +6261,7 @@
           "type": "string"
         },
         "airControl": {
+          "description": "Air steering fraction 0-1; writes CharacterMovement AirControl.",
           "type": "number"
         },
         "animBlueprintPath": {
@@ -6127,9 +6289,11 @@
           "type": "boolean"
         },
         "capsuleHalfHeight": {
+          "description": "Capsule half-height in cm; writes the CapsuleComponent unscaled half-height.",
           "type": "number"
         },
         "capsuleRadius": {
+          "description": "Capsule radius in cm; writes the CapsuleComponent unscaled radius (clamped against half-height).",
           "type": "number"
         },
         "crouchedHalfHeight": {
@@ -6137,6 +6301,7 @@
           "type": "number"
         },
         "crouchSpeed": {
+          "description": "Crouched walk speed; writes CharacterMovement MaxWalkSpeedCrouched.",
           "type": "number"
         },
         "customSpeed": {
@@ -6144,6 +6309,7 @@
           "type": "number"
         },
         "deceleration": {
+          "description": "Writes CharacterMovement BrakingDecelerationWalking.",
           "type": "number"
         },
         "fallingLateralFriction": {
@@ -6151,12 +6317,15 @@
           "type": "number"
         },
         "flySpeed": {
+          "description": "Fly speed; writes CharacterMovement MaxFlySpeed.",
           "type": "number"
         },
         "gravityScale": {
+          "description": "Gravity multiplier; writes CharacterMovement GravityScale.",
           "type": "number"
         },
         "groundFriction": {
+          "description": "Writes CharacterMovement GroundFriction.",
           "type": "number"
         },
         "jumpHeight": {
@@ -6168,6 +6337,7 @@
           "type": "number"
         },
         "maxJumpCount": {
+          "description": "Writes Character JumpMaxCount (2 = double jump).",
           "type": "integer"
         },
         "meshOffset": {
@@ -6213,9 +6383,11 @@
           "type": "string"
         },
         "navAgentHeight": {
+          "description": "Nav agent height in cm; writes NavAgentProps.AgentHeight.",
           "type": "number"
         },
         "navAgentRadius": {
+          "description": "Nav agent radius in cm; writes NavAgentProps.AgentRadius.",
           "type": "number"
         },
         "orientToMovement": {
@@ -6227,6 +6399,7 @@
           "type": "string"
         },
         "rotationRate": {
+          "description": "Yaw turn rate in degrees/second; writes CharacterMovement RotationRate (pitch/roll zeroed).",
           "type": "number"
         },
         "runSpeed": {
@@ -6250,6 +6423,7 @@
           "type": "number"
         },
         "springArmLength": {
+          "description": "Camera boom length in cm; writes the SpringArm TargetArmLength (component created if missing).",
           "type": "number"
         },
         "sprintSpeed": {
@@ -6274,6 +6448,7 @@
           "type": "string"
         },
         "swimSpeed": {
+          "description": "Swim speed; writes CharacterMovement MaxSwimSpeed.",
           "type": "number"
         },
         "useControllerRotationPitch": {
@@ -6343,6 +6518,7 @@
           "type": "array"
         },
         "baseDamage": {
+          "description": "create_weapon_blueprint/set_weapon_stats: weapon damage written to the BaseDamage variable default (default 25).",
           "type": "number"
         },
         "blueprintPath": {
@@ -6358,6 +6534,7 @@
           "type": "number"
         },
         "collisionRadius": {
+          "description": "create_projectile_blueprint/configure_projectile_collision: sphere radius of the projectile's CollisionComponent (default 5).",
           "type": "number"
         },
         "criticalMultiplier": {
@@ -6393,6 +6570,7 @@
           "type": "string"
         },
         "fireRate": {
+          "description": "create_weapon_blueprint/set_weapon_stats: fire rate written to the FireRate variable default (default 600).",
           "type": "number"
         },
         "headshotMultiplier": {
@@ -6492,9 +6670,11 @@
           "type": "string"
         },
         "projectileGravityScale": {
+          "description": "create_projectile_blueprint/configure_projectile_movement: ProjectileMovement gravity scale; 0 disables gravity (default 0).",
           "type": "number"
         },
         "projectileLifespan": {
+          "description": "configure_projectile_movement: projectile actor InitialLifeSpan in seconds (default 5).",
           "type": "number"
         },
         "projectileMeshPath": {
@@ -6502,9 +6682,11 @@
           "type": "string"
         },
         "projectileSpeed": {
+          "description": "create_projectile_blueprint/configure_projectile_movement: ProjectileMovement InitialSpeed and MaxSpeed (default 5000).",
           "type": "number"
         },
         "range": {
+          "description": "create_weapon_blueprint/set_weapon_stats: weapon range written to the Range variable default (default 10000).",
           "type": "number"
         },
         "shieldAmount": {
@@ -6520,6 +6702,7 @@
           "type": "number"
         },
         "spread": {
+          "description": "create_weapon_blueprint/set_weapon_stats: shot spread written to the Spread variable default (default 2).",
           "type": "number"
         },
         "weaponMeshPath": {
@@ -6654,24 +6837,30 @@
           "type": "array"
         },
         "burstCount": {
+          "description": "add_spawn_burst_module: burst particle count (default 10; echoed in the response, not applied to the module).",
           "type": "integer"
         },
         "burstTime": {
+          "description": "add_spawn_burst_module: burst time in seconds (default 0; echoed in the response, not applied to the module).",
           "type": "number"
         },
         "cameraOffset": {
+          "description": "add_camera_offset_module: camera-space offset distance stored as the MCP_CameraOffset user parameter (default 0).",
           "type": "number"
         },
         "collisionMode": {
+          "description": "add_collision_module: collision mode (default SceneDepth; echoed only -- the module added is always Collision).",
           "type": "string"
         },
         "color": {
+          "description": "debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored.",
           "items": {
             "type": "number"
           },
           "type": "array"
         },
         "colorMode": {
+          "description": "add_color_module: color mode (default Direct; echoed only -- the module added is always Color).",
           "type": "string"
         },
         "colorValue": {
@@ -6697,12 +6886,15 @@
           "type": "number"
         },
         "density": {
+          "description": "create_volumetric_fog: exponential height fog density (default 0.05).",
           "type": "number"
         },
         "deterministicEnabled": {
+          "description": "enable_gpu_simulation: request deterministic simulation (default false; echoed in the response, not applied).",
           "type": "boolean"
         },
         "dieOnCollision": {
+          "description": "add_collision_module: kill particles on collision, stored as the MCP_DieOnCollision user parameter (default false).",
           "type": "boolean"
         },
         "direction": {
@@ -6721,6 +6913,7 @@
           "type": "object"
         },
         "duration": {
+          "description": "debug_shape/particle: draw duration in seconds (default 5).",
           "type": "number"
         },
         "emitter": {
@@ -6764,12 +6957,15 @@
           "type": "string"
         },
         "eventSpawnCount": {
+          "description": "add_event_receiver: particles to spawn per received event (default 1).",
           "type": "integer"
         },
         "eventType": {
+          "description": "add_event_generator: event type to generate, Location|Collision|Death (default Location).",
           "type": "string"
         },
         "extinction": {
+          "description": "create_volumetric_fog: volumetric fog extinction scale (default 0.5).",
           "type": "number"
         },
         "facingMode": {
@@ -6781,6 +6977,7 @@
           "type": "string"
         },
         "fixedBoundsEnabled": {
+          "description": "enable_gpu_simulation: request fixed bounds (default false; echoed in the response, not applied).",
           "type": "boolean"
         },
         "floatValue": {
@@ -6788,12 +6985,15 @@
           "type": "number"
         },
         "forceStrength": {
+          "description": "add_force_module: force strength (default 980; echoed in the response, not applied to the module).",
           "type": "number"
         },
         "forceType": {
+          "description": "add_force_module: force module to add, Gravity|Drag|Wind|Curl|Vortex|PointAttraction (default Gravity; unknown values fall back to Gravity).",
           "type": "string"
         },
         "friction": {
+          "description": "add_collision_module: friction stored as the MCP_CollisionFriction user parameter (default 0.2).",
           "type": "number"
         },
         "halfHeight": {
@@ -6801,9 +7001,11 @@
           "type": "number"
         },
         "intensity": {
+          "description": "create_dynamic_light: light intensity applied to the light component (default 0, so omitting it yields an invisible light).",
           "type": "number"
         },
         "killCondition": {
+          "description": "add_kill_particles_module: kill condition (default Age; echoed only -- the module added is always KillParticles).",
           "type": "string"
         },
         "length": {
@@ -6811,6 +7013,7 @@
           "type": "number"
         },
         "lifetime": {
+          "description": "add_initialize_particle_module: particle lifetime in seconds (default 2; echoed in the response, not applied to the module).",
           "type": "number"
         },
         "lightName": {
@@ -6818,9 +7021,11 @@
           "type": "string"
         },
         "lightRadius": {
+          "description": "add_light_renderer_module: light renderer radius scale (default 100).",
           "type": "number"
         },
         "lightType": {
+          "description": "create_dynamic_light: light class Point|Spot|Directional|Rect (default Point).",
           "type": "string"
         },
         "location": {
@@ -6844,6 +7049,7 @@
           "type": "object"
         },
         "mass": {
+          "description": "add_initialize_particle_module: particle mass (default 1; echoed in the response, not applied to the module).",
           "type": "number"
         },
         "materialPath": {
@@ -6871,6 +7077,7 @@
           "type": "string"
         },
         "parameterType": {
+          "description": "add_user_parameter/bind_parameter_to_source: parameter type, Float|Int|Bool|Vector|LinearColor (default Float).",
           "type": "string"
         },
         "path": {
@@ -6894,12 +7101,15 @@
           "type": "object"
         },
         "radius": {
+          "description": "debug_shape: shape radius/size in world units, preferred over size (default 100).",
           "type": "number"
         },
         "reset": {
+          "description": "activate: restart the simulation from time zero instead of resuming (default true).",
           "type": "boolean"
         },
         "restitution": {
+          "description": "add_collision_module: bounce restitution stored as the MCP_CollisionRestitution user parameter (default 0.3).",
           "type": "number"
         },
         "rotation": {
@@ -6922,6 +7132,7 @@
           "type": "number"
         },
         "scattering": {
+          "description": "create_volumetric_fog: volumetric fog scattering distribution (default 0.5).",
           "type": "number"
         },
         "scriptType": {
@@ -6929,9 +7140,11 @@
           "type": "string"
         },
         "shape": {
+          "description": "debug_shape: alias for shapeType, read only when shapeType is omitted or sphere.",
           "type": "string"
         },
         "shapeType": {
+          "description": "debug_shape/particle: shape to draw, sphere|box|circle|line|point|coordinate|cylinder|cone|capsule|arrow|plane (default sphere).",
           "type": "string"
         },
         "size": {
@@ -6939,6 +7152,7 @@
           "type": "number"
         },
         "sizeMode": {
+          "description": "add_size_module: size mode (default Uniform; echoed only -- the module added is always ScaleSpriteSize).",
           "type": "string"
         },
         "skeletalMeshPath": {
@@ -6958,18 +7172,23 @@
           "type": "string"
         },
         "spawnOnEvent": {
+          "description": "add_event_receiver: run the event handler on spawned particles (spawn-per-event) instead of every particle (default false).",
           "type": "boolean"
         },
         "spawnPerUnit": {
+          "description": "add_spawn_per_unit_module: particles per unit of distance traveled (default 1; echoed in the response, not applied to the module).",
           "type": "number"
         },
         "spawnRate": {
+          "description": "add_spawn_rate_module: particles per second; also written to a user-exposed SpawnRate parameter when the system has one (default 100).",
           "type": "number"
         },
         "stageIterationSource": {
+          "description": "add_simulation_stage: iteration source, Particles|DataInterface (default Particles).",
           "type": "string"
         },
         "stageName": {
+          "description": "add_simulation_stage: name for the new simulation stage.",
           "type": "string"
         },
         "staticMeshPath": {
@@ -7001,6 +7220,7 @@
           "type": "number"
         },
         "uniformSize": {
+          "description": "add_size_module: sprite size stored as the MCP_UniformSize user parameter (default 10).",
           "type": "number"
         },
         "vectorValue": {
@@ -7019,6 +7239,7 @@
           "type": "object"
         },
         "velocityMode": {
+          "description": "add_velocity_module: velocity module variant, Linear|Cone|FromPoint (default Linear).",
           "type": "string"
         }
       },
@@ -8629,6 +8850,7 @@
           "type": "integer"
         },
         "maxWeight": {
+          "description": "configure_inventory_weight: maximum carry weight written to the MaxCarryWeight variable default (default 100).",
           "type": "number"
         },
         "minQuantity": {
@@ -8700,6 +8922,7 @@
           "type": "string"
         },
         "respawnable": {
+          "description": "configure_pickup_respawn: whether the pickup respawns after collection, written to the bRespawnable variable default (default false).",
           "type": "boolean"
         },
         "respawnTime": {
@@ -8715,6 +8938,7 @@
           "type": "boolean"
         },
         "slotCount": {
+          "description": "create_inventory_component/configure_inventory_slots: slot capacity written to the MaxSlots variable default (default 20; create_inventory_component reads it but does not currently apply it).",
           "type": "integer"
         },
         "stackable": {
@@ -8794,6 +9018,7 @@
           "type": "string"
         },
         "levelName": {
+          "description": "create_level: name for the new level (path separators are stripped; saved under levelPath, or /Game/Maps for a bare name). stream/unload: target streaming level name (levelPath used when omitted).",
           "type": "string"
         },
         "levelPath": {
@@ -8833,9 +9058,11 @@
           "type": "string"
         },
         "shouldBeLoaded": {
+          "description": "stream: whether the streaming level should be loaded (default true).",
           "type": "boolean"
         },
         "shouldBeVisible": {
+          "description": "stream: whether the streaming level should be visible (default true).",
           "type": "boolean"
         },
         "sourcePath": {
@@ -8843,6 +9070,7 @@
           "type": "string"
         },
         "streamingMethod": {
+          "description": "add_sublevel: 'AlwaysLoaded' adds the sublevel always-loaded; any other value (default 'Blueprint') adds it as a dynamic streaming level.",
           "type": "string"
         },
         "sublevelPath": {
@@ -8850,6 +9078,7 @@
           "type": "string"
         },
         "useWorldPartition": {
+          "description": "create_level: create the level with World Partition enabled (default false).",
           "type": "boolean"
         }
       },
@@ -9188,6 +9417,7 @@
           "type": "string"
         },
         "levelName": {
+          "description": "create_level: name of the new level asset (no path separators; created under levelPath, default /Game/Maps). configure_level_streaming/set_streaming_distance: streaming-level name or /Game/ path (substring match; a streaming reference is auto-created when the level exists on disk).",
           "type": "string"
         },
         "levelPath": {
@@ -9891,6 +10121,7 @@
           "type": "string"
         },
         "actorNames": {
+          "description": "add_actors: level actor names (label/name/UAID) to bind as possessables; remove_actors: binding names to remove (case-insensitive).",
           "items": {
             "type": "string"
           },
@@ -9905,6 +10136,7 @@
           "type": "string"
         },
         "className": {
+          "description": "add_spawnable_from_class: class for the new spawnable; a native class name or a /Game Blueprint asset path (its generated class is used).",
           "type": "string"
         },
         "destinationPath": {
@@ -9912,9 +10144,11 @@
           "type": "string"
         },
         "end": {
+          "description": "set_view_range/set_work_range: range end in seconds (default 10 for view, 0 for work).",
           "type": "number"
         },
         "endFrame": {
+          "description": "add_section: section end frame (default 100; raw tick-resolution frame number).",
           "type": "integer"
         },
         "floatValue": {
@@ -9922,6 +10156,7 @@
           "type": "number"
         },
         "frame": {
+          "description": "add_keyframe: keyframe frame number at the sequence display rate.",
           "type": "integer"
         },
         "frameRate": {
@@ -9929,12 +10164,15 @@
           "type": "string"
         },
         "lengthInFrames": {
+          "description": "set_properties: playback-range length in frames from playbackStart (ignored when playbackEnd is given).",
           "type": "integer"
         },
         "locked": {
+          "description": "set_track_locked: true locks all the track's sections, false unlocks them (default true).",
           "type": "boolean"
         },
         "muted": {
+          "description": "set_track_muted: true disables evaluation of the track, false re-enables it (default true).",
           "type": "boolean"
         },
         "name": {
@@ -9950,9 +10188,11 @@
           "type": "string"
         },
         "playbackEnd": {
+          "description": "set_properties: playback range end (raw tick-resolution frame number; wins over lengthInFrames).",
           "type": "integer"
         },
         "playbackStart": {
+          "description": "set_properties: playback range start (raw tick-resolution frame number, not display-rate frames).",
           "type": "integer"
         },
         "property": {
@@ -9960,18 +10200,23 @@
           "type": "string"
         },
         "resolution": {
+          "description": "set_tick_resolution: tick resolution as 'numerator/denominator' (e.g. 24000/1001) or a whole number per second; unrecognized formats keep the current resolution.",
           "type": "string"
         },
         "solo": {
+          "description": "set_track_solo: true solos by disabling evaluation on all other tracks, false re-enables all (default true).",
           "type": "boolean"
         },
         "speed": {
+          "description": "set_playback_speed: playback speed multiplier applied to the open Sequencer (default 1; must be > 0).",
           "type": "number"
         },
         "start": {
+          "description": "set_view_range/set_work_range: range start in seconds (default 0).",
           "type": "number"
         },
         "startFrame": {
+          "description": "add_section: section start frame (default 0; raw tick-resolution frame number).",
           "type": "integer"
         },
         "structValue": {
@@ -9979,9 +10224,11 @@
           "type": "object"
         },
         "trackName": {
+          "description": "add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed).",
           "type": "string"
         },
         "trackType": {
+          "description": "add_track: track class to add; a UMovieSceneTrack class name or short form expanded to MovieScene<Type>Track (e.g. Audio, Event; see list_track_types).",
           "type": "string"
         }
       },
@@ -10059,6 +10306,7 @@
           "type": "boolean"
         },
         "arguments": {
+          "description": "run_ubt: alias of additionalArgs, read when additionalArgs is absent.",
           "type": "string"
         },
         "boostPlayerLocation": {
@@ -10070,6 +10318,7 @@
           "type": "string"
         },
         "category": {
+          "description": "get_log/tail_log: case-insensitive substring filter on the log category name (e.g. 'LogTemp'); spawn_category: alias of categoryName, read when categoryName is absent; get_project_settings: accepted but ignored.",
           "type": "string"
         },
         "categoryName": {
@@ -10081,6 +10330,7 @@
           "type": "number"
         },
         "channels": {
+          "description": "start_session: comma-separated Unreal Insights trace channel list passed to 'Trace.Start' (omit to start with default channels).",
           "type": "string"
         },
         "className": {
@@ -10092,9 +10342,11 @@
           "type": "string"
         },
         "command": {
+          "description": "execute_command: console command line executed via the editor/engine Exec path (security blocklist applies).",
           "type": "string"
         },
         "configuration": {
+          "description": "run_ubt: build configuration — Debug|DebugGame|Development|Test|Shipping (default Development).",
           "type": "string"
         },
         "contains": {
@@ -10142,9 +10394,11 @@
           "type": "boolean"
         },
         "key": {
+          "description": "set_cvar: console variable name (e.g. r.ScreenPercentage); set_project_setting: config key within the section.",
           "type": "string"
         },
         "level": {
+          "description": "set_scalability: overall quality level 0=Low|1=Medium|2=High|3=Epic|4=Cinematic (default 3).",
           "type": "integer"
         },
         "loadingRange": {
@@ -10188,6 +10442,7 @@
           "type": "string"
         },
         "platform": {
+          "description": "run_ubt: build platform — Win64|Mac|Linux|LinuxArm64|Android|IOS|TVOS|HoloLens|VisionOS (default: host platform).",
           "type": "string"
         },
         "poolSize": {
@@ -10211,6 +10466,7 @@
           "type": "number"
         },
         "section": {
+          "description": "set_project_setting: ini section name; bare names are normalized to /Script/<Section> and written to DefaultEngine.ini. get_project_settings: accepted but ignored (a fixed summary is returned).",
           "type": "string"
         },
         "sinceSeq": {
@@ -10250,6 +10506,7 @@
           "type": "string"
         },
         "value": {
+          "description": "set_cvar: value to set (omit to log the cvar's current value); set_project_setting: value written to the config key.",
           "type": "string"
         },
         "verbosity": {

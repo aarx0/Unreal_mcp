@@ -51,12 +51,12 @@ static void S_Possess(FMcpSchemaBuilder& B)
 
 static void S_SetGameSpeed(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("speed"), TEXT(""));
+	B.Number(TEXT("speed"), TEXT("set_game_speed: world time-dilation multiplier, >0 and <=20 (default 1.0)."));
 }
 
 static void S_SetFixedDeltaTime(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("deltaTime"), TEXT(""));
+	B.Number(TEXT("deltaTime"), TEXT("set_fixed_delta_time: fixed frame time in seconds passed to r.FixedDeltaTime (default 0.01667, ~60fps)."));
 }
 
 static void S_SetCamera(FMcpSchemaBuilder& B)
@@ -73,17 +73,17 @@ static void S_SetCamera(FMcpSchemaBuilder& B)
 
 static void S_SetCameraFov(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("fov"), TEXT(""));
+	B.Number(TEXT("fov"), TEXT("set_camera_fov: viewport field of view in degrees, exclusive 1-179 (default 90)."));
 }
 
 static void S_SetViewMode(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("viewMode"), TEXT(""));
+	B.String(TEXT("viewMode"), TEXT("set_view_mode: Lit|Unlit|Wireframe|DetailLighting|LightingOnly|LightComplexity|ShaderComplexity|LightmapDensity|StationaryLightOverlap|ReflectionOverride, or any other single token passed to the 'viewmode' console command."));
 }
 
 static void S_SetViewportRealtime(FMcpSchemaBuilder& B)
 {
-	B.Bool(TEXT("realtime"), TEXT(""));
+	B.Bool(TEXT("realtime"), TEXT("set_viewport_realtime: enable realtime rendering for the active viewport (default true)."));
 }
 
 static void S_SetGameView(FMcpSchemaBuilder& B)
@@ -129,14 +129,14 @@ static void S_OpenLevel(FMcpSchemaBuilder& B)
 
 static void S_SetEditorMode(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("mode"), TEXT(""))
+	B.String(TEXT("mode"), TEXT("set_editor_mode: mode name passed verbatim to the 'mode <name>' editor console command (single token; the mode itself is not validated)."))
 	 .Required({TEXT("mode")});
 }
 
 static void S_SetPreferences(FMcpSchemaBuilder& B)
 {
-	B.Object(TEXT("preferences"), TEXT(""))
-	 .String(TEXT("category"), TEXT(""));
+	B.Object(TEXT("preferences"), TEXT("set_preferences: object of console-variable name -> value (string/number/bool) pairs; unmatched names are reported in 'failed'."))
+	 .String(TEXT("category"), TEXT("set_preferences: preference category; only 'LevelEditor' is meaningful (enables the non-CVar RealtimeAudio key)."));
 }
 
 static void S_CreateBookmark(FMcpSchemaBuilder& B)
@@ -163,8 +163,8 @@ static void S_SimulateInput(FMcpSchemaBuilder& B)
 		"analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in "
 		"PlayerInput until the next sample, so hold = inject once, release = inject 0."))
 	 .String(TEXT("inputType"), TEXT("Alias for type used by simulate_input."))
-	 .String(TEXT("inputAction"), TEXT(""))
-	 .String(TEXT("key"), TEXT(""))
+	 .String(TEXT("inputAction"), TEXT("Alias for type used by simulate_input (action-style values pressed/released/click/move also accepted)."))
+	 .String(TEXT("key"), TEXT("simulate_input: FKey name — the key to press/release for key_down/key_up (e.g. SpaceBar, Gamepad_FaceButton_Bottom), or the 1D axis key for analog (Gamepad_LeftY, MouseX, ...)."))
 	 .Number(TEXT("x"), TEXT("Mouse X coordinate for simulate_input."))
 	 .Number(TEXT("y"), TEXT("Mouse Y coordinate for simulate_input."))
 	 .String(TEXT("button"), TEXT("Mouse button for simulate_input."))
@@ -177,7 +177,7 @@ static void S_SimulateNav(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("direction"), TEXT("simulate_nav direction: Up/Down/Left/Right/Accept/Back/Next/Previous (PIE-only; faithfully routes a nav key through CommonUI, then returns the post-nav focus snapshot)."))
 	 .String(TEXT("device"), TEXT("simulate_nav input device: 'gamepad' (default, sends DPad/face-button keys) or 'keyboard' (arrows/Enter/Esc/Tab)."))
-	 .String(TEXT("key"), TEXT(""))
+	 .String(TEXT("key"), TEXT("simulate_nav: explicit FKey name to send instead of resolving direction/device (e.g. Gamepad_DPad_Up, Enter)."))
 	 .Bool(TEXT("stabilizeFocus"), TEXT("simulate_nav: default true — before the nav, focus the PIE game viewport if focus isn't already inside it, so the faithful drive routes through CommonUI deterministically (never steals focus from an already-focused in-game widget). Set false to drive from whatever currently has focus."));
 }
 

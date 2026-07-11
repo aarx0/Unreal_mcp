@@ -48,22 +48,40 @@ static void S_SaveAs(FMcpSchemaBuilder& B)
 
 static void S_CreateLevel(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name for the new level (path separators are "
+			"stripped; saved under levelPath, or /Game/Maps for a bare name). "
+			"stream/unload: target streaming level name (levelPath used when "
+			"omitted)."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."))
-	 .Bool(TEXT("useWorldPartition"), TEXT(""));
+	 .Bool(TEXT("useWorldPartition"),
+		TEXT("create_level: create the level with World Partition enabled "
+			"(default false)."));
 }
 
 static void S_Stream(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name for the new level (path separators are "
+			"stripped; saved under levelPath, or /Game/Maps for a bare name). "
+			"stream/unload: target streaming level name (levelPath used when "
+			"omitted)."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."))
-	 .Bool(TEXT("shouldBeLoaded"), TEXT(""))
-	 .Bool(TEXT("shouldBeVisible"), TEXT(""));
+	 .Bool(TEXT("shouldBeLoaded"),
+		TEXT("stream: whether the streaming level should be loaded "
+			"(default true)."))
+	 .Bool(TEXT("shouldBeVisible"),
+		TEXT("stream: whether the streaming level should be visible "
+			"(default true)."));
 }
 
 static void S_Unload(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("levelName"), TEXT(""))
+	B.String(TEXT("levelName"),
+		TEXT("create_level: name for the new level (path separators are "
+			"stripped; saved under levelPath, or /Game/Maps for a bare name). "
+			"stream/unload: target streaming level name (levelPath used when "
+			"omitted)."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."));
 }
 
@@ -98,7 +116,10 @@ static void S_AddSublevel(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("sublevelPath"), TEXT("Level asset path alias for add_sublevel."))
 	 .String(TEXT("levelPath"), TEXT("Level asset path."))
-	 .String(TEXT("streamingMethod"), TEXT(""));
+	 .String(TEXT("streamingMethod"),
+		TEXT("add_sublevel: 'AlwaysLoaded' adds the sublevel always-loaded; "
+			"any other value (default 'Blueprint') adds it as a dynamic "
+			"streaming level."));
 }
 
 static void S_Delete(FMcpSchemaBuilder& B)

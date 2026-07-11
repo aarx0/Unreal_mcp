@@ -114,7 +114,7 @@ static void S_SetVisibility(FMcpSchemaBuilder& B)
 static void S_AddComponent(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .String(TEXT("componentType"), TEXT(""))
+	 .String(TEXT("componentType"), TEXT("add_component: component class to add as an instance component (short class name or path; must be a UActorComponent subclass)."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("meshPath"), TEXT("Mesh asset path (StaticMeshComponent convenience)."))
 	 .Required({TEXT("actorName"), TEXT("componentType")});
@@ -229,7 +229,7 @@ static void S_SetBlueprintVariables(FMcpSchemaBuilder& B)
 static void S_CreateSnapshot(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .String(TEXT("snapshotName"), TEXT(""))
+	 .String(TEXT("snapshotName"), TEXT("create_snapshot: name for the actor's saved transform snapshot (keyed per actor for later restore)."))
 	 .Required({TEXT("actorName"), TEXT("snapshotName")});
 }
 

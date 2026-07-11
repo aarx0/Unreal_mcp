@@ -139,6 +139,97 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-11 — description-sweep finds: non-functional published params + manage_sequence unit bugs
+Surfaced while filling the 501 blank schema descriptions (every param was verified against its
+handler read site; the non-functional ones got truthful "currently ignored" descriptions rather
+than invented semantics — fix the handler or retire the param, then update the text).
+- **manage_sequence frame-unit inconsistency**: `set_properties` playbackStart/playbackEnd/
+  lengthInFrames (SequenceHandlers.cpp:428-445) and `add_section` startFrame/endFrame
+  (:1966-1971, fetched TickResolution unused) apply raw ints at TICK resolution, while
+  `add_keyframe` converts display-rate frames→ticks (:1699-1705). On a default 24000-tick/30fps
+  sequence, display-rate frames passed to the first two land ~800× short.
+- **Published-but-ignored params** (read, then discarded or echo-only):
+  `set_interpolation_settings.interpolationType` (read AnimationAuthoringHandlers.cpp:2432,
+  never applied); `create_anim_blueprint.parentClass` (read :2576, factory hardcodes
+  UAnimInstance :2661); `configure_vehicle.vehicleType` (echo-only, AnimationHandlers.cpp:1571);
+  `add_track.trackName` (echo-only, SequenceHandlers.cpp:2486 — functional in the five other
+  track actions).
+- **manage_sequence semantics quirks** (documented in descriptions, maybe intended):
+  `set_track_solo` fakes solo via SetEvalDisabled(true) on every other track — clobbers existing
+  per-track mute state, and unsolo re-enables ALL tracks; `set_track_locked` locks the track's
+  sections, not the track object.
+- **manage_audio parsed-then-discarded**: `create_ambient_sound`/`spawn_sound_at_location`
+  read `startTime` and never use it (AudioHandlers.cpp ~1173/1288 — only play_sound_at_location/
+  play_sound_2d honor it); `add_mix_modifier` reads fadeInTime/fadeOutTime
+  (AudioAuthoringHandlers.cpp:1398-1399) but never writes Mix->FadeInTime/FadeOutTime;
+  `fade_sound_out` reads `targetVolume` only on the bFadeIn branch (AudioHandlers.cpp:1625-1626),
+  fade-out always targets 0.
+- **create_audio_component type-read mismatch**: reads `volume`/`pitch` via TryGetStringField +
+  Atof (AudioHandlers.cpp:1842-1847) though the schema declares Number — works only via JSON
+  number→string coercion; every other handler uses TryGetNumberField.
+- **create_sound_cue conditional params**: `volume`/`pitch`/`looping` only take effect when
+  `wavePath` is provided and loads (modulator built inside the `if (Wave)` block).
+- **manage_asset set_material_parameter is a tombstone action**: handler unconditionally returns
+  AMBIGUOUS_ACTION ("Use set_scalar/vector/texture_parameter_value",
+  MaterialAuthoringHandlers.cpp:4962); the published fragment advertises an action that can never
+  succeed — retire the action+fragment or implement dispatch. Its `parameterType` is the one
+  description left blank (no honest text exists).
+- **get_source_control_state validation/handler drift**: fragment says
+  RequiredAnyOf({assetPath, assetPaths}) but the handler reads only singular assetPath
+  (AssetQueryHandlers.cpp:571-581) — an assetPaths-only call passes validation then always fails.
+- **manage_asset `format` fold collision with WRONG text**: create_render_target's `format`
+  publishes import_data_table's "'csv' or 'json'" description; actual accepted values are
+  RGBA8 (default)|RGBA16F/FloatRGBA|RGBA32F|R8|RG8|… (TextureHandlers.cpp:2888-2929). Needs a
+  combined per-action string (fold is last-writer-wins per param name).
+- **manage_asset `offset` kind inconsistency**: Integer in S_SearchAssets vs Number in
+  S_CreatePatternTexture (genuinely float, default 0.5) — same folded name, two builder kinds.
+- **manage_effect Niagara echoed-but-not-applied params** (read + echoed in response, never wired
+  into the added module): add_spawn_burst_module burstCount/burstTime; spawn_per_unit's
+  spawnPerUnit; add_initialize_particle_module lifetime/mass; add_force_module forceStrength;
+  add_size_module sizeMode; add_color_module colorMode; add_collision_module collisionMode;
+  add_kill_particles_module killCondition; enable_gpu_simulation fixedBoundsEnabled/
+  deterministicEnabled. Descriptions flag "(echoed, not applied)" — wire or retire.
+- **add_color_module `color` type mismatch**: schema declares Array but handler reads
+  TryGetObjectField (NiagaraAuthoringHandlers.cpp:1600) — a schema-conformant array is silently
+  ignored, color defaults to White. Description warns it's an {r,g,b,a} 0-1 object.
+- **create_niagara_ribbon `color` is dead**: handler delegates to CreateNiagaraEffect which never
+  reads color (EffectHandlers.cpp:1665) — the one blank left in ManageEffect.
+- **manage_effect `color` scale inconsistency**: debug_shape/particle expect 0-255 FColor;
+  create_dynamic_light/add_color_module expect 0-1 linear — one folded name, two scales
+  (combined description covers both).
+- **create_dynamic_light `intensity` default 0.0** applied unconditionally — omitting intensity
+  spawns an invisible light.
+- **create_inventory_component `slotCount`** parsed with default 20 (InventoryHandlers.cpp:502)
+  then discarded — MaxSlots variable added but never set from it (configure_inventory_slots does
+  apply it).
+- **manage_effect `parameterType` fold collision**: set_niagara_parameter's
+  "Float|Vector|Color|Bool" text is clobbered (last-writer-wins) by add_user_parameter/
+  bind_parameter_to_source whose real vocabulary is Float|Int|Bool|Vector|LinearColor.
+- **get_foliage_instances/remove_foliage drop `foliageTypePath`**: fragments advertise it, but
+  the wrappers (EnvironmentHandlers.cpp ~392/~409) rebuild the payload from `foliageType` only
+  and forward it AS `foliageTypePath` — an incoming foliageTypePath is silently ignored
+  (add_foliage_instances/paint_foliage read it correctly). Fix: wrappers try foliageTypePath
+  first.
+- **generate_lods `numLODs` silently WINS over `lodCount`** when both sent (sequential TryGets,
+  numLODs last) — "alias" is really "override".
+- **manage_level create_level dead branch**: levelName is stripped to its last path component
+  (LevelHandlers.cpp ~1286-1295) so the later "starts with '/' = full path" branch (~1344) can
+  never fire.
+- **get_project_settings `section`/`category` are dead**: read into the SAME variable (category
+  clobbers section, UiHandlers.cpp:101-103) and never used — the handler returns the same fixed
+  summary regardless; the params imply arbitrary-ini queries that don't exist. Left blank.
+- **configure_hearing_config `hearingConfig.detectFriendly` is dead**: handler reads only
+  hearingRange and hard-codes DetectionByAffiliation (friendlies=false); nested
+  `hearingConfig.maxAge` equally unread (hard-coded SetMaxAge(5.0f)). Left blank.
+- **inspect `propertyPath` is a misnomer**: all six actions read it as a plain alias of
+  propertyName (one-entry list / merged variable); only set_property/get_property resolve dotted
+  paths, and that lives on the merged variable so propertyName has it equally.
+- **find_by_class matching semantics drift**: exact-name/path-substring with NO IsA inheritance,
+  unlike find_objects/list_objects — three same-named `className` params, three matching
+  behaviors (documented per-action, but the fold publishes only the last text).
+- **add_eqs_generator `generatorSettings.actorClass`** silently dropped when unresolvable or not
+  an AActor subclass (contrast searchCenter, which errors loudly).
+
 ### [x] 2026-07-10 — actor-name resolution has FOUR rival implementations with drifting semantics
 FIXED same day (`fe085d14`): one canonical McpHandlerUtils::FindActorByName(World, Name,
 Exact|Prefix|Fuzzy); subsystem member is a world-selecting forward; networking/spline locals

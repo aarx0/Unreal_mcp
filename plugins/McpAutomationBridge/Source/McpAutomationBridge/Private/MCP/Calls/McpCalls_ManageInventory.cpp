@@ -71,7 +71,7 @@ static void S_CreateComponent(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .Integer(TEXT("slotCount"), TEXT(""))
+	 .Integer(TEXT("slotCount"), TEXT("create_inventory_component/configure_inventory_slots: slot capacity written to the MaxSlots variable default (default 20; create_inventory_component reads it but does not currently apply it)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -79,7 +79,7 @@ static void S_CreateComponent(FMcpSchemaBuilder& B)
 static void S_ConfigureSlots(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Integer(TEXT("slotCount"), TEXT(""))
+	 .Integer(TEXT("slotCount"), TEXT("create_inventory_component/configure_inventory_slots: slot capacity written to the MaxSlots variable default (default 20; create_inventory_component reads it but does not currently apply it)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("blueprintPath")});
 }
@@ -133,7 +133,7 @@ static void S_ConfigurePickupInteraction(FMcpSchemaBuilder& B)
 static void S_ConfigurePickupRespawn(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("pickupPath"), TEXT("Path to pickup actor Blueprint."))
-	 .Bool(TEXT("respawnable"), TEXT(""))
+	 .Bool(TEXT("respawnable"), TEXT("configure_pickup_respawn: whether the pickup respawns after collection, written to the bRespawnable variable default (default false)."))
 	 .Number(TEXT("respawnTime"), TEXT("Respawn time in seconds."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .Required({TEXT("pickupPath")});
@@ -298,7 +298,7 @@ static void S_RemoveLootEntry(FMcpSchemaBuilder& B)
 static void S_ConfigureWeight(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Number(TEXT("maxWeight"), TEXT(""))
+	 .Number(TEXT("maxWeight"), TEXT("configure_inventory_weight: maximum carry weight written to the MaxCarryWeight variable default (default 100)."))
 	 .Bool(TEXT("enableWeight"), TEXT("Enable inventory weight tracking."))
 	 .Bool(TEXT("encumbranceSystem"), TEXT("Enable encumbrance variables."))
 	 .Bool(TEXT("encumberanceSystem"), TEXT("Misspelled alias for encumbranceSystem (accepted for back-compat)."))

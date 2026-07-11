@@ -251,8 +251,8 @@ static void S_AddEqsGenerator(FMcpSchemaBuilder& B)
 	 .Object(TEXT("generatorSettings"), TEXT("Generator-specific settings."),
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("searchRadius"))
-		 .String(TEXT("searchCenter"), TEXT(""))
-		 .String(TEXT("actorClass"), TEXT(""))
+		 .String(TEXT("searchCenter"), TEXT("EnvQueryContext class for the search origin (short names expand to EnvQueryContext_<name>); only ActorsOfClass and OnCircle generators accept it."))
+		 .String(TEXT("actorClass"), TEXT("Actor class the ActorsOfClass generator searches for."))
 		 .Number(TEXT("gridSize"))
 		 .Number(TEXT("spacesBetween"))
 		 .Number(TEXT("innerRadius"))
@@ -302,14 +302,14 @@ static void S_ConfigureTestScoring(FMcpSchemaBuilder& B)
 			TEXT("Square"),
 			TEXT("InverseLinear"),
 			TEXT("Constant")
-		}, TEXT(""))
+		}, TEXT("Score curve for the test."))
 		 .Number(TEXT("clampMin"))
 		 .Number(TEXT("clampMax"))
 		 .StringEnum(TEXT("filterType"), {
 			TEXT("Minimum"),
 			TEXT("Maximum"),
 			TEXT("Range")
-		}, TEXT(""))
+		}, TEXT("Filter mode for the test."))
 		 .Number(TEXT("floatMin"))
 		 .Number(TEXT("floatMax"));
 	})
@@ -352,9 +352,9 @@ static void S_ConfigureSightConfig(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("friendlies"), TEXT("configure_sight_config: detect friendly-affiliated targets; top-level alias of sightConfig.detectionByAffiliation.friendlies."))
 	 .Object(TEXT("detectionByAffiliation"), TEXT("configure_sight_config: which affiliations to detect; top-level alias of sightConfig.detectionByAffiliation."),
 		[](FMcpSchemaBuilder& S) {
-		S.Bool(TEXT("enemies"), TEXT(""))
-		 .Bool(TEXT("neutrals"), TEXT(""))
-		 .Bool(TEXT("friendlies"), TEXT(""));
+		S.Bool(TEXT("enemies"), TEXT("Detect enemy-affiliated targets (default true)."))
+		 .Bool(TEXT("neutrals"), TEXT("Detect neutral-affiliated targets (default true)."))
+		 .Bool(TEXT("friendlies"), TEXT("Detect friendly-affiliated targets (default false)."));
 	})
 	 .Object(TEXT("sightConfig"), TEXT("AI sight sense configuration."),
 		[](FMcpSchemaBuilder& S) {
@@ -368,11 +368,11 @@ static void S_ConfigureSightConfig(FMcpSchemaBuilder& B)
 		 .Bool(TEXT("enemies"), TEXT("Flat alias of detectionByAffiliation.enemies."))
 		 .Bool(TEXT("neutrals"), TEXT("Flat alias of detectionByAffiliation.neutrals."))
 		 .Bool(TEXT("friendlies"), TEXT("Flat alias of detectionByAffiliation.friendlies."))
-		 .Object(TEXT("detectionByAffiliation"), TEXT(""),
+		 .Object(TEXT("detectionByAffiliation"), TEXT("Which affiliations to detect (wins over the flat enemies/neutrals/friendlies aliases)."),
 			[](FMcpSchemaBuilder& Inner) {
-			Inner.Bool(TEXT("enemies"), TEXT(""))
-				 .Bool(TEXT("neutrals"), TEXT(""))
-				 .Bool(TEXT("friendlies"), TEXT(""));
+			Inner.Bool(TEXT("enemies"), TEXT("Detect enemy-affiliated targets (default true)."))
+				 .Bool(TEXT("neutrals"), TEXT("Detect neutral-affiliated targets (default true)."))
+				 .Bool(TEXT("friendlies"), TEXT("Detect friendly-affiliated targets (default false)."));
 		});
 	})
 	 .Required({TEXT("blueprintPath")});
@@ -385,7 +385,7 @@ static void S_ConfigureHearingConfig(FMcpSchemaBuilder& B)
 	 .Object(TEXT("hearingConfig"), TEXT("AI hearing sense configuration."),
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("hearingRange"))
-		 .Bool(TEXT("detectFriendly"), TEXT(""))
+		 .Bool(TEXT("detectFriendly"), TEXT("Accepted but ignored — affiliation detection is hard-coded (enemies+neutrals on, friendlies off)."))
 		 .Number(TEXT("maxAge"));
 	})
 	 .Required({TEXT("blueprintPath")});

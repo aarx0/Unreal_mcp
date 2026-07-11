@@ -90,9 +90,9 @@ static void S_SetProperties(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .String(TEXT("frameRate"), TEXT("Frame/display rate in fps: an integer string (e.g. \"30\"), an exact NTSC rational \"numerator/denominator\" (e.g. \"24000/1001\"), or a plain JSON number (rounded to a whole-number rate)."))
-	 .Integer(TEXT("lengthInFrames"), TEXT(""))
-	 .Integer(TEXT("playbackStart"), TEXT(""))
-	 .Integer(TEXT("playbackEnd"), TEXT(""));
+	 .Integer(TEXT("lengthInFrames"), TEXT("set_properties: playback-range length in frames from playbackStart (ignored when playbackEnd is given)."))
+	 .Integer(TEXT("playbackStart"), TEXT("set_properties: playback range start (raw tick-resolution frame number, not display-rate frames)."))
+	 .Integer(TEXT("playbackEnd"), TEXT("set_properties: playback range end (raw tick-resolution frame number; wins over lengthInFrames)."));
 }
 
 static void S_AddCamera(FMcpSchemaBuilder& B)
@@ -111,7 +111,7 @@ static void S_AddActor(FMcpSchemaBuilder& B)
 
 static void S_AddActors(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("actorNames"), TEXT(""))
+	B.Array(TEXT("actorNames"), TEXT("add_actors: level actor names (label/name/UAID) to bind as possessables; remove_actors: binding names to remove (case-insensitive)."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .Required({TEXT("actorNames")});
@@ -119,7 +119,7 @@ static void S_AddActors(FMcpSchemaBuilder& B)
 
 static void S_RemoveActors(FMcpSchemaBuilder& B)
 {
-	B.Array(TEXT("actorNames"), TEXT(""))
+	B.Array(TEXT("actorNames"), TEXT("add_actors: level actor names (label/name/UAID) to bind as possessables; remove_actors: binding names to remove (case-insensitive)."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .Required({TEXT("actorNames")});
@@ -127,7 +127,7 @@ static void S_RemoveActors(FMcpSchemaBuilder& B)
 
 static void S_AddSpawnableFromClass(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT(""))
+	B.String(TEXT("className"), TEXT("add_spawnable_from_class: class for the new spawnable; a native class name or a /Game Blueprint asset path (its generated class is used)."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
 	 .Required({TEXT("className")});
@@ -140,7 +140,7 @@ static void S_AddKeyframe(FMcpSchemaBuilder& B)
 	 .String(TEXT("bindingId"), TEXT("add_keyframe: sequence binding GUID (alternative to actorName)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("property"), TEXT("Name of the property."))
-	 .Integer(TEXT("frame"), TEXT(""))
+	 .Integer(TEXT("frame"), TEXT("add_keyframe: keyframe frame number at the sequence display rate."))
 	 // Transform tracks: structValue {location,rotation,scale}. Float property tracks: floatValue.
 	 .Number(TEXT("floatValue"), TEXT("Keyframe value for a float property track."))
 	 .Object(TEXT("structValue"), TEXT("Keyframe value for a transform track: {location:{x,y,z}, rotation:{roll,pitch,yaw}, scale:{x,y,z}}."))
@@ -151,18 +151,18 @@ static void S_AddSection(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""))
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Integer(TEXT("startFrame"), TEXT(""))
-	 .Integer(TEXT("endFrame"), TEXT(""));
+	 .Integer(TEXT("startFrame"), TEXT("add_section: section start frame (default 0; raw tick-resolution frame number)."))
+	 .Integer(TEXT("endFrame"), TEXT("add_section: section end frame (default 100; raw tick-resolution frame number)."));
 }
 
 static void S_AddTrack(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackType"), TEXT(""))
-	 .String(TEXT("trackName"), TEXT(""))
+	 .String(TEXT("trackType"), TEXT("add_track: track class to add; a UMovieSceneTrack class name or short form expanded to MovieScene<Type>Track (e.g. Audio, Event; see list_track_types)."))
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Required({TEXT("trackType")});
 }
@@ -171,7 +171,7 @@ static void S_RemoveTrack(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""));
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."));
 }
 
 static void S_ListTracks(FMcpSchemaBuilder& B)
@@ -200,7 +200,7 @@ static void S_Stop(FMcpSchemaBuilder& B)
 
 static void S_SetPlaybackSpeed(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("speed"), TEXT(""))
+	B.Number(TEXT("speed"), TEXT("set_playback_speed: playback speed multiplier applied to the open Sequencer (default 1; must be > 0)."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
@@ -215,15 +215,15 @@ static void S_SetDisplayRate(FMcpSchemaBuilder& B)
 
 static void S_SetTickResolution(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("resolution"), TEXT(""))
+	B.String(TEXT("resolution"), TEXT("set_tick_resolution: tick resolution as 'numerator/denominator' (e.g. 24000/1001) or a whole number per second; unrecognized formats keep the current resolution."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
 
 static void S_SetViewRange(FMcpSchemaBuilder& B)
 {
-	B.Number(TEXT("start"), TEXT(""))
-	 .Number(TEXT("end"), TEXT(""))
+	B.Number(TEXT("start"), TEXT("set_view_range/set_work_range: range start in seconds (default 0)."))
+	 .Number(TEXT("end"), TEXT("set_view_range/set_work_range: range end in seconds (default 10 for view, 0 for work)."))
 	 .String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."));
 }
@@ -232,32 +232,32 @@ static void S_SetWorkRange(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .Number(TEXT("start"), TEXT(""))
-	 .Number(TEXT("end"), TEXT(""));
+	 .Number(TEXT("start"), TEXT("set_view_range/set_work_range: range start in seconds (default 0)."))
+	 .Number(TEXT("end"), TEXT("set_view_range/set_work_range: range end in seconds (default 10 for view, 0 for work)."));
 }
 
 static void S_SetTrackMuted(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("muted"), TEXT(""));
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."))
+	 .Bool(TEXT("muted"), TEXT("set_track_muted: true disables evaluation of the track, false re-enables it (default true)."));
 }
 
 static void S_SetTrackSolo(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("solo"), TEXT(""));
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."))
+	 .Bool(TEXT("solo"), TEXT("set_track_solo: true solos by disabling evaluation on all other tracks, false re-enables all (default true)."));
 }
 
 static void S_SetTrackLocked(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Level Sequence asset path."))
 	 .String(TEXT("path"), TEXT("Level Sequence asset path (alias of assetPath)."))
-	 .String(TEXT("trackName"), TEXT(""))
-	 .Bool(TEXT("locked"), TEXT(""));
+	 .String(TEXT("trackName"), TEXT("add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed)."))
+	 .Bool(TEXT("locked"), TEXT("set_track_locked: true locks all the track's sections, false unlocks them (default true)."));
 }
 
 // ─── Classes ─────────────────────────────────────────────────────────────────

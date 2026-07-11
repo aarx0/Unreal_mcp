@@ -48,18 +48,18 @@ static void S_ClearDebugShapes(FMcpSchemaBuilder&) {}
 
 static void S_DebugShape(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("shapeType"), TEXT(""))
-	 .String(TEXT("shape"), TEXT(""))
+	B.String(TEXT("shapeType"), TEXT("debug_shape/particle: shape to draw, sphere|box|circle|line|point|coordinate|cylinder|cone|capsule|arrow|plane (default sphere)."))
+	 .String(TEXT("shape"), TEXT("debug_shape: alias for shapeType, read only when shapeType is omitted or sphere."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
 		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
-	 .Number(TEXT("duration"), TEXT(""))
-	 .Number(TEXT("radius"), TEXT(""))
+	 .Number(TEXT("duration"), TEXT("debug_shape/particle: draw duration in seconds (default 5)."))
+	 .Number(TEXT("radius"), TEXT("debug_shape: shape radius/size in world units, preferred over size (default 100)."))
 	 .Number(TEXT("size"), TEXT("debug_shape/particle: shape size (fallback for radius)."))
 	 .Number(TEXT("thickness"), TEXT("debug_shape/particle: line/box drawing thickness."))
-	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
+	 .Array(TEXT("color"), TEXT("debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored."), TEXT("number"))
 	 .Object(TEXT("endLocation"), TEXT("debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
@@ -79,11 +79,11 @@ static void S_Particle(FMcpSchemaBuilder& B)
 	 .Array(TEXT("rotation"), TEXT("particle/spawn_niagara: spawn rotation as [pitch, yaw, roll]."), TEXT("number"))
 	 .Number(TEXT("scale"), TEXT("particle/spawn_niagara: uniform scale (also accepts an array)."))
 	 .Bool(TEXT("autoDestroy"), TEXT("particle/spawn_niagara: destroy the spawned actor once its effect finishes."))
-	 .Number(TEXT("duration"), TEXT(""))
+	 .Number(TEXT("duration"), TEXT("debug_shape/particle: draw duration in seconds (default 5)."))
 	 .Number(TEXT("size"), TEXT("debug_shape/particle: shape size (fallback for radius)."))
 	 .Number(TEXT("thickness"), TEXT("debug_shape/particle: line/box drawing thickness."))
-	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
-	 .String(TEXT("shapeType"), TEXT(""))
+	 .Array(TEXT("color"), TEXT("debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored."), TEXT("number"))
+	 .String(TEXT("shapeType"), TEXT("debug_shape/particle: shape to draw, sphere|box|circle|line|point|coordinate|cylinder|cone|capsule|arrow|plane (default sphere)."))
 	 .Array(TEXT("boxSize"), TEXT("particle: box shape dimensions [x, y, z]."), TEXT("number"))
 	 .Object(TEXT("endLocation"), TEXT("debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -131,9 +131,9 @@ static void S_CreateDynamicLight(FMcpSchemaBuilder& B)
 		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("lightName"), TEXT("create_dynamic_light: actor label for the spawned light."))
-	 .String(TEXT("lightType"), TEXT(""))
-	 .Number(TEXT("intensity"), TEXT(""))
-	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
+	 .String(TEXT("lightType"), TEXT("create_dynamic_light: light class Point|Spot|Directional|Rect (default Point)."))
+	 .Number(TEXT("intensity"), TEXT("create_dynamic_light: light intensity applied to the light component (default 0, so omitting it yields an invisible light)."))
+	 .Array(TEXT("color"), TEXT("debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored."), TEXT("number"))
 	 .Object(TEXT("pulse"), TEXT("create_dynamic_light: pulsing light tag (enabled, frequency)."),
 		[](FMcpSchemaBuilder& S) {
 		S.Bool(TEXT("enabled")).Number(TEXT("frequency"));
@@ -170,9 +170,9 @@ static void S_CreateVolumetricFog(FMcpSchemaBuilder& B)
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
 		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
-	 .Number(TEXT("density"), TEXT(""))
-	 .Number(TEXT("scattering"), TEXT(""))
-	 .Number(TEXT("extinction"), TEXT(""))
+	 .Number(TEXT("density"), TEXT("create_volumetric_fog: exponential height fog density (default 0.05)."))
+	 .Number(TEXT("scattering"), TEXT("create_volumetric_fog: volumetric fog scattering distribution (default 0.5)."))
+	 .Number(TEXT("extinction"), TEXT("create_volumetric_fog: volumetric fog extinction scale (default 0.5)."))
 	 .String(TEXT("name"), TEXT("Name identifier."));
 }
 
@@ -220,7 +220,7 @@ static void S_CreateNiagaraRibbon(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("systemPath"), TEXT("Niagara system asset path."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
-	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
+	 .Array(TEXT("color"), TEXT("debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored."), TEXT("number"))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
@@ -233,7 +233,7 @@ static void S_CreateNiagaraRibbon(FMcpSchemaBuilder& B)
 static void S_Activate(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("systemName"), TEXT("Niagara actor/system label."))
-	 .Bool(TEXT("reset"), TEXT(""));
+	 .Bool(TEXT("reset"), TEXT("activate: restart the simulation from time zero instead of resuming (default true)."));
 }
 
 static void S_Deactivate(FMcpSchemaBuilder& B)
@@ -343,7 +343,7 @@ static void S_AddSpawnRateModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("spawnRate"), TEXT(""))
+	 .Number(TEXT("spawnRate"), TEXT("add_spawn_rate_module: particles per second; also written to a user-exposed SpawnRate parameter when the system has one (default 100)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -357,8 +357,8 @@ static void S_AddSpawnBurstModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Integer(TEXT("burstCount"), TEXT(""))
-	 .Number(TEXT("burstTime"), TEXT(""))
+	 .Integer(TEXT("burstCount"), TEXT("add_spawn_burst_module: burst particle count (default 10; echoed in the response, not applied to the module)."))
+	 .Number(TEXT("burstTime"), TEXT("add_spawn_burst_module: burst time in seconds (default 0; echoed in the response, not applied to the module)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -372,7 +372,7 @@ static void S_AddSpawnPerUnitModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("spawnPerUnit"), TEXT(""))
+	 .Number(TEXT("spawnPerUnit"), TEXT("add_spawn_per_unit_module: particles per unit of distance traveled (default 1; echoed in the response, not applied to the module)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -386,8 +386,8 @@ static void S_AddInitializeParticleModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("lifetime"), TEXT(""))
-	 .Number(TEXT("mass"), TEXT(""))
+	 .Number(TEXT("lifetime"), TEXT("add_initialize_particle_module: particle lifetime in seconds (default 2; echoed in the response, not applied to the module)."))
+	 .Number(TEXT("mass"), TEXT("add_initialize_particle_module: particle mass (default 1; echoed in the response, not applied to the module)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -414,8 +414,8 @@ static void S_AddForceModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("forceType"), TEXT(""))
-	 .Number(TEXT("forceStrength"), TEXT(""))
+	 .String(TEXT("forceType"), TEXT("add_force_module: force module to add, Gravity|Drag|Wind|Curl|Vortex|PointAttraction (default Gravity; unknown values fall back to Gravity)."))
+	 .Number(TEXT("forceStrength"), TEXT("add_force_module: force strength (default 980; echoed in the response, not applied to the module)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -429,7 +429,7 @@ static void S_AddVelocityModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("velocityMode"), TEXT(""))
+	 .String(TEXT("velocityMode"), TEXT("add_velocity_module: velocity module variant, Linear|Cone|FromPoint (default Linear)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -460,8 +460,8 @@ static void S_AddSizeModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("sizeMode"), TEXT(""))
-	 .Number(TEXT("uniformSize"), TEXT(""))
+	 .String(TEXT("sizeMode"), TEXT("add_size_module: size mode (default Uniform; echoed only -- the module added is always ScaleSpriteSize)."))
+	 .Number(TEXT("uniformSize"), TEXT("add_size_module: sprite size stored as the MCP_UniformSize user parameter (default 10)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -475,8 +475,8 @@ static void S_AddColorModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
-	 .String(TEXT("colorMode"), TEXT(""))
+	 .Array(TEXT("color"), TEXT("debug_shape/particle: [r,g,b(,a)] 0-255; create_dynamic_light: [r,g,b(,a)] or {r,g,b,a} 0-1; add_color_module: {r,g,b,a} object 0-1 stored as the MCP_Color user parameter (default white); create_niagara_ribbon: accepted but ignored."), TEXT("number"))
+	 .String(TEXT("colorMode"), TEXT("add_color_module: color mode (default Direct; echoed only -- the module added is always Color)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -534,7 +534,7 @@ static void S_AddLightRendererModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("lightRadius"), TEXT(""))
+	 .Number(TEXT("lightRadius"), TEXT("add_light_renderer_module: light renderer radius scale (default 100)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -548,10 +548,10 @@ static void S_AddCollisionModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("collisionMode"), TEXT(""))
-	 .Number(TEXT("restitution"), TEXT(""))
-	 .Number(TEXT("friction"), TEXT(""))
-	 .Bool(TEXT("dieOnCollision"), TEXT(""))
+	 .String(TEXT("collisionMode"), TEXT("add_collision_module: collision mode (default SceneDepth; echoed only -- the module added is always Collision)."))
+	 .Number(TEXT("restitution"), TEXT("add_collision_module: bounce restitution stored as the MCP_CollisionRestitution user parameter (default 0.3)."))
+	 .Number(TEXT("friction"), TEXT("add_collision_module: friction stored as the MCP_CollisionFriction user parameter (default 0.2)."))
+	 .Bool(TEXT("dieOnCollision"), TEXT("add_collision_module: kill particles on collision, stored as the MCP_DieOnCollision user parameter (default false)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -565,7 +565,7 @@ static void S_AddKillParticlesModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("killCondition"), TEXT(""))
+	 .String(TEXT("killCondition"), TEXT("add_kill_particles_module: kill condition (default Age; echoed only -- the module added is always KillParticles)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -579,7 +579,7 @@ static void S_AddCameraOffsetModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Number(TEXT("cameraOffset"), TEXT(""))
+	 .Number(TEXT("cameraOffset"), TEXT("add_camera_offset_module: camera-space offset distance stored as the MCP_CameraOffset user parameter (default 0)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -594,7 +594,7 @@ static void S_AddUserParameter(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .String(TEXT("parameterType"), TEXT(""))
+	 .String(TEXT("parameterType"), TEXT("add_user_parameter/bind_parameter_to_source: parameter type, Float|Int|Bool|Vector|LinearColor (default Float)."))
 	 .Required({TEXT("systemPath"), TEXT("parameterName")});
 }
 
@@ -629,7 +629,7 @@ static void S_BindParameterToSource(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
 	 .String(TEXT("sourceBinding"), TEXT("Niagara source binding, e.g. Emitter.Age."))
-	 .String(TEXT("parameterType"), TEXT(""))
+	 .String(TEXT("parameterType"), TEXT("add_user_parameter/bind_parameter_to_source: parameter type, Float|Int|Bool|Vector|LinearColor (default Float)."))
 	 .Required({TEXT("systemPath"), TEXT("parameterName"), TEXT("sourceBinding")});
 }
 
@@ -716,7 +716,7 @@ static void S_AddEventGenerator(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("eventName"), TEXT("Name of the event."))
-	 .String(TEXT("eventType"), TEXT(""))
+	 .String(TEXT("eventType"), TEXT("add_event_generator: event type to generate, Location|Collision|Death (default Location)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName"), TEXT("eventName")});
 }
 
@@ -731,8 +731,8 @@ static void S_AddEventReceiver(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("eventName"), TEXT("Name of the event."))
-	 .Bool(TEXT("spawnOnEvent"), TEXT(""))
-	 .Integer(TEXT("eventSpawnCount"), TEXT(""))
+	 .Bool(TEXT("spawnOnEvent"), TEXT("add_event_receiver: run the event handler on spawned particles (spawn-per-event) instead of every particle (default false)."))
+	 .Integer(TEXT("eventSpawnCount"), TEXT("add_event_receiver: particles to spawn per received event (default 1)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName"), TEXT("eventName")});
 }
 
@@ -747,8 +747,8 @@ static void S_EnableGpuSimulation(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Bool(TEXT("fixedBoundsEnabled"), TEXT(""))
-	 .Bool(TEXT("deterministicEnabled"), TEXT(""))
+	 .Bool(TEXT("fixedBoundsEnabled"), TEXT("enable_gpu_simulation: request fixed bounds (default false; echoed in the response, not applied)."))
+	 .Bool(TEXT("deterministicEnabled"), TEXT("enable_gpu_simulation: request deterministic simulation (default false; echoed in the response, not applied)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -762,8 +762,8 @@ static void S_AddSimulationStage(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .String(TEXT("stageName"), TEXT(""))
-	 .String(TEXT("stageIterationSource"), TEXT(""))
+	 .String(TEXT("stageName"), TEXT("add_simulation_stage: name for the new simulation stage."))
+	 .String(TEXT("stageIterationSource"), TEXT("add_simulation_stage: iteration source, Particles|DataInterface (default Particles)."))
 	 .Required({TEXT("systemPath"), TEXT("emitterName"), TEXT("stageName")});
 }
 

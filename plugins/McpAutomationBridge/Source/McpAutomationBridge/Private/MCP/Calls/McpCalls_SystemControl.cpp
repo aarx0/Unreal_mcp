@@ -61,10 +61,10 @@ static void S_GenerateTestStub(FMcpSchemaBuilder& B)
 static void S_RunUbt(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("target"), TEXT("run_ubt: build target (e.g. MyProjectEditor). Non-blocking: returns a buildId immediately; poll get_build_status."))
-	 .String(TEXT("platform"), TEXT(""))
-	 .String(TEXT("configuration"), TEXT(""))
+	 .String(TEXT("platform"), TEXT("run_ubt: build platform — Win64|Mac|Linux|LinuxArm64|Android|IOS|TVOS|HoloLens|VisionOS (default: host platform)."))
+	 .String(TEXT("configuration"), TEXT("run_ubt: build configuration — Debug|DebugGame|Development|Test|Shipping (default Development)."))
 	 .String(TEXT("additionalArgs"), TEXT("run_ubt: extra UBT command-line arguments (alias: arguments)."))
-	 .String(TEXT("arguments"), TEXT(""))
+	 .String(TEXT("arguments"), TEXT("run_ubt: alias of additionalArgs, read when additionalArgs is absent."))
 	 .Bool(TEXT("noUBA"), TEXT("run_ubt: pass -NoUBA (default true — UBA-built binaries break later Live Coding patches). Set false for faster UBA builds when no LC patching will follow."))
 	 .Required({TEXT("target")});
 }
@@ -102,33 +102,33 @@ static void S_ExecutePython(FMcpSchemaBuilder& B)
 
 static void S_StartSession(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("channels"), TEXT(""));
+	B.String(TEXT("channels"), TEXT("start_session: comma-separated Unreal Insights trace channel list passed to 'Trace.Start' (omit to start with default channels)."));
 }
 
 static void S_ExecuteCommand(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("command"), TEXT(""))
+	B.String(TEXT("command"), TEXT("execute_command: console command line executed via the editor/engine Exec path (security blocklist applies)."))
 	 .Required({TEXT("command")});
 }
 
 static void S_SetCvar(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("key"), TEXT(""))
-	 .String(TEXT("value"), TEXT(""))
+	B.String(TEXT("key"), TEXT("set_cvar: console variable name (e.g. r.ScreenPercentage); set_project_setting: config key within the section."))
+	 .String(TEXT("value"), TEXT("set_cvar: value to set (omit to log the cvar's current value); set_project_setting: value written to the config key."))
 	 .Required({TEXT("key")});
 }
 
 static void S_GetProjectSettings(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("section"), TEXT(""))
-	 .String(TEXT("category"), TEXT(""));
+	B.String(TEXT("section"), TEXT("set_project_setting: ini section name; bare names are normalized to /Script/<Section> and written to DefaultEngine.ini. get_project_settings: accepted but ignored (a fixed summary is returned)."))
+	 .String(TEXT("category"), TEXT("get_log/tail_log: case-insensitive substring filter on the log category name (e.g. 'LogTemp'); spawn_category: alias of categoryName, read when categoryName is absent; get_project_settings: accepted but ignored."));
 }
 
 static void S_SetProjectSetting(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("section"), TEXT(""))
-	 .String(TEXT("key"), TEXT(""))
-	 .String(TEXT("value"), TEXT(""))
+	B.String(TEXT("section"), TEXT("set_project_setting: ini section name; bare names are normalized to /Script/<Section> and written to DefaultEngine.ini. get_project_settings: accepted but ignored (a fixed summary is returned)."))
+	 .String(TEXT("key"), TEXT("set_cvar: console variable name (e.g. r.ScreenPercentage); set_project_setting: config key within the section."))
+	 .String(TEXT("value"), TEXT("set_cvar: value to set (omit to log the cvar's current value); set_project_setting: value written to the config key."))
 	 .Required({TEXT("section"), TEXT("key")});
 }
 
@@ -137,7 +137,7 @@ static void S_GetLog(FMcpSchemaBuilder& B)
 	B.Integer(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
 	 .Integer(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
 	 .String(TEXT("verbosity"), TEXT("get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all)."))
-	 .String(TEXT("category"), TEXT(""))
+	 .String(TEXT("category"), TEXT("get_log/tail_log: case-insensitive substring filter on the log category name (e.g. 'LogTemp'); spawn_category: alias of categoryName, read when categoryName is absent; get_project_settings: accepted but ignored."))
 	 .String(TEXT("contains"), TEXT("get_log/tail_log: case-insensitive substring the message must contain."));
 }
 
@@ -146,14 +146,14 @@ static void S_TailLog(FMcpSchemaBuilder& B)
 	B.Integer(TEXT("count"), TEXT("get_log/tail_log: max lines to return (default 100, max 2000)."))
 	 .Integer(TEXT("sinceSeq"), TEXT("get_log/tail_log: return only lines with seq > this (incremental polling; response carries nextSeq + dropped)."))
 	 .String(TEXT("verbosity"), TEXT("get_log/tail_log: minimum severity to include — Fatal|Error|Warning|Display|Log|Verbose|VeryVerbose (default Verbose = all)."))
-	 .String(TEXT("category"), TEXT(""))
+	 .String(TEXT("category"), TEXT("get_log/tail_log: case-insensitive substring filter on the log category name (e.g. 'LogTemp'); spawn_category: alias of categoryName, read when categoryName is absent; get_project_settings: accepted but ignored."))
 	 .String(TEXT("contains"), TEXT("get_log/tail_log: case-insensitive substring the message must contain."));
 }
 
 static void S_SpawnCategory(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("categoryName"), TEXT("spawn_category: gameplay debugger category name (falls back to 'category' if absent)."))
-	 .String(TEXT("category"), TEXT(""))
+	 .String(TEXT("category"), TEXT("get_log/tail_log: case-insensitive substring filter on the log category name (e.g. 'LogTemp'); spawn_category: alias of categoryName, read when categoryName is absent; get_project_settings: accepted but ignored."))
 	 .Bool(TEXT("enabled"), TEXT("Whether the item/feature is enabled."));
 }
 
@@ -170,7 +170,7 @@ static void S_ShowFps(FMcpSchemaBuilder& B)
 
 static void S_SetScalability(FMcpSchemaBuilder& B)
 {
-	B.Integer(TEXT("level"), TEXT(""));
+	B.Integer(TEXT("level"), TEXT("set_scalability: overall quality level 0=Low|1=Medium|2=High|3=Epic|4=Cinematic (default 3)."));
 }
 
 static void S_SetResolutionScale(FMcpSchemaBuilder& B)
