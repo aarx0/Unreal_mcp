@@ -35,7 +35,6 @@ class_path
 commands
 function
 includeSoftDependencies
-origin
 params
 payloadBase64
 player_index

@@ -5,29 +5,24 @@
 // Provides landscape creation, heightmap modification, layer painting,
 // sculpting, material assignment, and grass type management.
 //
-// HANDLERS IMPLEMENTED (7 total):
+// HANDLERS IMPLEMENTED (6 total):
 // -----------------------------------------------------------------------------
-// Section A - Landscape Dispatch:
-//   - HandleEditLandscape           : Dispatcher for edit operations (modify_heightmap,
-//                                     paint_landscape_layer, sculpt_landscape,
-//                                     set_landscape_material)
-//
-// Section B - Landscape Creation:
+// Section A - Landscape Creation:
 //   - HandleCreateLandscape         : Create a new landscape actor with configurable
 //                                     components, quads, material, and location
 //
-// Section C - Heightmap Operations:
+// Section B - Heightmap Operations:
 //   - HandleModifyHeightmap         : Modify heightmap data (set/raise/lower/flatten)
 //                                     with optional region targeting and flush control
 //   - HandleSculptLandscape         : Brush-based sculpting at world-space positions
 //                                     (Raise/Lower/Flatten tool modes)
 //
-// Section D - Layer & Material Operations:
+// Section C - Layer & Material Operations:
 //   - HandlePaintLandscapeLayer     : Paint weight-map layers with auto-creation
 //                                     of missing layer info objects
 //   - HandleSetLandscapeMaterial    : Assign a material to a landscape actor
 //
-// Section E - Grass Type Management:
+// Section D - Grass Type Management:
 //   - HandleCreateLandscapeGrassType: Create ULandscapeGrassType asset with
 //                                     configurable density/scale/rotation
 //
@@ -167,44 +162,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogMcpLandscapeHandlers, Log, All);
 
 // =============================================================================
-// Section A: Landscape Dispatch
-// =============================================================================
-
-/**
- * HandleEditLandscape
- *
- * Top-level dispatcher for landscape edit operations.
- * Delegates to specific handlers based on action type:
- *   - modify_heightmap       -> HandleModifyHeightmap
- *   - paint_landscape_layer  -> HandlePaintLandscapeLayer
- *   - sculpt_landscape       -> HandleSculptLandscape
- *   - set_landscape_material -> HandleSetLandscapeMaterial
- *
- * @param RequestId  Unique request identifier for response correlation
- * @param Action     Action string (matched by sub-handlers)
- * @param Payload    JSON payload forwarded to sub-handler
- * @param RequestingSocket  WebSocket connection for response delivery
- * @return true if any sub-handler claimed the action
- */
-bool McpHandlers::BuildEnvironment::HandleEditLandscape(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-  // Dispatch to specific edit operations implemented below
-  if (HandleModifyHeightmap(S, RequestId, Action, Payload, RequestingSocket))
-    return true;
-  if (HandlePaintLandscapeLayer(S, RequestId, Action, Payload, RequestingSocket))
-    return true;
-  if (HandleSculptLandscape(S, RequestId, Action, Payload, RequestingSocket))
-    return true;
-  if (HandleSetLandscapeMaterial(S, RequestId, Action, Payload, RequestingSocket))
-    return true;
-  return false;
-}
-
-// =============================================================================
-// Section B: Landscape Creation
+// Section A: Landscape Creation
 // =============================================================================
 
 /**
@@ -599,7 +557,7 @@ bool McpHandlers::BuildEnvironment::HandleCreateLandscape(
 }
 
 // =============================================================================
-// Section C: Heightmap Operations
+// Section B: Heightmap Operations
 // =============================================================================
 
 /**
@@ -968,7 +926,7 @@ bool McpHandlers::BuildEnvironment::HandleModifyHeightmap(
 }
 
 // =============================================================================
-// Section C (continued): Sculpt Landscape
+// Section B (continued): Sculpt Landscape
 // =============================================================================
 
 /**
@@ -1273,7 +1231,7 @@ bool McpHandlers::BuildEnvironment::HandleSculptLandscape(
 }
 
 // =============================================================================
-// Section D: Layer & Material Operations
+// Section C: Layer & Material Operations
 // =============================================================================
 
 /**
@@ -1708,7 +1666,7 @@ bool McpHandlers::BuildEnvironment::HandleSetLandscapeMaterial(
 }
 
 // =============================================================================
-// Section E: Grass Type Management
+// Section D: Grass Type Management
 // =============================================================================
 
 /**

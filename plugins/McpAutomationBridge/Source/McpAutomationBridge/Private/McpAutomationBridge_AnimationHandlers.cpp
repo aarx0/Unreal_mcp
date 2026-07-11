@@ -2702,15 +2702,141 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysSetupRetargeting(
 #endif
 }
 
+/**
+ * @brief Handles a "play_montage" automation request by locating an actor
+ * and playing the specified animation montage in the editor.
+ *
+ * Processes the payload to resolve an actor by name and a montage asset path,
+ * loads the montage, and initiates playback on the actor's skeletal mesh
+ * component (using the actor's AnimInstance when available or single-node
+ * playback otherwise). Sends a structured automation response reporting
+ * success, playback length, and error details when applicable.
+ *
+ * @param RequestId Unique identifier for the incoming automation request;
+ * included in responses.
+ * @param Payload JSON payload containing fields:
+ *   - "actorName" (string, required): name or label of the target actor in the
+ * editor.
+ *   - "montagePath" or "assetPath" (string, required): asset path to the
+ * UAnimMontage.
+ *   - "playRate" (number, optional): playback speed (default 1.0).
+ * @param RequestingSocket Optional websocket that originated the request; used
+ * to send the response.
+ *
+ * @return true after sending a response (success or error).
+ */
 bool McpHandlers::AnimationPhysics::HandleAnimPhysPlayMontage(
     UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
-  // Dispatch to the dedicated handler, but force the action name to what it
-  // expects
-  return HandlePlayAnimMontage(S, RequestId, TEXT("play_anim_montage"), Payload,
-                               RequestingSocket);
+  if (!Payload.IsValid()) {
+    S.SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("play_montage payload missing"),
+                        TEXT("INVALID_PAYLOAD"));
+    return true;
+  }
+
+  FString ActorName;
+  if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
+      ActorName.IsEmpty()) {
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
+                        TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  FString MontagePath;
+  // Check both montagePath and assetPath for flexibility
+  if (!Payload->TryGetStringField(TEXT("montagePath"), MontagePath) ||
+      MontagePath.IsEmpty()) {
+    Payload->TryGetStringField(TEXT("assetPath"), MontagePath);
+  }
+
+  if (MontagePath.IsEmpty()) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(TEXT("error"), TEXT("montagePath required"));
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("montagePath required"), Resp,
+                           TEXT("INVALID_ARGUMENT"));
+    return true;
+  }
+
+  double PlayRate = 1.0;
+  Payload->TryGetNumberField(TEXT("playRate"), PlayRate);
+
+  AActor *TargetActor = S.FindActorByName(ActorName);
+
+  if (!TargetActor) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(
+        TEXT("error"),
+        FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+    Resp->SetStringField(TEXT("actorName"), ActorName);
+    Resp->SetStringField(TEXT("montagePath"), MontagePath);
+    Resp->SetNumberField(TEXT("playRate"), PlayRate);
+
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("Actor not found"), Resp,
+                           TEXT("ACTOR_NOT_FOUND"));
+    return true;
+  }
+
+  USkeletalMeshComponent *SkelMeshComp =
+      TargetActor->FindComponentByClass<USkeletalMeshComponent>();
+  if (!SkelMeshComp) {
+    S.SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("Skeletal mesh component not found"),
+                        TEXT("COMPONENT_NOT_FOUND"));
+    return true;
+  }
+
+  if (!UEditorAssetLibrary::DoesAssetExist(MontagePath)) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(
+        TEXT("error"),
+        FString::Printf(TEXT("Montage asset not found: %s"), *MontagePath));
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("Montage not found"), Resp,
+                           TEXT("ASSET_NOT_FOUND"));
+    return true;
+  }
+
+  UAnimMontage *Montage = LoadObject<UAnimMontage>(nullptr, *MontagePath);
+  if (!Montage) {
+    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+    Resp->SetStringField(
+        TEXT("error"),
+        FString::Printf(TEXT("Failed to load montage: %s"), *MontagePath));
+    Resp->SetStringField(TEXT("actorName"), ActorName);
+    Resp->SetStringField(TEXT("montagePath"), MontagePath);
+    Resp->SetNumberField(TEXT("playRate"), PlayRate);
+
+    S.SendAutomationResponse(RequestingSocket, RequestId, false,
+                           TEXT("Failed to load montage"), Resp,
+                           TEXT("ASSET_LOAD_FAILED"));
+    return true;
+  }
+
+  float MontageLength = 0.f;
+  if (UAnimInstance *AnimInst = SkelMeshComp->GetAnimInstance()) {
+    MontageLength =
+        AnimInst->Montage_Play(Montage, static_cast<float>(PlayRate));
+  } else {
+    SkelMeshComp->SetAnimationMode(EAnimationMode::Type::AnimationSingleNode);
+    SkelMeshComp->PlayAnimation(Montage, false);
+  }
+
+  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
+  Resp->SetBoolField(TEXT("success"), true);
+  Resp->SetStringField(TEXT("actorName"), ActorName);
+  Resp->SetStringField(TEXT("montagePath"), MontagePath);
+  Resp->SetNumberField(TEXT("playRate"), PlayRate);
+  Resp->SetNumberField(TEXT("montageLength"), MontageLength);
+  Resp->SetBoolField(TEXT("playing"), true);
+
+  S.SendAutomationResponse(RequestingSocket, RequestId, true,
+                         TEXT("Animation montage playing"), Resp, FString());
+  return true;
 #else
   S.SendAutomationResponse(
       RequestingSocket, RequestId, false,
@@ -2833,158 +2959,6 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysCreatePoseLibrary(
 // McpAutomationBridgeSubsystem.cpp - do not duplicate definitions here.
 // The functions are declared in the subsystem header and implemented once
 // to avoid LNK2005 duplicate symbol linker errors.
-
-/**
- * @brief Handles a "play_anim_montage" automation request by locating an actor
- * and playing the specified animation montage in the editor.
- *
- * Processes the payload to resolve an actor by name and a montage asset path,
- * loads the montage, and initiates playback on the actor's skeletal mesh
- * component (using the actor's AnimInstance when available or single-node
- * playback otherwise). Sends a structured automation response reporting
- * success, playback length, and error details when applicable.
- *
- * @param RequestId Unique identifier for the incoming automation request;
- * included in responses.
- * @param Action The action string provided by the request; this handler
- * responds when the action equals "play_anim_montage".
- * @param Payload JSON payload containing fields:
- *   - "actorName" (string, required): name or label of the target actor in the
- * editor.
- *   - "montagePath" or "assetPath" (string, required): asset path to the
- * UAnimMontage.
- *   - "playRate" (number, optional): playback speed (default 1.0).
- * @param RequestingSocket Optional websocket that originated the request; used
- * to send the response.
- *
- * @return true if the request was handled (a response was sent), false if the
- * handler did not claim the action.
- */
-bool McpHandlers::AnimationPhysics::HandlePlayAnimMontage(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const FString &Action,
-    const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle RequestingSocket) {
-  const FString Lower = Action.ToLower();
-  if (!Lower.Equals(TEXT("play_anim_montage"), ESearchCase::IgnoreCase)) {
-    return false;
-  }
-
-#if WITH_EDITOR
-  if (!Payload.IsValid()) {
-    S.SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("play_anim_montage payload missing"),
-                        TEXT("INVALID_PAYLOAD"));
-    return true;
-  }
-
-  FString ActorName;
-  if (!Payload->TryGetStringField(TEXT("actorName"), ActorName) ||
-      ActorName.IsEmpty()) {
-    S.SendAutomationError(RequestingSocket, RequestId, TEXT("actorName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
-  FString MontagePath;
-  // Check both montagePath and assetPath for flexibility
-  if (!Payload->TryGetStringField(TEXT("montagePath"), MontagePath) ||
-      MontagePath.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("assetPath"), MontagePath);
-  }
-
-  if (MontagePath.IsEmpty()) {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(TEXT("error"), TEXT("montagePath required"));
-    S.SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("montagePath required"), Resp,
-                           TEXT("INVALID_ARGUMENT"));
-    return true;
-  }
-
-  double PlayRate = 1.0;
-  Payload->TryGetNumberField(TEXT("playRate"), PlayRate);
-
-  AActor *TargetActor = S.FindActorByName(ActorName);
-
-  if (!TargetActor) {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(
-        TEXT("error"),
-        FString::Printf(TEXT("Actor not found: %s"), *ActorName));
-    Resp->SetStringField(TEXT("actorName"), ActorName);
-    Resp->SetStringField(TEXT("montagePath"), MontagePath);
-    Resp->SetNumberField(TEXT("playRate"), PlayRate);
-
-    S.SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("Actor not found"), Resp,
-                           TEXT("ACTOR_NOT_FOUND"));
-    return true;
-  }
-
-  USkeletalMeshComponent *SkelMeshComp =
-      TargetActor->FindComponentByClass<USkeletalMeshComponent>();
-  if (!SkelMeshComp) {
-    S.SendAutomationError(RequestingSocket, RequestId,
-                        TEXT("Skeletal mesh component not found"),
-                        TEXT("COMPONENT_NOT_FOUND"));
-    return true;
-  }
-
-  if (!UEditorAssetLibrary::DoesAssetExist(MontagePath)) {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(
-        TEXT("error"),
-        FString::Printf(TEXT("Montage asset not found: %s"), *MontagePath));
-    S.SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("Montage not found"), Resp,
-                           TEXT("ASSET_NOT_FOUND"));
-    return true;
-  }
-
-  UAnimMontage *Montage = LoadObject<UAnimMontage>(nullptr, *MontagePath);
-  if (!Montage) {
-    TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-    Resp->SetStringField(
-        TEXT("error"),
-        FString::Printf(TEXT("Failed to load montage: %s"), *MontagePath));
-    Resp->SetStringField(TEXT("actorName"), ActorName);
-    Resp->SetStringField(TEXT("montagePath"), MontagePath);
-    Resp->SetNumberField(TEXT("playRate"), PlayRate);
-
-    S.SendAutomationResponse(RequestingSocket, RequestId, false,
-                           TEXT("Failed to load montage"), Resp,
-                           TEXT("ASSET_LOAD_FAILED"));
-    return true;
-  }
-
-  float MontageLength = 0.f;
-  if (UAnimInstance *AnimInst = SkelMeshComp->GetAnimInstance()) {
-    MontageLength =
-        AnimInst->Montage_Play(Montage, static_cast<float>(PlayRate));
-  } else {
-    SkelMeshComp->SetAnimationMode(EAnimationMode::Type::AnimationSingleNode);
-    SkelMeshComp->PlayAnimation(Montage, false);
-  }
-
-  TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
-  Resp->SetBoolField(TEXT("success"), true);
-  Resp->SetStringField(TEXT("actorName"), ActorName);
-  Resp->SetStringField(TEXT("montagePath"), MontagePath);
-  Resp->SetNumberField(TEXT("playRate"), PlayRate);
-  Resp->SetNumberField(TEXT("montageLength"), MontageLength);
-  Resp->SetBoolField(TEXT("playing"), true);
-
-  S.SendAutomationResponse(RequestingSocket, RequestId, true,
-                         TEXT("Animation montage playing"), Resp, FString());
-  return true;
-#else
-  S.SendAutomationResponse(RequestingSocket, RequestId, false,
-                         TEXT("play_anim_montage requires editor build"),
-                         nullptr, TEXT("NOT_IMPLEMENTED"));
-  return true;
-#endif
-}
 
 /**
  * @brief Enables ragdoll physics on a named actor's skeletal mesh in the

@@ -14,8 +14,6 @@ class UMcpAutomationBridgeSubsystem;
 
 namespace McpHandlers::BuildEnvironment
 {
-bool HandleEditLandscape(UMcpAutomationBridgeSubsystem& S, const FString& RequestId, const FString& Action,
-             const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleCreateLandscape(UMcpAutomationBridgeSubsystem& S, const FString& RequestId, const FString& Action,
              const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle Socket);
 bool HandleModifyHeightmap(UMcpAutomationBridgeSubsystem& S, const FString& RequestId, const FString& Action,
