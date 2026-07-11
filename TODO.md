@@ -165,6 +165,17 @@ E2 sweep find. `HandleMoveAsset` (`AssetWorkflowHandlers.cpp:1825`) is one line:
 `{sourcePath, assetPath, destinationPath, newName}` while `S_Rename` requires nothing — identical
 behavior, two validation contracts. Consolidation-pass input (keep one action, or align decls).
 
+### [ ] 2026-07-10 — nested-contract wave follow-ups (from the 351-param audit)
+Logged at the wave's close (machinery 73073c18, authoring 2107c684/802eafea/+B): (a) DEAD READS —
+add_force_module.forceVector + add_velocity_module.velocity (NiagaraAuthoringHandlers ~1287/~1388)
+parsed but never applied; set_spline_point_tangents.leaveTangent read-then-discarded;
+configure_player_start.location/rotation parsed-never-applied (ManageNetworking) — each wants
+wire-or-retire. (b) set_scs_transform RESETS omitted channels to identity/1 while modify_scs
+PRESERVES them — reconcile the semantics or document the split. (c) ArrayOfObjects item schemas
+deliberately not authored this wave (none declare element members, so element-level gates are
+no-ops) — authoring them publishes element contracts and activates per-element validation;
+the audits' element classifications are in the three NESTED_AUDIT_*.md session reports.
+
 ### [x] 2026-07-10 — two orphaned handlers left standing by the build_environment de-member (delete candidates)
 RESOLVED same day (kill batch, per Aaron's "extreme prejudice"): HandleWorldPartitionAction —
 whole WorldPartitionHandlers.cpp/.h deleted (647+21 lines, never routed); HandleEditLandscape —
@@ -181,7 +192,12 @@ to finish the de-member but are dispatched nowhere. Delete both (WorldPartitionH
 empties entirely) after a fresh zero-caller grep + full build; also `HandlePlayAnimMontage`
 (AnimationHandlers.cpp, see the ragdoll entry) belongs to the same wire-or-retire cleanup batch.
 
-### [ ] 2026-07-10 — remaining unbounded list-style actions (limit-parity follow-up)
+### [x] 2026-07-10 — remaining unbounded list-style actions (limit-parity follow-up)
+CLOSED same day: inspect/control_actor find_by_tag + control_actor find_by_name gained limit
+(default 50, clamp [1,200], matched/truncated) matching find_by_class; push/pop_sound_mix also
+aligned onto the sibling mixName→mix→name chain with RequiredAnyOf replacing the bare
+Required(mixName). get_selected_actors deliberately left (naturally bounded).
+Original find below.
 Found while adding className/pathContains/limit to inspect list_objects and limit to both
 find_by_class variants (default 50, clamp [1,200], matched+truncated response fields — mirrors
 find_objects). Same gap, not fixed: `inspect find_by_tag` (HandleInspectFindByTag),

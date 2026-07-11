@@ -440,6 +440,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "lodIndex": {
@@ -605,6 +610,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "relativeRotation": {
@@ -862,6 +872,10 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y"
+          ],
           "type": "object"
         },
         "vectorValue": {
@@ -1016,6 +1030,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "assetPath": {
@@ -1199,6 +1218,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "locations": {
@@ -1356,6 +1380,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "properties": {
@@ -1469,6 +1498,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "sizeX": {
@@ -1849,6 +1883,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "visible": {
@@ -2205,7 +2244,7 @@
           "type": "integer"
         },
         "limit": {
-          "description": "find_by_class: max actors returned (default 50, cap 200).",
+          "description": "find_by_tag: max actors returned (default 50, cap 200).",
           "type": "integer"
         },
         "markDirty": {
@@ -2281,6 +2320,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         }
       },
@@ -2599,6 +2643,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "enemies": {
@@ -2762,6 +2811,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "loseSightRadius": {
@@ -2959,6 +3013,14 @@
               },
               "type": "object"
             },
+            "enemies": {
+              "description": "Flat alias of detectionByAffiliation.enemies.",
+              "type": "boolean"
+            },
+            "friendlies": {
+              "description": "Flat alias of detectionByAffiliation.friendlies.",
+              "type": "boolean"
+            },
             "loseSightRadius": {
               "type": "number"
             },
@@ -2967,6 +3029,10 @@
             },
             "nearClippingRadius": {
               "type": "number"
+            },
+            "neutrals": {
+              "description": "Flat alias of detectionByAffiliation.neutrals.",
+              "type": "boolean"
             },
             "peripheralVisionAngle": {
               "type": "number"
@@ -3009,6 +3075,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "stateName": {
@@ -4529,6 +4600,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "loopCount": {
@@ -5357,7 +5433,7 @@
           "type": "number"
         },
         "location": {
-          "description": "3D location (x, y, z).",
+          "description": "2D graph-node position (x, y).",
           "properties": {
             "x": {
               "description": "X coordinate.",
@@ -5366,16 +5442,11 @@
             "y": {
               "description": "Y coordinate.",
               "type": "number"
-            },
-            "z": {
-              "description": "Z coordinate.",
-              "type": "number"
             }
           },
           "required": [
             "x",
-            "y",
-            "z"
+            "y"
           ],
           "type": "object"
         },
@@ -5704,7 +5775,7 @@
           "type": "string"
         },
         "scale": {
-          "description": "3D scale (x, y, z).",
+          "description": "set_render_transform: 2D scale (x, y).",
           "properties": {
             "x": {
               "description": "X scale.",
@@ -5713,17 +5784,8 @@
             "y": {
               "description": "Y scale.",
               "type": "number"
-            },
-            "z": {
-              "description": "Z scale.",
-              "type": "number"
             }
           },
-          "required": [
-            "x",
-            "y",
-            "z"
-          ],
           "type": "object"
         },
         "scrollBarVisibility": {
@@ -6685,6 +6747,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "eventName": {
@@ -6779,6 +6846,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "mass": {
@@ -7581,6 +7653,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "collisionType": {
@@ -7650,6 +7727,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "distance": {
@@ -7776,6 +7858,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "lodCount": {
@@ -7875,6 +7962,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "preserveFeatures": {
@@ -7932,34 +8024,12 @@
           "type": "number"
         },
         "rotation": {
-          "description": "3D rotation (pitch, yaw, roll).",
-          "properties": {
-            "pitch": {
-              "type": "number"
-            },
-            "roll": {
-              "type": "number"
-            },
-            "yaw": {
-              "type": "number"
-            }
-          },
-          "type": "object"
+          "description": "transform_uvs: UV rotation angle in degrees (default 0).",
+          "type": "number"
         },
         "scale": {
-          "description": "3D scale (x, y, z).",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
+          "description": "project_uv: uniform projection scale applied to the UVs (default 1).",
+          "type": "number"
         },
         "scaleEnd": {
           "description": "sweep/extrude_along_spline: cross-section scale at the path end.",
@@ -9083,6 +9153,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "instanceRotation": {
@@ -9169,6 +9244,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "nodeClass": {
@@ -9318,6 +9398,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "volumeName": {
