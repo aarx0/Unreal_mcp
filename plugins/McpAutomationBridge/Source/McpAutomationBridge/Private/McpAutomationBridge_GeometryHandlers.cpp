@@ -140,21 +140,22 @@ static FVector ReadVectorFromPayload(const TSharedPtr<FJsonObject>& Payload, con
         );
     }
 
-    // Try object format {x, y, z}
+    // Try object format {x, y, z}; missing components fall back to the per-component Default
+    // (so a partial scale object keeps 1 on the unspecified axes rather than collapsing to 0).
     const TSharedPtr<FJsonObject>* ObjPtr;
     if (Payload->TryGetObjectField(FieldName, ObjPtr))
     {
         return FVector(
-            GetJsonNumberField((*ObjPtr), TEXT("x")),
-            GetJsonNumberField((*ObjPtr), TEXT("y")),
-            GetJsonNumberField((*ObjPtr), TEXT("z"))
+            GetJsonNumberField((*ObjPtr), TEXT("x"), Default.X),
+            GetJsonNumberField((*ObjPtr), TEXT("y"), Default.Y),
+            GetJsonNumberField((*ObjPtr), TEXT("z"), Default.Z)
         );
     }
 
     return Default;
 }
 
-// Helper to read FRotator from JSON (supports both {pitch,yaw,roll} and {x,y,z} formats)
+// Helper to read FRotator from JSON (supports {pitch,yaw,roll} object and [pitch,yaw,roll] array)
 static FRotator ReadRotatorFromPayload(const TSharedPtr<FJsonObject>& Payload, const TCHAR* FieldName, FRotator Default = FRotator::ZeroRotator)
 {
     if (!Payload.IsValid())
@@ -171,11 +172,10 @@ static FRotator ReadRotatorFromPayload(const TSharedPtr<FJsonObject>& Payload, c
         );
     }
 
-    // Try object format {pitch, yaw, roll} or {x, y, z}
+    // Try object format {pitch, yaw, roll}
     const TSharedPtr<FJsonObject>* ObjPtr;
     if (Payload->TryGetObjectField(FieldName, ObjPtr))
     {
-        // Check for {pitch, yaw, roll} format first
         if ((*ObjPtr)->HasField(TEXT("pitch")) || (*ObjPtr)->HasField(TEXT("yaw")) || (*ObjPtr)->HasField(TEXT("roll")))
         {
             return FRotator(
@@ -184,12 +184,6 @@ static FRotator ReadRotatorFromPayload(const TSharedPtr<FJsonObject>& Payload, c
                 GetJsonNumberField((*ObjPtr), TEXT("roll"), 0.0)
             );
         }
-        // Fallback to {x, y, z} format (x=Pitch, y=Yaw, z=Roll)
-        return FRotator(
-            GetJsonNumberField((*ObjPtr), TEXT("x")),
-            GetJsonNumberField((*ObjPtr), TEXT("y")),
-            GetJsonNumberField((*ObjPtr), TEXT("z"))
-        );
     }
 
     return Default;

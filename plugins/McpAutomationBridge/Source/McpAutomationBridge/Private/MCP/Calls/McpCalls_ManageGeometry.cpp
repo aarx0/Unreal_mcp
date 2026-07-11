@@ -42,7 +42,8 @@ static void S_Transform(FMcpSchemaBuilder& B)
 {
 	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -338,7 +339,8 @@ static void S_Extrude(FMcpSchemaBuilder& B)
 	 .Number(TEXT("distance"), TEXT("Distance value."))
 	 .Object(TEXT("direction"), TEXT("extrude: direction vector (x, y, z) to extrude along (default +Z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Required({TEXT("actorName")});
 }
@@ -476,7 +478,8 @@ static void S_LatticeDeform(FMcpSchemaBuilder& B)
 	 .Number(TEXT("strength"), TEXT("Strength or weight."))
 	 .Object(TEXT("position"), TEXT("lattice_deform: deformation center (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("radius"), TEXT("Radius value."))
 	 .StringEnum(TEXT("axis"), {
@@ -581,7 +584,8 @@ static void S_ArrayRadial(FMcpSchemaBuilder& B)
 	 .Integer(TEXT("count"), TEXT("array_linear/array_radial/duplicate_along_spline: number of copies."))
 	 .Object(TEXT("center"), TEXT("array_radial: center of the radial array (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .StringEnum(TEXT("axis"), {
 		TEXT("X"),
@@ -611,10 +615,7 @@ static void S_ProjectUV(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
 	 .String(TEXT("projectionType"), TEXT("project_uv: projection mode (e.g. box, planar, cylindrical)."))
-	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
-		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
-		})
+	 .Number(TEXT("scale"), TEXT("project_uv: uniform projection scale applied to the UVs (default 1)."))
 	 .Integer(TEXT("uvChannel"), TEXT("UV channel index (0-7)."))
 	 .Object(TEXT("uvScale"), TEXT("UV scale."),
 		[](FMcpSchemaBuilder& S) {
@@ -635,10 +636,7 @@ static void S_TransformUVs(FMcpSchemaBuilder& B)
 	 .Number(TEXT("translateV"), TEXT("transform_uvs: V-axis translation."))
 	 .Number(TEXT("scaleU"), TEXT("transform_uvs: U-axis scale."))
 	 .Number(TEXT("scaleV"), TEXT("transform_uvs: V-axis scale."))
-	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
-		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
-		})
+	 .Number(TEXT("rotation"), TEXT("transform_uvs: UV rotation angle in degrees (default 0)."))
 	 .Required({TEXT("actorName")});
 }
 

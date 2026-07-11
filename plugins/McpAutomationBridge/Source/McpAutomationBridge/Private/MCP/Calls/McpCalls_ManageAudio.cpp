@@ -81,7 +81,7 @@ static void S_PlaySoundAtLocation(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("soundPath"), TEXT("Sound asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("volume"), TEXT(""))
@@ -113,7 +113,7 @@ static void S_CreateAmbientSound(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("soundPath"), TEXT("Sound asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Number(TEXT("volume"), TEXT(""))
 	 .Number(TEXT("pitch"), TEXT(""))
 	 .Number(TEXT("startTime"), TEXT(""))
@@ -126,7 +126,7 @@ static void S_SpawnSoundAtLocation(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("soundPath"), TEXT("Sound asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("volume"), TEXT(""))
@@ -215,7 +215,7 @@ static void S_CreateAudioComponent(FMcpSchemaBuilder& B)
 	B.String(TEXT("soundPath"), TEXT("Sound asset path."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .String(TEXT("attachTo"), TEXT("create_audio_component: actor to attach the component to (alias of actorName)."))
@@ -278,7 +278,7 @@ static void S_CreateReverbZone(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("size"), TEXT("3D scale (x, y, z)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .String(TEXT("reverbEffect"), TEXT(""))

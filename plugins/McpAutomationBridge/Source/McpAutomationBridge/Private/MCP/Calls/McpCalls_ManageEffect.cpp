@@ -52,7 +52,8 @@ static void S_DebugShape(FMcpSchemaBuilder& B)
 	 .String(TEXT("shape"), TEXT(""))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Number(TEXT("duration"), TEXT(""))
 	 .Number(TEXT("radius"), TEXT(""))
@@ -61,7 +62,8 @@ static void S_DebugShape(FMcpSchemaBuilder& B)
 	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
 	 .Object(TEXT("endLocation"), TEXT("debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Required({TEXT("location")});
 }
@@ -71,7 +73,8 @@ static void S_Particle(FMcpSchemaBuilder& B)
 	B.String(TEXT("preset"), TEXT("Particle preset or asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Array(TEXT("rotation"), TEXT("particle/spawn_niagara: spawn rotation as [pitch, yaw, roll]."), TEXT("number"))
 	 .Number(TEXT("scale"), TEXT("particle/spawn_niagara: uniform scale (also accepts an array)."))
@@ -84,7 +87,8 @@ static void S_Particle(FMcpSchemaBuilder& B)
 	 .Array(TEXT("boxSize"), TEXT("particle: box shape dimensions [x, y, z]."), TEXT("number"))
 	 .Object(TEXT("endLocation"), TEXT("debug_shape/particle: end point for line/cylinder/arrow shapes (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("direction"), TEXT("particle: cone shape direction (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -123,7 +127,8 @@ static void S_CreateDynamicLight(FMcpSchemaBuilder& B)
 {
 	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("lightName"), TEXT("create_dynamic_light: actor label for the spawned light."))
 	 .String(TEXT("lightType"), TEXT(""))
@@ -146,7 +151,8 @@ static void S_SpawnNiagara(FMcpSchemaBuilder& B)
 	B.String(TEXT("systemPath"), TEXT("Niagara system asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Array(TEXT("rotation"), TEXT("particle/spawn_niagara: spawn rotation as [pitch, yaw, roll]."), TEXT("number"))
 	 .Number(TEXT("scale"), TEXT("particle/spawn_niagara: uniform scale (also accepts an array)."))
@@ -161,7 +167,8 @@ static void S_CreateVolumetricFog(FMcpSchemaBuilder& B)
 {
 	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Number(TEXT("density"), TEXT(""))
 	 .Number(TEXT("scattering"), TEXT(""))
@@ -175,7 +182,8 @@ static void S_CreateParticleTrail(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitter"), TEXT("Emitter name alias."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
@@ -187,7 +195,8 @@ static void S_CreateEnvironmentEffect(FMcpSchemaBuilder& B)
 	B.String(TEXT("systemPath"), TEXT("Niagara system asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
@@ -199,7 +208,8 @@ static void S_CreateImpactEffect(FMcpSchemaBuilder& B)
 	B.String(TEXT("systemPath"), TEXT("Niagara system asset path."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
@@ -213,7 +223,8 @@ static void S_CreateNiagaraRibbon(FMcpSchemaBuilder& B)
 	 .Array(TEXT("color"), TEXT(""), TEXT("number"))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Required({TEXT("systemPath")});

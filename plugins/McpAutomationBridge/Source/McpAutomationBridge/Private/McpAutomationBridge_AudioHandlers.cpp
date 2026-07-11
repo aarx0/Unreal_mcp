@@ -910,20 +910,10 @@ bool McpHandlers::Audio::HandleAudioPlaySoundAtLocation(UMcpAutomationBridgeSubs
     return true;
   }
 
-  FVector Location = FVector::ZeroVector;
-  FRotator Rotation = FRotator::ZeroRotator;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
-  const TArray<TSharedPtr<FJsonValue>> *RotArr;
-  if (Payload->TryGetArrayField(TEXT("rotation"), RotArr) && RotArr &&
-      RotArr->Num() >= 3) {
-    Rotation = FRotator((*RotArr)[0]->AsNumber(), (*RotArr)[1]->AsNumber(),
-                        (*RotArr)[2]->AsNumber());
-  }
+  FVector Location =
+      ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
+  FRotator Rotation =
+      ExtractRotatorField(Payload, TEXT("rotation"), FRotator::ZeroRotator);
 
   double Volume = 1.0;
   Payload->TryGetNumberField(TEXT("volume"), Volume);
@@ -1173,13 +1163,8 @@ bool McpHandlers::Audio::HandleAudioCreateAmbientSound(UMcpAutomationBridgeSubsy
     return true;
   }
 
-  FVector Location = FVector::ZeroVector;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
+  FVector Location =
+      ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
 
   double Volume = 1.0;
   Payload->TryGetNumberField(TEXT("volume"), Volume);
@@ -1290,21 +1275,11 @@ bool McpHandlers::Audio::HandleAudioSpawnSoundAtLocation(UMcpAutomationBridgeSub
     return true;
   }
 
-  FVector Location = FVector::ZeroVector;
-  const TArray<TSharedPtr<FJsonValue>> *LocArr;
-  if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr &&
-      LocArr->Num() >= 3) {
-    Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                       (*LocArr)[2]->AsNumber());
-  }
+  FVector Location =
+      ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
 
-  FRotator Rotation = FRotator::ZeroRotator;
-  const TArray<TSharedPtr<FJsonValue>> *RotArr;
-  if (Payload->TryGetArrayField(TEXT("rotation"), RotArr) && RotArr &&
-      RotArr->Num() >= 3) {
-    Rotation = FRotator((*RotArr)[0]->AsNumber(), (*RotArr)[1]->AsNumber(),
-                        (*RotArr)[2]->AsNumber());
-  }
+  FRotator Rotation =
+      ExtractRotatorField(Payload, TEXT("rotation"), FRotator::ZeroRotator);
 
   double Volume = 1.0;
   Payload->TryGetNumberField(TEXT("volume"), Volume);
@@ -1370,11 +1345,10 @@ bool McpHandlers::Audio::HandleAudioPushSoundMix(UMcpAutomationBridgeSubsystem& 
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString MixName;
-  if (!Payload->TryGetStringField(TEXT("mixName"), MixName) ||
-      MixName.IsEmpty()) {
-    S.SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
+  if (!Payload->TryGetStringField(TEXT("mixName"), MixName) || MixName.IsEmpty()) {
+    if (!Payload->TryGetStringField(TEXT("mix"), MixName) || MixName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("name"), MixName);
+    }
   }
 
   USoundMix *Mix = ResolveSoundMix(MixName);
@@ -1419,11 +1393,10 @@ bool McpHandlers::Audio::HandleAudioPopSoundMix(UMcpAutomationBridgeSubsystem& S
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   FString MixName;
-  if (!Payload->TryGetStringField(TEXT("mixName"), MixName) ||
-      MixName.IsEmpty()) {
-    S.SendAutomationError(RequestingSocket, RequestId, TEXT("mixName required"),
-                        TEXT("INVALID_ARGUMENT"));
-    return true;
+  if (!Payload->TryGetStringField(TEXT("mixName"), MixName) || MixName.IsEmpty()) {
+    if (!Payload->TryGetStringField(TEXT("mix"), MixName) || MixName.IsEmpty()) {
+      Payload->TryGetStringField(TEXT("name"), MixName);
+    }
   }
 
   USoundMix *Mix = ResolveSoundMix(MixName);
@@ -2450,19 +2423,11 @@ bool McpHandlers::Audio::HandleAudioCreateReverbZone(UMcpAutomationBridgeSubsyst
      return true;
    }
 
-   FVector Location = FVector::ZeroVector;
-   const TArray<TSharedPtr<FJsonValue>> *LocArr;
-   if (Payload->TryGetArrayField(TEXT("location"), LocArr) && LocArr && LocArr->Num() >= 3) {
-     Location = FVector((*LocArr)[0]->AsNumber(), (*LocArr)[1]->AsNumber(),
-                        (*LocArr)[2]->AsNumber());
-   }
+   FVector Location =
+       ExtractVectorField(Payload, TEXT("location"), FVector::ZeroVector);
 
-   FVector Size = FVector(500.0f, 500.0f, 500.0f);
-   const TArray<TSharedPtr<FJsonValue>> *SizeArr;
-   if (Payload->TryGetArrayField(TEXT("size"), SizeArr) && SizeArr && SizeArr->Num() >= 3) {
-     Size = FVector((*SizeArr)[0]->AsNumber(), (*SizeArr)[1]->AsNumber(),
-                    (*SizeArr)[2]->AsNumber());
-   }
+   FVector Size =
+       ExtractVectorField(Payload, TEXT("size"), FVector(500.0f, 500.0f, 500.0f));
 
    FString ReverbEffectPath;
    Payload->TryGetStringField(TEXT("reverbEffect"), ReverbEffectPath);

@@ -365,6 +365,9 @@ static void S_ConfigureSightConfig(FMcpSchemaBuilder& B)
 		 .Number(TEXT("nearClippingRadius"))
 		 .Number(TEXT("autoSuccessRange"))
 		 .Number(TEXT("maxAge"))
+		 .Bool(TEXT("enemies"), TEXT("Flat alias of detectionByAffiliation.enemies."))
+		 .Bool(TEXT("neutrals"), TEXT("Flat alias of detectionByAffiliation.neutrals."))
+		 .Bool(TEXT("friendlies"), TEXT("Flat alias of detectionByAffiliation.friendlies."))
 		 .Object(TEXT("detectionByAffiliation"), TEXT(""),
 			[](FMcpSchemaBuilder& Inner) {
 			Inner.Bool(TEXT("enemies"), TEXT(""))
@@ -731,7 +734,8 @@ static void S_CreateNavLinkProxy(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("World location for nav link proxy."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("rotation"), TEXT("Rotation for nav link proxy."),
 		[](FMcpSchemaBuilder& S) {
@@ -739,11 +743,13 @@ static void S_CreateNavLinkProxy(FMcpSchemaBuilder& B)
 	})
 	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .StringEnum(TEXT("direction"), {
 		TEXT("BothWays"),
@@ -758,11 +764,13 @@ static void S_ConfigureNavLink(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .StringEnum(TEXT("direction"), {
 		TEXT("BothWays"),
@@ -788,7 +796,8 @@ static void S_CreateSmartLink(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("World location for nav link proxy."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("rotation"), TEXT("Rotation for nav link proxy."),
 		[](FMcpSchemaBuilder& S) {
@@ -796,11 +805,13 @@ static void S_CreateSmartLink(FMcpSchemaBuilder& B)
 	})
 	 .Object(TEXT("startPoint"), TEXT("Start point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("endPoint"), TEXT("End point of navigation link (relative to actor)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .StringEnum(TEXT("direction"), {
 		TEXT("BothWays"),

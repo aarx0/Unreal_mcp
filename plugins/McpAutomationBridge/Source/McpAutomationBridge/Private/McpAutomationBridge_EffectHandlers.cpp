@@ -311,6 +311,13 @@ bool McpHandlers::Effect::HandleEffectDebugShape(UMcpAutomationBridgeSubsystem& 
         const TArray<TSharedPtr<FJsonValue>> &Arr = EndVal->AsArray();
         if (Arr.Num() >= 3)
           EndLoc = FVector((float)Arr[0]->AsNumber(), (float)Arr[1]->AsNumber(), (float)Arr[2]->AsNumber());
+      } else if (EndVal.IsValid() && EndVal->Type == EJson::Object) {
+        const TSharedPtr<FJsonObject> O = EndVal->AsObject();
+        if (O.IsValid())
+          EndLoc = FVector(
+              (float)(O->HasField(TEXT("x")) ? GetJsonNumberField(O, TEXT("x")) : 0.0),
+              (float)(O->HasField(TEXT("y")) ? GetJsonNumberField(O, TEXT("y")) : 0.0),
+              (float)(O->HasField(TEXT("z")) ? GetJsonNumberField(O, TEXT("z")) : 0.0));
       }
     }
     DrawDebugLine(World, Loc, EndLoc, DebugColor, false, Duration, 0, Thickness);
@@ -1493,6 +1500,13 @@ bool McpHandlers::Effect::HandleEffectCreateVolumetricFog(UMcpAutomationBridgeSu
       const TArray<TSharedPtr<FJsonValue>> &Arr = LocVal->AsArray();
       if (Arr.Num() >= 3)
         Loc = FVector((float)Arr[0]->AsNumber(), (float)Arr[1]->AsNumber(), (float)Arr[2]->AsNumber());
+    } else if (LocVal.IsValid() && LocVal->Type == EJson::Object) {
+      const TSharedPtr<FJsonObject> O = LocVal->AsObject();
+      if (O.IsValid())
+        Loc = FVector(
+            (float)(O->HasField(TEXT("x")) ? GetJsonNumberField(O, TEXT("x")) : 0.0),
+            (float)(O->HasField(TEXT("y")) ? GetJsonNumberField(O, TEXT("y")) : 0.0),
+            (float)(O->HasField(TEXT("z")) ? GetJsonNumberField(O, TEXT("z")) : 0.0));
     }
   }
 

@@ -357,17 +357,18 @@ static bool SaveAnimAsset(UObject* Asset, bool bShouldSave)
     return bSaved;
 }
 
-// Helper to get FVector from JSON object
-static FVector GetVectorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj)
+// Helper to get FVector from JSON object. Missing components fall back to the per-component
+// Default so a partial scale object keeps 1 on the unspecified axes rather than collapsing to 0.
+static FVector GetVectorFromJsonAnim(const TSharedPtr<FJsonObject>& Obj, const FVector& Default = FVector::ZeroVector)
 {
     if (!Obj.IsValid())
     {
-        return FVector::ZeroVector;
+        return Default;
     }
     return FVector(
-        GetJsonNumberField(Obj, TEXT("x"), 0.0),
-        GetJsonNumberField(Obj, TEXT("y"), 0.0),
-        GetJsonNumberField(Obj, TEXT("z"), 0.0)
+        GetJsonNumberField(Obj, TEXT("x"), Default.X),
+        GetJsonNumberField(Obj, TEXT("y"), Default.Y),
+        GetJsonNumberField(Obj, TEXT("z"), Default.Z)
     );
 }
 
@@ -882,7 +883,7 @@ static TSharedPtr<FJsonObject> AnimAuthoringSetBoneKey(const TSharedPtr<FJsonObj
         // Build transform key
         FVector Location = LocationObj.IsValid() ? GetVectorFromJsonAnim(LocationObj) : FVector::ZeroVector;
         FQuat Rotation = RotationObj.IsValid() ? GetRotatorFromJsonAnim(RotationObj).Quaternion() : FQuat::Identity;
-        FVector Scale = ScaleObj.IsValid() ? GetVectorFromJsonAnim(ScaleObj) : FVector::OneVector;
+        FVector Scale = ScaleObj.IsValid() ? GetVectorFromJsonAnim(ScaleObj, FVector::OneVector) : FVector::OneVector;
 
         int32 TotalFrames = Sequence->GetDataModel()->GetNumberOfFrames();
         if (Frame < 0 || Frame >= TotalFrames)

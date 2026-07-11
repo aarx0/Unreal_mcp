@@ -281,7 +281,9 @@ static FVector ParseVectorFromJson(const TSharedPtr<FJsonObject>& JsonObj, const
     const TSharedPtr<FJsonObject>* VecObj = nullptr;
     if (JsonObj->TryGetObjectField(FieldName, VecObj) && VecObj && VecObj->IsValid())
     {
-        double X = 0.0, Y = 0.0, Z = 0.0;
+        // Missing components fall back to the per-component Default so a partial scale
+        // object keeps 1 on the unspecified axes rather than collapsing to 0.
+        double X = Default.X, Y = Default.Y, Z = Default.Z;
         (*VecObj)->TryGetNumberField(TEXT("x"), X);
         (*VecObj)->TryGetNumberField(TEXT("y"), Y);
         (*VecObj)->TryGetNumberField(TEXT("z"), Z);

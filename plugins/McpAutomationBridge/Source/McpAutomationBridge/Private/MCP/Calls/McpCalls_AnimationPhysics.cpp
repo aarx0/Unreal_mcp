@@ -214,9 +214,10 @@ static void S_SetBoneKey(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .String(TEXT("boneName"), TEXT("Name of the bone."))
-	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
+	 .Object(TEXT("rotation"), TEXT("3D rotation as Euler (pitch, yaw, roll) or quaternion (x, y, z, w)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"))
+		 .Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Number(TEXT("w"));
 	})
 	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
@@ -226,7 +227,8 @@ static void S_SetBoneKey(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Required({TEXT("assetPath"), TEXT("boneName")});
 }
@@ -417,7 +419,7 @@ static void S_AddBlendSample(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Number(TEXT("floatValue"), TEXT("add_blend_sample: 1D blend space sample coordinate."))
 	 .Object(TEXT("vector2Value"), TEXT("add_blend_sample: 2D blend space sample coordinate (x, y)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Required({TEXT("x"), TEXT("y")}); })
 	 .Required({TEXT("assetPath"), TEXT("animationPath")});
 }
 
@@ -692,7 +694,8 @@ static void S_CreateSocket(FMcpSchemaBuilder& B)
 	 .String(TEXT("boneName"), TEXT("Name of the bone."))
 	 .Object(TEXT("relativeLocation"), TEXT("create_socket/configure_socket: socket location relative to its bone (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("relativeRotation"), TEXT("create_socket/configure_socket: socket rotation relative to its bone (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -716,7 +719,8 @@ static void S_ConfigureSocket(FMcpSchemaBuilder& B)
 	 .String(TEXT("attachBoneName"), TEXT("create_socket/configure_socket: bone the socket attaches to ('boneName' accepted as fallback)."))
 	 .Object(TEXT("relativeLocation"), TEXT("create_socket/configure_socket: socket location relative to its bone (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("relativeRotation"), TEXT("create_socket/configure_socket: socket rotation relative to its bone (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -832,7 +836,8 @@ static void S_SetBoneTransform(FMcpSchemaBuilder& B)
 	 .String(TEXT("boneName"), TEXT("Name of the bone."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -919,7 +924,8 @@ static void S_AddBone(FMcpSchemaBuilder& B)
 	 .String(TEXT("parentBoneName"), TEXT("Alias of parentBone for add_bone."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 	})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
