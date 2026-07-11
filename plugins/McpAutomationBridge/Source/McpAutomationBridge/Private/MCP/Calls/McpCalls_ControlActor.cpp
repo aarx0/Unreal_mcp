@@ -186,12 +186,14 @@ static void S_FindByTag(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("tag"), TEXT("Name of the tag."))
 	 .String(TEXT("matchType"), TEXT("find_by_tag: match mode, 'exact' (default) or 'contains'."))
+	 .Integer(TEXT("limit"), TEXT("find_by_tag: max actors returned (default 50, cap 200)."))
 	 .Required({TEXT("tag")});
 }
 
 static void S_FindByName(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
+	 .Integer(TEXT("limit"), TEXT("find_by_name: max actors returned (default 50, cap 200)."))
 	 .Required({TEXT("name")});
 }
 

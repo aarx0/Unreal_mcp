@@ -132,7 +132,8 @@ static void S_FindByClass(FMcpSchemaBuilder& B)
 
 static void S_FindByTag(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("tag"), TEXT("Name of the tag."));
+	B.String(TEXT("tag"), TEXT("Name of the tag."))
+	 .Integer(TEXT("limit"), TEXT("find_by_tag: max actors returned (default 50, cap 200)."));
 }
 
 static void S_InspectClass(FMcpSchemaBuilder& B)

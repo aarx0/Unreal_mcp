@@ -1665,7 +1665,18 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   Payload->TryGetStringField(TEXT("matchType"), MatchType);
   MatchType = MatchType.ToLower();
   FName TagName(*TagValue);
+
+  int32 Limit = 50;
+  {
+    double LimitNum = 0.0;
+    if (Payload->TryGetNumberField(TEXT("limit"), LimitNum)) {
+      Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+    }
+  }
+
   TArray<TSharedPtr<FJsonValue>> Matches;
+  int32 Matched = 0;
+  bool bTruncated = false;
 
   // Log tag search details
   UE_LOG(LogMcpAutomationBridgeSubsystem, Verbose,
@@ -1711,6 +1722,11 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
              *Actor->GetActorLabel(), *TagList, bMatches);
     }
     if (bMatches) {
+      ++Matched;
+      if (Matches.Num() >= Limit) {
+        bTruncated = true;
+        continue;
+      }
       TSharedPtr<FJsonObject> Entry = McpHandlerUtils::CreateResultObject();
       Entry->SetStringField(TEXT("name"), Actor->GetActorLabel());
       Entry->SetStringField(TEXT("path"), Actor->GetPathName());
@@ -1724,6 +1740,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByTag(
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetNumberField(TEXT("count"), Matches.Num());
+  Data->SetNumberField(TEXT("matched"), Matched);
+  Data->SetBoolField(TEXT("truncated"), bTruncated);
   Data->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
   if (World) {
     Data->SetStringField(TEXT("worldName"), World->GetName());
@@ -1802,6 +1820,14 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
     return true;
   }
 
+  int32 Limit = 50;
+  {
+    double LimitNum = 0.0;
+    if (Payload->TryGetNumberField(TEXT("limit"), LimitNum)) {
+      Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+    }
+  }
+
   bool bIsPieWorld = false;
   UWorld *World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
   TArray<AActor *> AllActors;
@@ -1813,6 +1839,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
     }
   }
   TArray<TSharedPtr<FJsonValue>> Matches;
+  int32 Matched = 0;
+  bool bTruncated = false;
   for (AActor *Actor : AllActors) {
     if (!Actor)
       continue;
@@ -1823,6 +1851,11 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
                           Name.Contains(Query, ESearchCase::IgnoreCase) ||
                           Path.Contains(Query, ESearchCase::IgnoreCase);
     if (bMatches) {
+      ++Matched;
+      if (Matches.Num() >= Limit) {
+        bTruncated = true;
+        continue;
+      }
       TSharedPtr<FJsonObject> Entry = McpHandlerUtils::CreateResultObject();
       Entry->SetStringField(TEXT("label"), Label);
       Entry->SetStringField(TEXT("name"), Name);
@@ -1836,6 +1869,8 @@ bool McpHandlers::ControlActor::HandleControlActorFindByName(
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   Data->SetNumberField(TEXT("count"), Matches.Num());
+  Data->SetNumberField(TEXT("matched"), Matched);
+  Data->SetBoolField(TEXT("truncated"), bTruncated);
   Data->SetArrayField(TEXT("actors"), Matches);
   Data->SetStringField(TEXT("query"), Query);
   Data->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);

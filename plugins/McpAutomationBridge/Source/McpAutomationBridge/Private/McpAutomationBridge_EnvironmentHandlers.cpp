@@ -2098,7 +2098,17 @@ bool McpHandlers::Inspect::HandleInspectFindByTag(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     FString Tag;
     Payload->TryGetStringField(TEXT("tag"), Tag);
+    int32 Limit = 50;
+    {
+        double LimitNum = 0.0;
+        if (Payload->TryGetNumberField(TEXT("limit"), LimitNum))
+        {
+            Limit = FMath::Clamp(static_cast<int32>(LimitNum), 1, 200);
+        }
+    }
     TArray<TSharedPtr<FJsonValue>> ObjectsArray;
+    int32 Matched = 0;
+    bool bTruncated = false;
     bool bIsPieWorld = false;
     UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
 
@@ -2109,6 +2119,12 @@ bool McpHandlers::Inspect::HandleInspectFindByTag(
             AActor* Actor = *It;
             if (Actor->ActorHasTag(FName(*Tag)))
             {
+                ++Matched;
+                if (ObjectsArray.Num() >= Limit)
+                {
+                    bTruncated = true;
+                    continue;
+                }
                 TSharedPtr<FJsonObject> Obj = McpHandlerUtils::CreateResultObject();
                 Obj->SetStringField(TEXT("name"), Actor->GetName());
                 Obj->SetStringField(TEXT("path"), Actor->GetPathName());
@@ -2119,6 +2135,8 @@ bool McpHandlers::Inspect::HandleInspectFindByTag(
     }
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
+    Resp->SetNumberField(TEXT("matched"), Matched);
+    Resp->SetBoolField(TEXT("truncated"), bTruncated);
     Resp->SetBoolField(TEXT("isPieWorld"), bIsPieWorld);
     if (World)
     {

@@ -138,13 +138,17 @@ static void S_SpawnSoundAtLocation(FMcpSchemaBuilder& B)
 static void S_PushSoundMix(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("mixName"), TEXT(""))
-	 .Required({TEXT("mixName")});
+	 .String(TEXT("mix"), TEXT("Alias of mixName (set_sound_mix_class_override/clear_sound_mix_class_override/set_base_sound_mix)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")});
 }
 
 static void S_PopSoundMix(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("mixName"), TEXT(""))
-	 .Required({TEXT("mixName")});
+	 .String(TEXT("mix"), TEXT("Alias of mixName (set_sound_mix_class_override/clear_sound_mix_class_override/set_base_sound_mix)."))
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")});
 }
 
 static void S_SetSoundMixClassOverride(FMcpSchemaBuilder& B)
