@@ -13,8 +13,11 @@
 #include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
 
@@ -39,6 +42,82 @@ static FString McpDescribeActiveModalWindow()
 	const FString Title = Modal->GetTitle().ToString();
 	return Title.IsEmpty() ? TEXT("<untitled modal>") : FString::Printf(TEXT("'%s'"), *Title);
 }
+
+// ─── Call journal ─────────────────────────────────────────────────────────────
+// One JSONL line per tools/call outcome, day-keyed under Saved/McpJournal/, so
+// failure rates and param-name usage are queryable after UE's own logs rotate
+// away (scripts/journal-stats.ps1 aggregates). Reject sites record why="<check>"
+// with the offending names; completions record why="handler" with the measured
+// duration (timeouts arrive there as code=TIMEOUT via CleanupStaleRequests).
+// Param NAMES only, never values — values can be huge and are irrelevant to the
+// stats. Callers run on the socket thread, thread pool, and game thread, hence
+// the mutex; a write failure must not fail the call, so it degrades to one
+// warning per session.
+
+namespace McpCallJournal
+{
+
+static void Record(const FString& Tool, const FString& Action, bool bOk,
+	const FString& Code, const FString& Why, const TArray<FString>& ArgNames,
+	const TArray<FString>& Offending, double DurationMs, const FString& SessionId)
+{
+	TSharedPtr<FJsonObject> Line = MakeShared<FJsonObject>();
+	Line->SetStringField(TEXT("ts"), FDateTime::UtcNow().ToIso8601());
+	Line->SetStringField(TEXT("tool"), Tool);
+	Line->SetStringField(TEXT("action"), Action);
+	Line->SetBoolField(TEXT("ok"), bOk);
+	if (!Code.IsEmpty())
+	{
+		Line->SetStringField(TEXT("code"), Code);
+	}
+	Line->SetStringField(TEXT("why"), Why);
+	TArray<TSharedPtr<FJsonValue>> ArgsJson;
+	for (const FString& A : ArgNames)
+	{
+		ArgsJson.Add(MakeShared<FJsonValueString>(A));
+	}
+	Line->SetArrayField(TEXT("args"), ArgsJson);
+	if (Offending.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> OffJson;
+		for (const FString& O : Offending)
+		{
+			OffJson.Add(MakeShared<FJsonValueString>(O));
+		}
+		Line->SetArrayField(TEXT("offending"), OffJson);
+	}
+	Line->SetNumberField(TEXT("ms"), FMath::RoundToDouble(DurationMs * 10.0) / 10.0);
+	if (!SessionId.IsEmpty())
+	{
+		Line->SetStringField(TEXT("session"), SessionId);
+	}
+
+	FString Out;
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+	FJsonSerializer::Serialize(Line.ToSharedRef(), Writer);
+	Out += LINE_TERMINATOR;
+
+	// Filename is local-day (matches the session the user was in); ts is UTC.
+	const FString Path = FPaths::ProjectSavedDir() / TEXT("McpJournal") /
+		FString::Printf(TEXT("calls-%s.jsonl"), *FDateTime::Now().ToString(TEXT("%Y%m%d")));
+
+	static FCriticalSection JournalMutex;
+	static bool bWarnedWriteFailure = false;
+	FScopeLock Lock(&JournalMutex);
+	if (!FFileHelper::SaveStringToFile(Out, *Path,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+			&IFileManager::Get(), FILEWRITE_Append) &&
+		!bWarnedWriteFailure)
+	{
+		bWarnedWriteFailure = true;
+		UE_LOG(LogMcpNativeTransport, Warning,
+			TEXT("call journal write failed (%s); journaling disabled-in-effect until it succeeds again"),
+			*Path);
+	}
+}
+
+}  // namespace McpCallJournal
 
 // ─── Recursive nested-kind validation (McpCallRegistry decl walk) ─────────────
 // The per-action decl carries nested member/element kinds AND per-member required
@@ -1358,6 +1437,18 @@ void FMcpNativeTransport::HandleToolsCall(
 		Arguments = MakeShared<FJsonObject>();
 	}
 
+	// Journal capture: raw client-sent key names, before the action/subAction
+	// mirror below injects a key the client never sent.
+	TArray<FString> ClientArgNames;
+	Arguments->Values.GetKeys(ClientArgNames);
+	auto JournalReject = [&ToolName, &ClientArgNames, &SessionId](
+		const FString& InAction, const TCHAR* Code, const TCHAR* Why,
+		const TArray<FString>& Offending)
+	{
+		McpCallJournal::Record(ToolName, InAction, false, Code, Why,
+			ClientArgNames, Offending, 0.0, SessionId);
+	};
+
 	// Normalize action/subAction both ways BEFORE validation: some handlers
 	// read "subAction", and a legacy subAction-only payload must not be
 	// rejected for a missing required "action". Both present but different is
@@ -1371,6 +1462,8 @@ void FMcpNativeTransport::HandleToolsCall(
 		const bool bHasSubAction = Arguments->TryGetStringField(TEXT("subAction"), SubActionVal);
 		if (bHasAction && bHasSubAction && !SubActionVal.Equals(ActionVal, ESearchCase::IgnoreCase))
 		{
+			JournalReject(ActionVal, TEXT("INVALID_PARAMS"), TEXT("action_subaction"),
+				{TEXT("action"), TEXT("subAction")});
 			TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 				false,
 				FString::Printf(
@@ -1393,6 +1486,10 @@ void FMcpNativeTransport::HandleToolsCall(
 			Arguments->SetStringField(TEXT("action"), SubActionVal);
 		}
 	}
+
+	// Resolved action for the journal and the action-agnostic reject sites below.
+	FString CallAction;
+	Arguments->TryGetStringField(TEXT("action"), CallAction);
 
 	// Argument validation against the published schema (arch review F7).
 	// Shipped warn-first 2026-07-02; promoted to INVALID_PARAMS rejection
@@ -1591,6 +1688,7 @@ void FMcpNativeTransport::HandleToolsCall(
 	const TArray<FString> SchemaViolations = CollectSchemaViolations(ToolName, Arguments);
 	if (SchemaViolations.Num() > 0)
 	{
+		JournalReject(CallAction, TEXT("INVALID_PARAMS"), TEXT("schema"), SchemaViolations);
 		UE_LOG(LogMcpNativeTransport, Warning,
 			TEXT("tools/call rejected (INVALID_PARAMS): %s: %s"),
 			*ToolName, *FString::Join(SchemaViolations, TEXT("; ")));
@@ -1682,6 +1780,8 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("action's declaration is wrong: retry with bypassParamCheck:true to proceed ")
 							TEXT("now, and report the miss (fork TODO.md) so its McpDecl_*.h entry gets fixed."),
 							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedClause);
+						JournalReject(ActionValue, TEXT("INVALID_PARAMS"),
+							TEXT("foreign_params"), ForeignParams);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (per-action params): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")));
@@ -1742,6 +1842,8 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("proceed now, and report the miss (fork TODO.md) so its fragment's Required() gets fixed."),
 							*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")),
 							*FString::Join(RequiredParams, TEXT(", ")));
+						JournalReject(ActionValue, TEXT("MISSING_REQUIRED"),
+							TEXT("missing_required"), MissingRequired);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (missing required): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")));
@@ -1805,6 +1907,13 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("wrong: retry with bypassParamCheck:true to proceed now, and report ")
 							TEXT("the miss (fork TODO.md) so its fragment's RequiredAnyOf() gets fixed."),
 							*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
+						TArray<FString> OffendingGroups;
+						for (const TArray<FString>& G : FailedGroups)
+						{
+							OffendingGroups.Add(FString::Join(G, TEXT("|")));
+						}
+						JournalReject(ActionValue, TEXT("MISSING_REQUIRED"),
+							TEXT("required_group"), OffendingGroups);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (missing required group): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
@@ -1862,6 +1971,8 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("shape. If the handler tolerates it, retry with bypassParamCheck:true ")
 							TEXT("to proceed now, and report the miss (fork TODO.md)."),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.Kind, TEXT("; ")));
+						JournalReject(ActionValue, TEXT("INVALID_PARAMS"),
+							TEXT("nested_kind"), NestedErrors.Kind);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (nested kind): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.Kind, TEXT("; ")));
@@ -1903,6 +2014,8 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("is wrong: retry with bypassParamCheck:true to proceed now, and report the ")
 							TEXT("miss (fork TODO.md)."),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.Undeclared, TEXT("; ")));
+						JournalReject(ActionValue, TEXT("INVALID_PARAMS"),
+							TEXT("nested_undeclared"), NestedErrors.Undeclared);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (nested undeclared): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.Undeclared, TEXT("; ")));
@@ -1944,6 +2057,8 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("handler does NOT require them, the action's declaration is wrong: retry ")
 							TEXT("with bypassParamCheck:true to proceed now, and report the miss (fork TODO.md)."),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.MissingRequired, TEXT("; ")));
+						JournalReject(ActionValue, TEXT("MISSING_REQUIRED"),
+							TEXT("nested_required"), NestedErrors.MissingRequired);
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (nested missing required): %s.%s: %s"),
 							*ToolName, *ActionValue, *FString::Join(NestedErrors.MissingRequired, TEXT("; ")));
@@ -1975,6 +2090,7 @@ void FMcpNativeTransport::HandleToolsCall(
 
 	if (!FMcpToolRegistry::Get().FindTool(ToolName))
 	{
+		JournalReject(CallAction, TEXT("UNKNOWN_TOOL"), TEXT("unknown_tool"), {});
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 			false,
 			FString::Printf(TEXT("Unknown tool '%s'. Use tools/list to see available tools."), *ToolName),
@@ -1999,6 +2115,7 @@ void FMcpNativeTransport::HandleToolsCall(
 		constexpr int32 MaxParkedRequests = 64;
 		if (PendingConnections.Num() >= MaxParkedRequests)
 		{
+			JournalReject(CallAction, TEXT("OVERLOADED"), TEXT("overloaded"), {});
 			FString ErrorBody = FMcpJsonRpc::BuildError(
 				Id, FMcpJsonRpc::ErrorInternalError,
 				FString::Printf(TEXT("Too many requests in flight (%d parked); retry later"),
@@ -2015,6 +2132,8 @@ void FMcpNativeTransport::HandleToolsCall(
 		Conn->ToolName = ToolName;
 		Conn->SessionId = SessionId;
 		Conn->CorsOrigin = CorsOrigin;
+		Conn->Action = CallAction;
+		Conn->ArgNames = MoveTemp(ClientArgNames);
 		Conn->ParamWarnings = MoveTemp(BypassedParamWarnings);
 		PendingConnections.Add(RequestId, Conn);
 	}
@@ -2090,10 +2209,11 @@ bool FMcpNativeTransport::CompletePendingRequest(
 	FString CapturedToolName = Conn->ToolName;
 	FString CapturedSessionId = Conn->SessionId;
 	bool bCapturedSuccess = bSuccess;
+	const double DurationMs = (FPlatformTime::Seconds() - Conn->StartTime) * 1000.0;
 	PendingAsyncWrites.fetch_add(1);
 
 	Async(EAsyncExecution::ThreadPool,
-		[this, Conn, Message, Result, ErrorCode,
+		[this, Conn, Message, Result, ErrorCode, DurationMs,
 		 CapturedRequestId, CapturedToolName, CapturedSessionId, bCapturedSuccess]()
 	{
 		TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
@@ -2158,6 +2278,10 @@ bool FMcpNativeTransport::CompletePendingRequest(
 			TEXT("tools/call completed: %s (tool=%s, success=%s)"),
 			*CapturedRequestId, *CapturedToolName,
 			bCapturedSuccess ? TEXT("true") : TEXT("false"));
+
+		McpCallJournal::Record(CapturedToolName, Conn->Action, bCapturedSuccess,
+			ErrorCode, TEXT("handler"), Conn->ArgNames, {}, DurationMs,
+			CapturedSessionId);
 
 		PendingAsyncWrites.fetch_sub(1);
 	});

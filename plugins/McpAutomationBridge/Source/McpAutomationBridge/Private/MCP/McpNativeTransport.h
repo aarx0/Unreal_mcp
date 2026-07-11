@@ -85,6 +85,11 @@ private:
 		FString ToolName;
 		FString SessionId;   // for touching ActiveSessions
 		FString CorsOrigin;  // preserved from the request for the response headers
+		// Call-journal fields: the resolved action and the client-sent top-level
+		// arg NAMES (captured before the action/subAction mirror injects keys the
+		// client never sent). Written once at park time, read after; no lock.
+		FString Action;
+		TArray<FString> ArgNames;
 		// Per-action param-check findings under bypassParamCheck:true — merged
 		// into the response envelope so the caller sees what was flagged.
 		// Written once at park time, read by the response writer after; no lock.
