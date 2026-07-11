@@ -35,7 +35,7 @@ static void S_Spawn(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
@@ -49,7 +49,7 @@ static void S_SpawnBlueprint(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
@@ -143,7 +143,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum property."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Required({TEXT("actorName"), TEXT("componentName")});
 }
 
@@ -222,7 +222,7 @@ static void S_SetBlueprintVariables(FMcpSchemaBuilder& B)
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double variable."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum variable."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector variable (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Required({TEXT("actorName"), TEXT("variableName")});
 }
 

@@ -1275,7 +1275,14 @@ EMcpTypedValueParse ReadDiscriminatedValue(const TSharedPtr<FJsonObject>& Payloa
     if (Payload->TryGetStringField(TEXT("stringValue"), S))
         Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(S)});
     if (Payload->TryGetObjectField(TEXT("colorValue"), Obj) && Obj && Obj->IsValid())
-        Present.Add({TEXT("colorValue"), TEXT("color"), MakeShared<FJsonValueObject>(*Obj)});
+    {
+        // Omitted alpha imports as opaque (1.0), not the zero-init 0 -- a bare
+        // {r,g,b} must not land a fully transparent color.
+        TSharedPtr<FJsonObject> Color = MakeShared<FJsonObject>(**Obj);
+        if (!Color->HasField(TEXT("a")) && !Color->HasField(TEXT("A")))
+            Color->SetNumberField(TEXT("a"), 1.0);
+        Present.Add({TEXT("colorValue"), TEXT("color"), MakeShared<FJsonValueObject>(Color)});
+    }
     if (Payload->TryGetObjectField(TEXT("vector2Value"), Obj) && Obj && Obj->IsValid())
         Present.Add({TEXT("vector2Value"), TEXT("vector2"), MakeShared<FJsonValueObject>(*Obj)});
     if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())

@@ -81,7 +81,7 @@ static void S_SetStreamingDistance(FMcpSchemaBuilder& B)
 		TEXT("BlockingOnLoad"), TEXT("LoadingNotVisible")
 	 }, TEXT("Streaming volume usage mode (default: LoadingAndVisibility)."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Bool(TEXT("createVolume"), TEXT("Create a streaming volume (true) or just report existing "
 		"volumes (false). Default: true."))
 	 .Required({TEXT("levelName")});
@@ -146,7 +146,7 @@ static void S_CreateMinimapVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); });
 }
@@ -176,7 +176,7 @@ static void S_CreateLevelInstance(FMcpSchemaBuilder& B)
 	B.String(TEXT("levelInstanceName"), TEXT("Level instance name."))
 	 .String(TEXT("levelAssetPath"), TEXT("Path to the level asset for instancing."))
 	 .Object(TEXT("instanceLocation"), TEXT("Location of the level instance."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("instanceRotation"), TEXT("Rotation of the level instance."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("instanceScale"), TEXT("Scale of the level instance."),
@@ -189,7 +189,7 @@ static void S_CreatePackedLevelActor(FMcpSchemaBuilder& B)
 	B.String(TEXT("packedLevelName"), TEXT("Name for the packed level actor."))
 	 .String(TEXT("levelAssetPath"), TEXT("Path to the level asset for instancing."))
 	 .Object(TEXT("instanceLocation"), TEXT("Location of the level instance."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("instanceRotation"), TEXT("Rotation of the level instance."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Bool(TEXT("bPackBlueprints"), TEXT("Include blueprints in packed level."))
@@ -202,10 +202,10 @@ static void S_CreateTriggerVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -219,10 +219,10 @@ static void S_CreateTriggerBox(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -238,10 +238,10 @@ static void S_CreateTriggerSphere(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("sphereRadius"), TEXT("create_trigger_sphere: sphere radius."));
@@ -251,10 +251,10 @@ static void S_CreateTriggerCapsule(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("capsuleRadius"), TEXT("create_trigger_capsule: capsule radius."))
@@ -265,10 +265,10 @@ static void S_CreateBlockingVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -282,10 +282,10 @@ static void S_CreateKillZVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -299,10 +299,10 @@ static void S_CreatePainCausingVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -320,10 +320,10 @@ static void S_CreatePhysicsVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -346,10 +346,10 @@ static void S_CreateAudioVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -365,10 +365,10 @@ static void S_CreateReverbVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -388,10 +388,10 @@ static void S_CreatePostProcessVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -419,10 +419,10 @@ static void S_CreateCullDistanceVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -438,10 +438,10 @@ static void S_CreatePrecomputedVisibilityVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -455,10 +455,10 @@ static void S_CreateLightmassImportanceVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -472,10 +472,10 @@ static void S_CreateNavMeshBoundsVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -489,10 +489,10 @@ static void S_CreateNavModifierVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -506,10 +506,10 @@ static void S_CreateCameraBlockingVolume(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("volumeName"), TEXT("Name of the volume."))
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll); create_*_volume actions."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Object(TEXT("volumeExtent"), TEXT("Extent of the volume."),
@@ -566,10 +566,10 @@ static void S_SetVolumeBounds(FMcpSchemaBuilder& B)
 		"(create_*_volume / set_volume_* actions; first present wins)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
 	 .Object(TEXT("volumeLocation"), TEXT("Location of the volume."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("location"), TEXT("Volume location alias for volumeLocation "
 		"(create_*_volume actions; first present wins)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Required({TEXT("volumeName")});
 }
 

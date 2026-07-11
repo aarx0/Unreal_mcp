@@ -216,7 +216,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
 	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path property."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Required({TEXT("componentName")});
 }
 
@@ -265,7 +265,7 @@ static void S_SetProperty(FMcpSchemaBuilder& B)
 	 .Object(TEXT("colorValue"), TEXT("Set an FLinearColor/FColor property (r,g,b,a, 0..1)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("r")).Number(TEXT("g")).Number(TEXT("b")).Number(TEXT("a")); })
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
-		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")); })
+		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
 	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"))
 	 .Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
