@@ -40,6 +40,95 @@ static FString McpDescribeActiveModalWindow()
 	return Title.IsEmpty() ? TEXT("<untitled modal>") : FString::Printf(TEXT("'%s'"), *Title);
 }
 
+// ─── Recursive nested-kind validation (McpCallRegistry decl walk) ─────────────
+// The per-action decl carries nested member/element kinds derived from each
+// fragment's authored sub-schema; these walk a present payload subtree against
+// them. Kind matching mirrors the top-level type check (integer folds to Number,
+// so any JSON number satisfies it). Absent members and unknown extra members are
+// intentionally NOT flagged (nested-required and nested-unknown are out of scope).
+
+static bool McpJsonMatchesKind(EJson Type, EMcpParamKind Kind)
+{
+	switch (Kind)
+	{
+	case EMcpParamKind::String: return Type == EJson::String;
+	case EMcpParamKind::Number: return Type == EJson::Number;
+	case EMcpParamKind::Bool:   return Type == EJson::Boolean;
+	case EMcpParamKind::Object: return Type == EJson::Object;
+	case EMcpParamKind::Array:  return Type == EJson::Array;
+	case EMcpParamKind::Any:
+	default:                    return true;
+	}
+}
+
+static const TCHAR* McpKindDisplayName(EMcpParamKind Kind)
+{
+	switch (Kind)
+	{
+	case EMcpParamKind::String: return TEXT("string");
+	case EMcpParamKind::Number: return TEXT("number");
+	case EMcpParamKind::Bool:   return TEXT("boolean");
+	case EMcpParamKind::Object: return TEXT("object");
+	case EMcpParamKind::Array:  return TEXT("array");
+	default:                    return TEXT("any");
+	}
+}
+
+static const TCHAR* McpJsonValueDisplayName(EJson Type)
+{
+	switch (Type)
+	{
+	case EJson::String:  return TEXT("string");
+	case EJson::Number:  return TEXT("number");
+	case EJson::Boolean: return TEXT("boolean");
+	case EJson::Object:  return TEXT("object");
+	case EJson::Array:   return TEXT("array");
+	default:             return TEXT("null");
+	}
+}
+
+static void McpCheckNestedNode(const FString& Path, const FMcpParamDecl& Node,
+	const TSharedPtr<FJsonValue>& Val, TArray<FString>& OutErrors)
+{
+	if (!Val.IsValid() || Val->Type == EJson::Null || Val->Type == EJson::None)
+	{
+		return; // absent/null does not constrain (matches the top-level type check)
+	}
+	if (Node.Kind != EMcpParamKind::Any && !McpJsonMatchesKind(Val->Type, Node.Kind))
+	{
+		OutErrors.Add(FString::Printf(TEXT("%s: expected %s, got %s"),
+			*Path, McpKindDisplayName(Node.Kind), McpJsonValueDisplayName(Val->Type)));
+		return; // wrong kind — do not descend into a mismatched value
+	}
+	if (Node.Kind == EMcpParamKind::Object && Node.Members.Num() > 0)
+	{
+		const TSharedPtr<FJsonObject>* Sub = nullptr;
+		if (Val->TryGetObject(Sub) && Sub && Sub->IsValid())
+		{
+			for (const FMcpParamDecl& Member : Node.Members)
+			{
+				const TSharedPtr<FJsonValue> Field = (*Sub)->Values.FindRef(Member.Name);
+				if (!Field.IsValid()) { continue; } // absent member: not an error
+				McpCheckNestedNode(FString::Printf(TEXT("%s.%s"), *Path, Member.Name),
+					Member, Field, OutErrors);
+			}
+		}
+	}
+	else if (Node.Kind == EMcpParamKind::Array && Node.Element.Num() > 0)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (Val->TryGetArray(Arr) && Arr)
+		{
+			const FMcpParamDecl& Element = Node.Element[0];
+			for (int32 i = 0; i < Arr->Num(); ++i)
+			{
+				McpCheckNestedNode(FString::Printf(TEXT("%s[%d]"), *Path, i),
+					Element, (*Arr)[i], OutErrors);
+			}
+		}
+	}
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 FMcpNativeTransport::FMcpNativeTransport(UMcpAutomationBridgeSubsystem* InSubsystem)
@@ -1631,6 +1720,123 @@ void FMcpNativeTransport::HandleToolsCall(
 					UE_LOG(LogMcpNativeTransport, Warning,
 						TEXT("missing-required check BYPASSED: %s.%s: %s — if these are not truly required, fix the table"),
 						*ToolName, *ActionValue, *FString::Join(MissingRequired, TEXT(", ")));
+				}
+
+				// Required any-of groups — presence-only, at-least-one-of per group.
+				// Same pass and bypassParamCheck path as the missing-required check.
+				TArray<TArray<FString>> FailedGroups;
+				for (const TConstArrayView<const TCHAR*>& Group : Decl->RequiredGroups)
+				{
+					bool bAnyPresent = false;
+					for (const TCHAR* Member : Group)
+					{
+						if (Arguments->HasField(Member)) { bAnyPresent = true; break; }
+					}
+					if (!bAnyPresent)
+					{
+						TArray<FString> Members;
+						for (const TCHAR* Member : Group) { Members.Add(Member); }
+						FailedGroups.Add(MoveTemp(Members));
+					}
+				}
+				if (FailedGroups.Num() > 0)
+				{
+					TArray<FString> GroupClauses;
+					for (const TArray<FString>& G : FailedGroups)
+					{
+						GroupClauses.Add(FString::Printf(TEXT("one of %s is required"),
+							*FString::Join(G, TEXT("|"))));
+					}
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s: %s. Supply at least one param from each group. If the ")
+							TEXT("handler does NOT actually require it, the action's declaration is ")
+							TEXT("wrong: retry with bypassParamCheck:true to proceed now, and report ")
+							TEXT("the miss (fork TODO.md) so its fragment's RequiredAnyOf() gets fixed."),
+							*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (missing required group): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> GroupsJson;
+						for (const TArray<FString>& G : FailedGroups)
+						{
+							TArray<TSharedPtr<FJsonValue>> MembersJson;
+							for (const FString& M : G) { MembersJson.Add(MakeShared<FJsonValueString>(M)); }
+							GroupsJson.Add(MakeShared<FJsonValueArray>(MembersJson));
+						}
+						Details->SetArrayField(TEXT("requiredGroups"), GroupsJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("MISSING_REQUIRED"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& Clause : GroupClauses)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("required group unsatisfied (%s) for %s.%s (per-action table; bypassed)"),
+							*Clause, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("required-group check BYPASSED: %s.%s: %s — if not truly required, fix the table"),
+						*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
+				}
+
+				// Recursive nested-kind check — for each present Object/Array param,
+				// type-check its declared members/elements by path. Same bypass path
+				// and response shape as the sibling checks.
+				TArray<FString> NestedKindErrors;
+				for (const FMcpParamDecl& Param : Decl->Params)
+				{
+					const bool bStructured =
+						(Param.Kind == EMcpParamKind::Object && Param.Members.Num() > 0) ||
+						(Param.Kind == EMcpParamKind::Array && Param.Element.Num() > 0);
+					if (!bStructured) { continue; }
+					const TSharedPtr<FJsonValue> Val = Arguments->Values.FindRef(Param.Name);
+					if (!Val.IsValid()) { continue; }
+					McpCheckNestedNode(FString(Param.Name), Param, Val, NestedKindErrors);
+				}
+				if (NestedKindErrors.Num() > 0)
+				{
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s has nested param(s) of the wrong type: %s. Fix the value's ")
+							TEXT("shape. If the handler tolerates it, retry with bypassParamCheck:true ")
+							TEXT("to proceed now, and report the miss (fork TODO.md)."),
+							*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (nested kind): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> ErrJson;
+						for (const FString& E : NestedKindErrors) { ErrJson.Add(MakeShared<FJsonValueString>(E)); }
+						Details->SetArrayField(TEXT("nestedKindViolations"), ErrJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("INVALID_PARAMS"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& E : NestedKindErrors)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("nested kind mismatch (%s) for %s.%s (bypassed)"),
+							*E, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("nested-kind check BYPASSED: %s.%s: %s"),
+						*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
 				}
 			}
 		}

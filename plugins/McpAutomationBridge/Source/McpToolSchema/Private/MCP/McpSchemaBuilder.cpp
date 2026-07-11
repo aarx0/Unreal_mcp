@@ -187,6 +187,13 @@ FMcpSchemaBuilder& FMcpSchemaBuilder::ClearRequired()
 	return *this;
 }
 
+FMcpSchemaBuilder& FMcpSchemaBuilder::RequiredAnyOf(const TArray<FString>& GroupMemberNames)
+{
+	// Side-channel only: recorded for McpDeriveDecl(), never written by Build().
+	RequiredGroups.Add(GroupMemberNames);
+	return *this;
+}
+
 TSharedPtr<FJsonObject> FMcpSchemaBuilder::Build() const
 {
 	auto Schema = MakeShared<FJsonObject>();

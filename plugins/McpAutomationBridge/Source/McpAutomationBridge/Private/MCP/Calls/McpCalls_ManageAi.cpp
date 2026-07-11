@@ -30,9 +30,12 @@ namespace McpCalls::ManageAi
 //
 // The path spellings (assetPath/behaviorTreePath/path for the BT graph actions,
 // controllerPath/behaviorTreePath/blackboardPath for assign_blackboard,
-// blueprintPath/controllerPath for get_info/setup_perception) stay optional: the
-// handler resolves the alias fallback itself, so the "at least one" requirement is
-// handler-enforced, not declared.
+// blueprintPath/controllerPath for get_info) stay optional: the handler resolves
+// the alias fallback itself, so the "at least one" requirement is handler-enforced,
+// not declared. setup_perception is the exception — it declares the
+// {blueprintPath, controllerPath} any-of group via RequiredAnyOf() (a
+// validation-only side-channel; nothing reaches the published JSON), so the
+// transport rejects a request that supplies neither before the handler runs.
 //
 // Drift-corrections vs the retired flat facade + P_* decls, re-verified against
 // the member bodies at this classing:
@@ -542,7 +545,8 @@ static void S_SetupPerception(FMcpSchemaBuilder& B)
 		TEXT("Damage"),
 		TEXT("Touch"),
 		TEXT("None")
-	 }, TEXT("Dominant sense for perception prioritization."));
+	 }, TEXT("Dominant sense for perception prioritization."))
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("controllerPath")});
 }
 
 static void S_SetFocus(FMcpSchemaBuilder& B)

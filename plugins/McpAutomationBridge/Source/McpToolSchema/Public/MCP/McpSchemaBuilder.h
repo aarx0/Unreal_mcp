@@ -65,12 +65,25 @@ public:
 	 *  otherwise force one action's required param onto every action. */
 	FMcpSchemaBuilder& ClearRequired();
 
+	/** Declare a required any-of group: at least one of these param names must be
+	 *  present in the payload (presence only; the handler owns value checks).
+	 *  Validation-only side-channel — recorded in builder state and read back by
+	 *  McpDeriveDecl() into the action's decl; Build() writes NOTHING for it, so
+	 *  the published schema is unchanged. Members are top-level params of this
+	 *  fragment. */
+	FMcpSchemaBuilder& RequiredAnyOf(const TArray<FString>& GroupMemberNames);
+
 	/** Build the final inputSchema JSON object. */
 	TSharedPtr<FJsonObject> Build() const;
+
+	/** Any-of groups recorded by RequiredAnyOf(), for McpDeriveDecl() to fold into
+	 *  the validation decl. Deliberately absent from Build()'s output. */
+	const TArray<TArray<FString>>& GetRequiredGroups() const { return RequiredGroups; }
 
 private:
 	TSharedPtr<FJsonObject> Properties;
 	TArray<FString> RequiredFields;
+	TArray<TArray<FString>> RequiredGroups;
 
 	void AddProperty(const FString& Name, const TSharedPtr<FJsonObject>& PropSchema);
 };

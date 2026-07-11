@@ -43,6 +43,16 @@ struct FMcpParamDecl
 	const TCHAR* Name = nullptr;
 	EMcpParamKind Kind = EMcpParamKind::Any;
 	bool bRequired = false;
+
+	// Nested kind schema (recursive-kind validation), derived from the fragment's
+	// authored sub-schema. For an Object param: the declared member schemas (each a
+	// FMcpParamDecl with its own Name/Kind, recursively). For an Array param:
+	// exactly one entry describing the element schema (Name = nullptr). Empty for
+	// scalars and for structured params authored without a sub-schema. bRequired is
+	// unused on nested nodes — nested-required is deliberately not enforced. The
+	// pointed-to arrays live in McpDeriveDecl's grow-only pools (process lifetime).
+	TConstArrayView<FMcpParamDecl> Members;
+	TConstArrayView<FMcpParamDecl> Element;
 };
 
 struct FMcpCallDecl
@@ -51,6 +61,12 @@ struct FMcpCallDecl
 	const TCHAR* Action = nullptr;
 	TConstArrayView<FMcpParamDecl> Params;
 	EMcpCallFlags Flags = EMcpCallFlags::None;
+
+	// Required any-of groups: each inner view is a group of param names, at least
+	// one of which must be present in the payload. Validation-only — authored via
+	// FMcpSchemaBuilder::RequiredAnyOf() and never emitted into the published JSON.
+	// Backed by McpDeriveDecl's grow-only pools (process lifetime).
+	TConstArrayView<TConstArrayView<const TCHAR*>> RequiredGroups;
 };
 
 /**
