@@ -350,12 +350,11 @@ static void S_AddEvent(FMcpSchemaBuilder& B)
 	 .ArrayOfObjects(TEXT("parameters"), TEXT(""))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
-	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
+	 .Object(TEXT("location"), TEXT("2D graph-node position (x, y)."),
 			[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x"), TEXT("X coordinate."))
 			 .Number(TEXT("y"), TEXT("Y coordinate."))
-			 .Number(TEXT("z"), TEXT("Z coordinate."))
-			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
+			 .Required({TEXT("x"), TEXT("y")});
 		})
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""));
@@ -1044,12 +1043,10 @@ static void S_SetRenderTransform(FMcpSchemaBuilder& B)
 			[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x")).Number(TEXT("y"));
 		})
-	 .Object(TEXT("scale"), TEXT("3D scale (x, y, z)."),
+	 .Object(TEXT("scale"), TEXT("set_render_transform: 2D scale (x, y)."),
 			[](FMcpSchemaBuilder& S) {
 			S.Number(TEXT("x"), TEXT("X scale."))
-			 .Number(TEXT("y"), TEXT("Y scale."))
-			 .Number(TEXT("z"), TEXT("Z scale."))
-			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
+			 .Number(TEXT("y"), TEXT("Y scale."));
 		})
 	 .Object(TEXT("shear"), TEXT("set_render_transform: 2D shear."),
 			[](FMcpSchemaBuilder& S) {

@@ -68,11 +68,13 @@ static void S_PaintFoliage(FMcpSchemaBuilder& B)
 	 .ArrayOfObjects(TEXT("locations"), TEXT(""))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("position"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		});
 }
 
@@ -97,7 +99,8 @@ static void S_CreateProceduralTerrain(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -132,7 +135,8 @@ static void S_CreateLandscape(FMcpSchemaBuilder& B)
 			"(alternative to the 'location' object)."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Integer(TEXT("componentsX"),
 		TEXT("create_landscape: number of components along X (alternative "
@@ -193,11 +197,13 @@ static void S_Sculpt(FMcpSchemaBuilder& B)
 	 .String(TEXT("landscapeName"), TEXT(""))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("position"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .StringEnum(TEXT("toolMode"), {
 		TEXT("Raise"),
@@ -332,7 +338,8 @@ static void S_CreateFogVolume(FMcpSchemaBuilder& B)
 {
 	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("x"),
 		TEXT("create_landscape/create_fog_volume: flat location X "
@@ -367,7 +374,8 @@ static void S_CreateLight(FMcpSchemaBuilder& B)
 			"lightType."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -422,12 +430,14 @@ static void S_CreateLightmassVolume(FMcpSchemaBuilder& B)
 {
 	B.Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("size"),
 		TEXT("create_lightmass_volume: volume size (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .String(TEXT("name"), TEXT("Name identifier."));
 }
@@ -487,7 +497,8 @@ static void S_CreateSplineActor(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("rotation"), TEXT("3D rotation (pitch, yaw, roll)."),
 		[](FMcpSchemaBuilder& S) {
@@ -515,7 +526,8 @@ static void S_AddSplinePoint(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("position"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Integer(TEXT("index"),
 		TEXT("add_spline_point: insertion index (-1/omitted appends at "
@@ -551,7 +563,8 @@ static void S_SetSplinePointPosition(FMcpSchemaBuilder& B)
 			"to modify."))
 	 .Object(TEXT("position"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Required({TEXT("actorName")});
 }
@@ -567,7 +580,8 @@ static void S_SetSplinePointTangents(FMcpSchemaBuilder& B)
 	 .Object(TEXT("arriveTangent"),
 		TEXT("set_spline_point_tangents: incoming tangent (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Object(TEXT("leaveTangent"),
 		TEXT("set_spline_point_tangents: outgoing tangent (x, y, z)."),
@@ -716,7 +730,8 @@ static void S_CreateRoadSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
@@ -730,7 +745,8 @@ static void S_CreateRiverSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
@@ -744,7 +760,8 @@ static void S_CreateFenceSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
@@ -758,7 +775,8 @@ static void S_CreateWallSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
@@ -772,7 +790,8 @@ static void S_CreateCableSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
@@ -786,7 +805,8 @@ static void S_CreatePipeSpline(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Number(TEXT("width"),
 		TEXT("create_road_spline/create_river_spline/create_fence_spline/"
