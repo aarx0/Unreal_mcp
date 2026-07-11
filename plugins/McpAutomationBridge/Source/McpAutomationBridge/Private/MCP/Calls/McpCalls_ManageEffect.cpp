@@ -178,7 +178,8 @@ static void S_CreateParticleTrail(FMcpSchemaBuilder& B)
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 	})
 	 .String(TEXT("name"), TEXT("Name identifier."))
-	 .String(TEXT("actorName"), TEXT("Name of the actor."));
+	 .String(TEXT("actorName"), TEXT("Name of the actor."))
+	 .RequiredAnyOf({TEXT("systemPath"), TEXT("emitter")});
 }
 
 static void S_CreateEnvironmentEffect(FMcpSchemaBuilder& B)
@@ -772,7 +773,8 @@ static void S_GetNiagaraInfo(FMcpSchemaBuilder& B)
 	 .String(TEXT("systemPath"), TEXT("Niagara system asset path."))
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
-	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."));
+	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("systemPath")});
 }
 
 static void S_ValidateNiagaraSystem(FMcpSchemaBuilder& B)

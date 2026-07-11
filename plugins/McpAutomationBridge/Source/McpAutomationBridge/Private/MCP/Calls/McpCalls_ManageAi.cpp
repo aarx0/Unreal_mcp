@@ -82,7 +82,8 @@ static void S_AssignBlackboard(FMcpSchemaBuilder& B)
 	B.String(TEXT("controllerPath"), TEXT("Path to controller blueprint."))
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
-	 .Required({TEXT("blackboardPath")});
+	 .Required({TEXT("blackboardPath")})
+	 .RequiredAnyOf({TEXT("controllerPath"), TEXT("behaviorTreePath")});
 }
 
 static void S_CreateBlackboardAsset(FMcpSchemaBuilder& B)
@@ -525,7 +526,8 @@ static void S_GetAiInfo(FMcpSchemaBuilder& B)
 	 .String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
 	 .String(TEXT("queryPath"), TEXT("Path to EQS query asset."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("path"), TEXT("Directory path for asset creation."));
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("controllerPath"), TEXT("behaviorTreePath"), TEXT("blackboardPath"), TEXT("queryPath"), TEXT("assetPath"), TEXT("path")});
 }
 
 static void S_SetupPerception(FMcpSchemaBuilder& B)
@@ -610,7 +612,8 @@ static void S_AddNode(FMcpSchemaBuilder& B)
 	 .Number(TEXT("y"), TEXT("Graph node Y coordinate."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
-	 .Required({TEXT("nodeType")});
+	 .Required({TEXT("nodeType")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_ConnectNodes(FMcpSchemaBuilder& B)
@@ -620,7 +623,8 @@ static void S_ConnectNodes(FMcpSchemaBuilder& B)
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
 	 .String(TEXT("childNodeId"), TEXT("Child node ID."))
-	 .Required({TEXT("parentNodeId"), TEXT("childNodeId")});
+	 .Required({TEXT("parentNodeId"), TEXT("childNodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_RemoveNode(FMcpSchemaBuilder& B)
@@ -629,7 +633,8 @@ static void S_RemoveNode(FMcpSchemaBuilder& B)
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_BreakConnections(FMcpSchemaBuilder& B)
@@ -638,7 +643,8 @@ static void S_BreakConnections(FMcpSchemaBuilder& B)
 	 .String(TEXT("behaviorTreePath"), TEXT("Path to behavior tree asset."))
 	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_SetNodeProperties(FMcpSchemaBuilder& B)
@@ -649,7 +655,8 @@ static void S_SetNodeProperties(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("comment"), TEXT("Node comment."))
 	 .Object(TEXT("properties"), TEXT("Properties to set on a graph node."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_AddSubnode(FMcpSchemaBuilder& B)
@@ -660,7 +667,8 @@ static void S_AddSubnode(FMcpSchemaBuilder& B)
 	 .String(TEXT("parentNodeId"), TEXT("Parent node id: 'root' or a node GUID. add_node/add_composite_node/add_task_node connect the new node under it; add_subnode/add_decorator/add_service attach to it."))
 	 .String(TEXT("subnodeType"), TEXT("Behavior Tree graph subnode type."))
 	 .String(TEXT("nodeClass"), TEXT("Behavior Tree node class: engine name (e.g. 'BTDecorator_Blackboard'), a short name that expands to one, or a Blueprint class path."))
-	 .Required({TEXT("parentNodeId"), TEXT("subnodeType"), TEXT("nodeClass")});
+	 .Required({TEXT("parentNodeId"), TEXT("subnodeType"), TEXT("nodeClass")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("behaviorTreePath"), TEXT("path")});
 }
 
 static void S_ConfigureNavMeshSettings(FMcpSchemaBuilder& B)

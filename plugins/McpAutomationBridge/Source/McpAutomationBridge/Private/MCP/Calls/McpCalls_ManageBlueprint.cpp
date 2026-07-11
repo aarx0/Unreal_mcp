@@ -445,7 +445,8 @@ static void S_CreateNode(FMcpSchemaBuilder& B)
 	 .ArrayOfObjects(TEXT("parameters"), TEXT(""))
 	 .String(TEXT("targetClass"), TEXT(""))
 	 .String(TEXT("inputAxisName"), TEXT(""))
-	 .Required({TEXT("nodeType")});
+	 .Required({TEXT("nodeType")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_DeleteNode(FMcpSchemaBuilder& B)
@@ -454,7 +455,8 @@ static void S_DeleteNode(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_ConnectPins(FMcpSchemaBuilder& B)
@@ -472,7 +474,8 @@ static void S_ConnectPins(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Array(TEXT("blueprintCandidates"), TEXT("Ordered list of candidate blueprint paths to try when blueprintPath/name is absent."))
 	 .Array(TEXT("candidates"), TEXT("Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try."))
-	 .Required({TEXT("sourceNodeId"), TEXT("sourcePinName"), TEXT("targetNodeId"), TEXT("targetPinName")});
+	 .Required({TEXT("sourceNodeId"), TEXT("sourcePinName"), TEXT("targetNodeId"), TEXT("targetPinName")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_BreakPinLinks(FMcpSchemaBuilder& B)
@@ -482,7 +485,8 @@ static void S_BreakPinLinks(FMcpSchemaBuilder& B)
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
-	 .Required({TEXT("nodeId"), TEXT("pinName")});
+	 .Required({TEXT("nodeId"), TEXT("pinName")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_SetNodeProperty(FMcpSchemaBuilder& B)
@@ -493,7 +497,8 @@ static void S_SetNodeProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
 	 .String(TEXT("stringValue"), TEXT("Property value (node properties like Comment are string-serialized)."))
-	 .Required({TEXT("nodeId"), TEXT("propertyName")});
+	 .Required({TEXT("nodeId"), TEXT("propertyName")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_CreateRerouteNode(FMcpSchemaBuilder& B)
@@ -504,7 +509,8 @@ static void S_CreateRerouteNode(FMcpSchemaBuilder& B)
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("posX"), TEXT("Node X position (graph units)."))
 	 .Number(TEXT("y"), TEXT(""))
-	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."));
+	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_GetNodeDetails(FMcpSchemaBuilder& B)
@@ -513,7 +519,8 @@ static void S_GetNodeDetails(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_GetGraphDetails(FMcpSchemaBuilder& B)
@@ -521,7 +528,8 @@ static void S_GetGraphDetails(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
-	 .Bool(TEXT("includePinLinks"), TEXT("get_graph_details: include per-node pins with defaults and \"<nodeGuid>:<pinName>\" link refs (always on inside get_transition_rule_graph's ruleGraph)."));
+	 .Bool(TEXT("includePinLinks"), TEXT("get_graph_details: include per-node pins with defaults and \"<nodeGuid>:<pinName>\" link refs (always on inside get_transition_rule_graph's ruleGraph)."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_GetPinDetails(FMcpSchemaBuilder& B)
@@ -531,7 +539,8 @@ static void S_GetPinDetails(FMcpSchemaBuilder& B)
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
-	 .Required({TEXT("nodeId")});
+	 .Required({TEXT("nodeId")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_ListNodeTypes(FMcpSchemaBuilder& B)
@@ -548,21 +557,24 @@ static void S_SetPinDefaultValue(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeId"), TEXT("ID of the node."))
 	 .String(TEXT("pinName"), TEXT("Name of the pin."))
 	 .String(TEXT("stringValue"), TEXT("Pin default value (UE serializes pin defaults as strings)."))
-	 .Required({TEXT("nodeId"), TEXT("pinName")});
+	 .Required({TEXT("nodeId"), TEXT("pinName")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_ArrangeGraph(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("graphName"), TEXT("Name of the graph."));
+	 .String(TEXT("graphName"), TEXT("Name of the graph."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_ListAnimbpGraphs(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .String(TEXT("graphName"), TEXT("Name of the graph."));
+	 .String(TEXT("graphName"), TEXT("Name of the graph."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 static void S_GetTransitionRuleGraph(FMcpSchemaBuilder& B)
@@ -574,7 +586,8 @@ static void S_GetTransitionRuleGraph(FMcpSchemaBuilder& B)
 	 .String(TEXT("toState"), TEXT("get_transition_rule_graph: target state name (paired with fromState)."))
 	 .String(TEXT("transitionName"), TEXT("get_transition_rule_graph: transition node title or rule-graph name, as an alternative to fromState/toState."))
 	 .String(TEXT("stateMachine"), TEXT("get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted."))
-	 .Integer(TEXT("transitionIndex"), TEXT("get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response)."));
+	 .Integer(TEXT("transitionIndex"), TEXT("get_transition_rule_graph: 0-based pick when parallel transitions between the same states match (see matchCount in the response)."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 
 // WidgetAuthoring (per-action HandleWidgetAuthoring* members)
@@ -937,7 +950,8 @@ static void S_SetAnchor(FMcpSchemaBuilder& B)
 	 .Number(TEXT("anchorMaxX"), TEXT("set_anchor: anchor maximum X (0..1)."))
 	 .Number(TEXT("anchorMaxY"), TEXT("set_anchor: anchor maximum Y (0..1)."))
 	 .String(TEXT("preset"), TEXT("set_anchor: named anchor preset (TopLeft, TopCenter, TopRight, CenterLeft, Center, CenterRight, BottomLeft, BottomCenter, BottomRight, StretchHorizontal, StretchVertical, StretchAll)."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetAlignment(FMcpSchemaBuilder& B)
@@ -952,7 +966,8 @@ static void S_SetAlignment(FMcpSchemaBuilder& B)
 		})
 	 .Number(TEXT("alignmentX"), TEXT("set_alignment: pivot X (0..1)."))
 	 .Number(TEXT("alignmentY"), TEXT("set_alignment: pivot Y (0..1)."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetPosition(FMcpSchemaBuilder& B)
@@ -969,7 +984,8 @@ static void S_SetPosition(FMcpSchemaBuilder& B)
 	 .Number(TEXT("posY"), TEXT("Node Y position (graph units)."))
 	 .Number(TEXT("x"), TEXT(""))
 	 .Number(TEXT("y"), TEXT(""))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetSize(FMcpSchemaBuilder& B)
@@ -984,7 +1000,8 @@ static void S_SetSize(FMcpSchemaBuilder& B)
 	 .Number(TEXT("y"), TEXT(""))
 	 .Bool(TEXT("fill"), TEXT("set_size: stretch a HBox/VBox child to fill (vs Automatic)."))
 	 .Number(TEXT("fillWeight"), TEXT("set_size: fill weight when fill is true."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetPadding(FMcpSchemaBuilder& B)
@@ -1002,7 +1019,8 @@ static void S_SetPadding(FMcpSchemaBuilder& B)
 	 .Number(TEXT("padTop"), TEXT("set_padding: top padding."))
 	 .Number(TEXT("padRight"), TEXT("set_padding: right padding."))
 	 .Number(TEXT("padBottom"), TEXT("set_padding: bottom padding."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetZOrder(FMcpSchemaBuilder& B)
@@ -1012,7 +1030,8 @@ static void S_SetZOrder(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .Integer(TEXT("zOrder"), TEXT("set_z_order: Canvas slot Z-order."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetRenderTransform(FMcpSchemaBuilder& B)
@@ -1037,7 +1056,8 @@ static void S_SetRenderTransform(FMcpSchemaBuilder& B)
 			S.Number(TEXT("x")).Number(TEXT("y"));
 		})
 	 .Number(TEXT("angle"), TEXT("set_render_transform: rotation angle in degrees."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetVisibility(FMcpSchemaBuilder& B)
@@ -1047,7 +1067,8 @@ static void S_SetVisibility(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .String(TEXT("visibility"), TEXT("set_visibility: Visible, Hidden, Collapsed, HitTestInvisible, or SelfHitTestInvisible."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetStyle(FMcpSchemaBuilder& B)
@@ -1069,7 +1090,8 @@ static void S_SetStyle(FMcpSchemaBuilder& B)
 	 .Object(TEXT("structValue"), TEXT("Set a struct style property (e.g. a Slate brush/margin)."))
 	 .Array(TEXT("arrayValue"), TEXT("Set an array style property."), TEXT("object"))
 	 .String(TEXT("style"), TEXT("set_style: legacy value alias for propertyName=\"Style\" when propertyName is omitted."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_SetClipping(FMcpSchemaBuilder& B)
@@ -1079,7 +1101,8 @@ static void S_SetClipping(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .String(TEXT("clipping"), TEXT("set_clipping: Inherit, ClipToBounds, ClipToBoundsWithoutIntersecting, ClipToBoundsAlways, or OnDemand."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_CreatePropertyBinding(FMcpSchemaBuilder&) {}
@@ -1101,7 +1124,8 @@ static void S_BindOnClicked(FMcpSchemaBuilder& B)
 	 .String(TEXT("delegateName"), TEXT("Multicast delegate name (bind_on_clicked/bind_on_hovered default OnClicked/OnHovered; bind_on_value_changed default OnValueChanged; bind_event_to_delegate)."))
 	 .String(TEXT("targetFunction"), TEXT("bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName)."))
 	 .String(TEXT("functionName"), TEXT("Name of the function."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_BindOnHovered(FMcpSchemaBuilder& B)
@@ -1113,7 +1137,8 @@ static void S_BindOnHovered(FMcpSchemaBuilder& B)
 	 .String(TEXT("delegateName"), TEXT("Multicast delegate name (bind_on_clicked/bind_on_hovered default OnClicked/OnHovered; bind_on_value_changed default OnValueChanged; bind_event_to_delegate)."))
 	 .String(TEXT("targetFunction"), TEXT("bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName)."))
 	 .String(TEXT("functionName"), TEXT("Name of the function."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_BindOnValueChanged(FMcpSchemaBuilder& B)
@@ -1124,7 +1149,8 @@ static void S_BindOnValueChanged(FMcpSchemaBuilder& B)
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .String(TEXT("delegateName"), TEXT("Multicast delegate name (bind_on_clicked/bind_on_hovered default OnClicked/OnHovered; bind_on_value_changed default OnValueChanged; bind_event_to_delegate)."))
 	 .String(TEXT("targetText"), TEXT("bind_on_value_changed: text widget to live-update with the new value."))
-	 .Required({TEXT("widgetPath")});
+	 .Required({TEXT("widgetPath")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_BindEventToDelegate(FMcpSchemaBuilder& B)
@@ -1155,7 +1181,8 @@ static void S_AddAnimationTrack(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("widgetName"), TEXT("Target widget's name within the tree (remove/rename/reparent; DesiredFocusWidget; get_widget_info: return this widget's property values + objectPath)."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .Required({TEXT("widgetPath"), TEXT("animationName")});
+	 .Required({TEXT("widgetPath"), TEXT("animationName")})
+	 .RequiredAnyOf({TEXT("slotName"), TEXT("name"), TEXT("widgetName")});
 }
 
 static void S_AddAnimationKeyframe(FMcpSchemaBuilder& B)
@@ -1332,7 +1359,8 @@ static void S_RenameWidget(FMcpSchemaBuilder& B)
 	 .String(TEXT("slotName"), TEXT("Name for the widget being added / the slot to target."))
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("newName"), TEXT("New name for renaming."))
-	 .Required({TEXT("widgetPath"), TEXT("newName")});
+	 .Required({TEXT("widgetPath"), TEXT("newName")})
+	 .RequiredAnyOf({TEXT("oldName"), TEXT("slotName"), TEXT("name")});
 }
 
 static void S_GetWidgetSlotInfo(FMcpSchemaBuilder& B)

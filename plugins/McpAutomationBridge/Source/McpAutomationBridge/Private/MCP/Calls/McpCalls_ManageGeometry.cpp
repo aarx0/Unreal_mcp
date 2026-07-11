@@ -281,7 +281,8 @@ static void S_SelfUnion(FMcpSchemaBuilder& B)
 static void S_GetMeshInfo(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
-	 .String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."));
+	 .String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."))
+	 .RequiredAnyOf({TEXT("actorName"), TEXT("assetPath")});
 }
 
 static void S_RecalculateNormals(FMcpSchemaBuilder& B)
@@ -797,7 +798,8 @@ static void S_GenerateLODs(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor to operate on (also sets the label for create_* actions)."))
 	 .Integer(TEXT("lodCount"), TEXT("Number of LOD levels to generate."))
-	 .String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."));
+	 .String(TEXT("assetPath"), TEXT("Destination asset path for convert_to_static_mesh/convert_to_nanite (e.g. /Game/Meshes/SM_Rock)."))
+	 .RequiredAnyOf({TEXT("actorName"), TEXT("assetPath")});
 }
 
 static void S_SetLODSettings(FMcpSchemaBuilder& B)

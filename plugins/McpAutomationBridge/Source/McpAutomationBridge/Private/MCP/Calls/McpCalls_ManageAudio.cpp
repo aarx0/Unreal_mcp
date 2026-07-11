@@ -157,7 +157,9 @@ static void S_SetSoundMixClassOverride(FMcpSchemaBuilder& B)
 	 .Number(TEXT("volume"), TEXT(""))
 	 .Number(TEXT("pitch"), TEXT(""))
 	 .Number(TEXT("fadeInTime"), TEXT(""))
-	 .Bool(TEXT("applyToChildren"), TEXT("set_sound_mix_class_override/add_mix_modifier: apply the override to child sound classes."));
+	 .Bool(TEXT("applyToChildren"), TEXT("set_sound_mix_class_override/add_mix_modifier: apply the override to child sound classes."))
+	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")})
+	 .RequiredAnyOf({TEXT("soundClassName"), TEXT("soundClass")});
 }
 
 static void S_ClearSoundMixClassOverride(FMcpSchemaBuilder& B)
@@ -167,14 +169,17 @@ static void S_ClearSoundMixClassOverride(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("soundClassName"), TEXT(""))
 	 .String(TEXT("soundClass"), TEXT("Alias of soundClassName (set_sound_mix_class_override/clear_sound_mix_class_override)."))
-	 .Number(TEXT("fadeOutTime"), TEXT(""));
+	 .Number(TEXT("fadeOutTime"), TEXT(""))
+	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")})
+	 .RequiredAnyOf({TEXT("soundClassName"), TEXT("soundClass")});
 }
 
 static void S_SetBaseSoundMix(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("mixName"), TEXT(""))
 	 .String(TEXT("mix"), TEXT("Alias of mixName (set_sound_mix_class_override/clear_sound_mix_class_override/set_base_sound_mix)."))
-	 .String(TEXT("name"), TEXT("Name identifier."));
+	 .String(TEXT("name"), TEXT("Name identifier."))
+	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")});
 }
 
 static void S_FadeSoundOut(FMcpSchemaBuilder& B)
@@ -212,7 +217,8 @@ static void S_CreateAudioComponent(FMcpSchemaBuilder& B)
 	 .String(TEXT("attachTo"), TEXT("create_audio_component: actor to attach the component to (alias of actorName)."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .Number(TEXT("volume"), TEXT(""))
-	 .Number(TEXT("pitch"), TEXT(""));
+	 .Number(TEXT("pitch"), TEXT(""))
+	 .RequiredAnyOf({TEXT("soundPath"), TEXT("path")});
 }
 
 static void S_EnableAudioAnalysis(FMcpSchemaBuilder& B)
@@ -260,7 +266,8 @@ static void S_FadeSound(FMcpSchemaBuilder& B)
 	 .Number(TEXT("fadeTime"), TEXT(""))
 	 .Number(TEXT("targetVolume"), TEXT(""))
 	 .String(TEXT("fadeType"), TEXT(""))
-	 .String(TEXT("componentName"), TEXT("Name of the component."));
+	 .String(TEXT("componentName"), TEXT("Name of the component."))
+	 .RequiredAnyOf({TEXT("soundName"), TEXT("actorName")});
 }
 
 static void S_CreateReverbZone(FMcpSchemaBuilder& B)
@@ -333,7 +340,8 @@ static void S_AddMetasoundNode(FMcpSchemaBuilder& B)
 	 .String(TEXT("nodeClassName"), TEXT("add_metasound_node: explicit 3-part MetaSound class name (Namespace.Name.Variant)."))
 	 .String(TEXT("nodeType"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation. Default true."))
-	 .Required({TEXT("assetPath")});
+	 .Required({TEXT("assetPath")})
+	 .RequiredAnyOf({TEXT("nodeClassName"), TEXT("nodeType")});
 }
 
 static void S_ConnectMetasoundNodes(FMcpSchemaBuilder& B)

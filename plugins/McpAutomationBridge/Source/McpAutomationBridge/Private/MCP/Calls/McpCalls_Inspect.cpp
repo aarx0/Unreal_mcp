@@ -268,7 +268,8 @@ static void S_SetProperty(FMcpSchemaBuilder& B)
 	 .Object(TEXT("structValue"), TEXT("Set a struct / instanced subobject ({\"__class\",...}) / map property."))
 	 .Array(TEXT("arrayValue"), TEXT("Set an array property (items are structs/instanced objects)."), TEXT("object"))
 	 .Bool(TEXT("markDirty"), TEXT("set_property: mark the owning package dirty (default true)."))
-	 .Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."));
+	 .Bool(TEXT("save"), TEXT("set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all."))
+	 .RequiredAnyOf({TEXT("propertyName"), TEXT("propertyPath")});
 }
 
 static void S_GetProperty(FMcpSchemaBuilder& B)

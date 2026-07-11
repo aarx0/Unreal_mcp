@@ -84,7 +84,8 @@ static void S_CreateStateMachine(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("machineName"), TEXT("Alias of stateMachineName."))
 	 .ArrayOfObjects(TEXT("states"), TEXT("create_state_machine: states to add ({name})."))
-	 .ArrayOfObjects(TEXT("transitions"), TEXT("create_state_machine: transitions to add ({sourceState, targetState, crossfadeDuration})."));
+	 .ArrayOfObjects(TEXT("transitions"), TEXT("create_state_machine: transitions to add ({sourceState, targetState, crossfadeDuration})."))
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("name")});
 }
 
 static void S_SetupIk(FMcpSchemaBuilder& B)
@@ -104,7 +105,8 @@ static void S_ConfigureVehicle(FMcpSchemaBuilder& B)
 	 .Object(TEXT("engine"), TEXT("configure_vehicle: engine settings (maxRPM, maxTorque, gears)."))
 	 .Object(TEXT("transmission"), TEXT("configure_vehicle: transmission settings (finalDrive/finalDriveRatio, gearRatios array)."))
 	 .Number(TEXT("mass"), TEXT(""))
-	 .Number(TEXT("dragCoefficient"), TEXT(""));
+	 .Number(TEXT("dragCoefficient"), TEXT(""))
+	 .RequiredAnyOf({TEXT("actorName"), TEXT("vehicleName")});
 }
 
 static void S_SetupPhysicsSimulation(FMcpSchemaBuilder& B)
@@ -114,7 +116,8 @@ static void S_SetupPhysicsSimulation(FMcpSchemaBuilder& B)
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("physicsAssetName"), TEXT("Physics asset name for setup_physics_simulation."))
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
-	 .Bool(TEXT("assignToMesh"), TEXT("Assign the created physics asset to the skeletal mesh."));
+	 .Bool(TEXT("assignToMesh"), TEXT("Assign the created physics asset to the skeletal mesh."))
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath"), TEXT("actorName")});
 }
 
 static void S_CreateAnimationAsset(FMcpSchemaBuilder& B)
@@ -144,7 +147,8 @@ static void S_PlayMontage(FMcpSchemaBuilder& B)
 	 .String(TEXT("montagePath"), TEXT("play_montage: montage to play; add_montage_section: montage to edit ('assetPath'/'name' accepted as fallback)."))
 	 .String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
 	 .Number(TEXT("playRate"), TEXT(""))
-	 .Required({TEXT("actorName")});
+	 .Required({TEXT("actorName")})
+	 .RequiredAnyOf({TEXT("montagePath"), TEXT("assetPath")});
 }
 
 static void S_CreatePoseLibrary(FMcpSchemaBuilder& B)
@@ -312,7 +316,8 @@ static void S_AddMontageSection(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .Number(TEXT("time"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("sectionName")});
+	 .Required({TEXT("sectionName")})
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("montagePath"), TEXT("name")});
 }
 
 static void S_AddMontageSlot(FMcpSchemaBuilder& B)
@@ -352,7 +357,8 @@ static void S_SetBlendIn(FMcpSchemaBuilder& B)
 	 .Number(TEXT("time"), TEXT(""))
 	 .String(TEXT("blendOption"), TEXT("set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("assetPath")});
+	 .Required({TEXT("assetPath")})
+	 .RequiredAnyOf({TEXT("blendTime"), TEXT("time"), TEXT("blendOption")});
 }
 
 static void S_SetBlendOut(FMcpSchemaBuilder& B)
@@ -362,7 +368,8 @@ static void S_SetBlendOut(FMcpSchemaBuilder& B)
 	 .Number(TEXT("time"), TEXT(""))
 	 .String(TEXT("blendOption"), TEXT("set_blend_in/set_blend_out: Linear, Cubic, or Sinusoidal."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("assetPath")});
+	 .Required({TEXT("assetPath")})
+	 .RequiredAnyOf({TEXT("blendTime"), TEXT("time"), TEXT("blendOption")});
 }
 
 static void S_LinkSections(FMcpSchemaBuilder& B)
@@ -483,7 +490,9 @@ static void S_AddStateMachine(FMcpSchemaBuilder& B)
 	 .String(TEXT("stateMachineName"), TEXT("State machine name for add_state_machine/add_state/add_transition/set_transition_rules."))
 	 .Number(TEXT("positionX"), TEXT(""))
 	 .Number(TEXT("positionY"), TEXT(""))
-	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("assetPath")})
+	 .RequiredAnyOf({TEXT("stateMachineName"), TEXT("machineName")});
 }
 
 static void S_AddState(FMcpSchemaBuilder& B)
@@ -496,7 +505,8 @@ static void S_AddState(FMcpSchemaBuilder& B)
 	 .Number(TEXT("positionX"), TEXT(""))
 	 .Number(TEXT("positionY"), TEXT(""))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("stateName")});
+	 .Required({TEXT("stateName")})
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("assetPath")});
 }
 
 static void S_AddTransition(FMcpSchemaBuilder& B)
@@ -509,7 +519,8 @@ static void S_AddTransition(FMcpSchemaBuilder& B)
 	 .String(TEXT("toState"), TEXT("add_transition/set_transition_rules: target state name."))
 	 .Number(TEXT("crossfadeDuration"), TEXT("add_transition/set_transition_rules: crossfade time in seconds."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("fromState"), TEXT("toState")});
+	 .Required({TEXT("fromState"), TEXT("toState")})
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("assetPath")});
 }
 
 static void S_SetTransitionRules(FMcpSchemaBuilder& B)
@@ -524,7 +535,8 @@ static void S_SetTransitionRules(FMcpSchemaBuilder& B)
 	 .Integer(TEXT("priorityOrder"), TEXT("set_transition_rules: transition priority order."))
 	 .Bool(TEXT("automaticRule"), TEXT("set_transition_rules: auto-trigger when the source sequence player finishes (default false)."))
 	 .Bool(TEXT("bidirectional"), TEXT("set_transition_rules: also allow the reverse transition (default false)."))
-	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("assetPath")});
 }
 
 static void S_AddBlendNode(FMcpSchemaBuilder& B)
@@ -644,7 +656,8 @@ static void S_BindAnimNotify(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Number(TEXT("positionX"), TEXT(""))
 	 .Number(TEXT("positionY"), TEXT(""))
-	 .Required({TEXT("notifyName"), TEXT("functionName")});
+	 .Required({TEXT("notifyName"), TEXT("functionName")})
+	 .RequiredAnyOf({TEXT("blueprintPath"), TEXT("assetPath")});
 }
 
 // Skeleton, physics assets, skin weights, cloth, morphs (SkeletonHandlers.cpp)
@@ -652,19 +665,22 @@ static void S_BindAnimNotify(FMcpSchemaBuilder& B)
 static void S_GetSkeletonInfo(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath")});
 }
 
 static void S_ListBones(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath")});
 }
 
 static void S_ListSockets(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath")});
 }
 
 static void S_CreateSocket(FMcpSchemaBuilder& B)
@@ -687,7 +703,9 @@ static void S_CreateSocket(FMcpSchemaBuilder& B)
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 	})
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("socketName")});
+	 .Required({TEXT("socketName")})
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath")})
+	 .RequiredAnyOf({TEXT("attachBoneName"), TEXT("boneName")});
 }
 
 static void S_ConfigureSocket(FMcpSchemaBuilder& B)
@@ -709,7 +727,8 @@ static void S_ConfigureSocket(FMcpSchemaBuilder& B)
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 	})
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("socketName")});
+	 .Required({TEXT("socketName")})
+	 .RequiredAnyOf({TEXT("skeletonPath"), TEXT("skeletalMeshPath")});
 }
 
 static void S_CreateVirtualBone(FMcpSchemaBuilder& B)
@@ -727,13 +746,15 @@ static void S_CreatePhysicsAsset(FMcpSchemaBuilder& B)
 	B.String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
 	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("outputPath"), TEXT("create_physics_asset: output asset path (default: <mesh>_PhysicsAsset next to the mesh)."))
-	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."));
+	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
+	 .RequiredAnyOf({TEXT("skeletalMeshPath"), TEXT("skeletonPath")});
 }
 
 static void S_ListPhysicsBodies(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("physicsAssetPath"), TEXT("Existing physics asset path (list_physics_bodies, add_physics_body, configure_physics_body, add_physics_constraint, configure_constraint_limits)."))
-	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."));
+	 .String(TEXT("skeletalMeshPath"), TEXT("Skeletal mesh path."))
+	 .RequiredAnyOf({TEXT("physicsAssetPath"), TEXT("skeletalMeshPath")});
 }
 
 static void S_AddPhysicsBody(FMcpSchemaBuilder& B)
@@ -822,7 +843,8 @@ static void S_SetBoneTransform(FMcpSchemaBuilder& B)
 		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
 	})
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
-	 .Required({TEXT("boneName")});
+	 .Required({TEXT("boneName")})
+	 .RequiredAnyOf({TEXT("skeletalMeshPath"), TEXT("skeletonPath")});
 }
 
 static void S_CreateMorphTarget(FMcpSchemaBuilder& B)
@@ -885,7 +907,8 @@ static void S_CreateSkeleton(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
 	 .String(TEXT("skeletonPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("rootBoneName"), TEXT("create_skeleton: name for the initial root bone (default 'Root')."));
+	 .String(TEXT("rootBoneName"), TEXT("create_skeleton: name for the initial root bone (default 'Root')."))
+	 .RequiredAnyOf({TEXT("path"), TEXT("skeletonPath")});
 }
 
 static void S_AddBone(FMcpSchemaBuilder& B)
