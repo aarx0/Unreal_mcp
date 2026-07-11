@@ -167,10 +167,15 @@ behavior, two validation contracts. Consolidation-pass input (keep one action, o
 
 ### [ ] 2026-07-10 — nested-contract wave follow-ups (from the 351-param audit)
 Logged at the wave's close (machinery 73073c18, authoring 2107c684/802eafea/+B): (a) DEAD READS —
-add_force_module.forceVector + add_velocity_module.velocity (NiagaraAuthoringHandlers ~1287/~1388)
-parsed but never applied; set_spline_point_tangents.leaveTangent read-then-discarded;
-configure_player_start.location/rotation parsed-never-applied (ManageNetworking) — each wants
-wire-or-retire. (b) set_scs_transform RESETS omitted channels to identity/1 while modify_scs
+RESOLVED 2026-07-11 (7bfff343 + fragment fix): leaveTangent WIRED (SetTangentsAtSplinePoint when
+present; arrive-only path unchanged) and configure_player_start location/rotation WIRED (Modify +
+SetActorLocation/Rotation under the existing save path; shapes declared — note the fragment
+upgrade was initially claimed-but-not-landed by the agent, caught by live probe);
+add_force_module.forceVector + add_velocity_module.velocity REMOVED (no stack-input pattern
+exists in the file — wiring would need Niagara stack-graph machinery). New find while probing:
+configure_player_start hard-requires blueprintPath before touching the PlayerStart (family
+preamble?) even though the action targets a level actor — check whether that requirement is
+genuine or a preamble over-reach. (b) set_scs_transform RESETS omitted channels to identity/1 while modify_scs
 PRESERVES them — reconcile the semantics or document the split. (c) ArrayOfObjects item schemas
 deliberately not authored this wave (none declare element members, so element-level gates are
 no-ops) — authoring them publishes element contracts and activates per-element validation;

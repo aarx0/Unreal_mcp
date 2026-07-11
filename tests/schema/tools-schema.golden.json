@@ -1188,6 +1188,11 @@
               "type": "number"
             }
           },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "lightClass": {
@@ -6788,21 +6793,6 @@
         "forceType": {
           "type": "string"
         },
-        "forceVector": {
-          "description": "3D force vector (x, y, z).",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
-        },
         "friction": {
           "type": "number"
         },
@@ -7015,21 +7005,6 @@
         },
         "vectorValue": {
           "description": "Value for a Vector Niagara parameter (x, y, z).",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
-          "type": "object"
-        },
-        "velocity": {
-          "description": "3D velocity vector (x, y, z).",
           "properties": {
             "x": {
               "type": "number"
@@ -9595,6 +9570,22 @@
         },
         "location": {
           "description": "configure_player_start: PlayerStart world location (x, y, z).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "type": "object"
         },
         "mapName": {
@@ -9758,6 +9749,17 @@
         },
         "rotation": {
           "description": "configure_player_start: PlayerStart world rotation (pitch, yaw, roll).",
+          "properties": {
+            "pitch": {
+              "type": "number"
+            },
+            "roll": {
+              "type": "number"
+            },
+            "yaw": {
+              "type": "number"
+            }
+          },
           "type": "object"
         },
         "rpcType": {
