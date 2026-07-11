@@ -28,10 +28,12 @@ using FMcpParamPool = TArray<TUniquePtr<TArray<FMcpParamDecl>>>;
 static TConstArrayView<FMcpParamDecl> McpDeriveElement(
     const TSharedPtr<FJsonObject>& ArraySchema, FMcpNamePool& NamePools, FMcpParamPool& ParamPools);
 
-// Derive the member schemas of one object node (its "properties", with "required"
-// folded into each member's bRequired for the TOP level — nested nodes carry it
-// too but the transport never reads nested-required). Recurses into Object members
-// and Array elements. Returns a view into a freshly pooled, never-again-grown array.
+// Derive the member schemas of one object node (its "properties", with the node's
+// "required" array folded into each member's bRequired). This runs at every level,
+// so a sub-schema's "required" sets bRequired on that object's members and an array
+// item schema's "required" on the element's members — the transport enforces both
+// on a present parent. Recurses into Object members and Array elements. Returns a
+// view into a freshly pooled, never-again-grown array.
 static TConstArrayView<FMcpParamDecl> McpDeriveMembers(
     const TSharedPtr<FJsonObject>& Schema, FMcpNamePool& NamePools, FMcpParamPool& ParamPools)
 {

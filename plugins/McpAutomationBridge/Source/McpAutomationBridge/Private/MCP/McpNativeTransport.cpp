@@ -41,11 +41,15 @@ static FString McpDescribeActiveModalWindow()
 }
 
 // ─── Recursive nested-kind validation (McpCallRegistry decl walk) ─────────────
-// The per-action decl carries nested member/element kinds derived from each
-// fragment's authored sub-schema; these walk a present payload subtree against
-// them. Kind matching mirrors the top-level type check (integer folds to Number,
-// so any JSON number satisfies it). Absent members and unknown extra members are
-// intentionally NOT flagged (nested-required and nested-unknown are out of scope).
+// The per-action decl carries nested member/element kinds AND per-member required
+// flags derived from each fragment's authored sub-schema; these walk a present
+// payload subtree against them. Kind matching mirrors the top-level type check
+// (integer folds to Number, so any JSON number satisfies it), and member lookup is
+// case-insensitive because UE property/FName matching is. One walk yields three
+// findings kept apart: a wrong nested kind, a payload member of an object that
+// declares members but has no case-insensitive declared match (undeclared), and a
+// declared-required member missing from a present object. Objects with no declared
+// members are open bags and constrain nothing.
 
 static bool McpJsonMatchesKind(EJson Type, EMcpParamKind Kind)
 {
@@ -87,8 +91,17 @@ static const TCHAR* McpJsonValueDisplayName(EJson Type)
 	}
 }
 
+// One walk's findings, kept apart so each maps to its own rejection block + detail
+// array (mirroring the sibling top-level checks).
+struct FMcpNestedWalkErrors
+{
+	TArray<FString> Kind;            // a nested value of the wrong JSON type
+	TArray<FString> Undeclared;      // a payload member with no case-insensitive declared match
+	TArray<FString> MissingRequired; // a declared-required member absent from a present object
+};
+
 static void McpCheckNestedNode(const FString& Path, const FMcpParamDecl& Node,
-	const TSharedPtr<FJsonValue>& Val, TArray<FString>& OutErrors)
+	const TSharedPtr<FJsonValue>& Val, FMcpNestedWalkErrors& Out)
 {
 	if (!Val.IsValid() || Val->Type == EJson::Null || Val->Type == EJson::None)
 	{
@@ -96,7 +109,7 @@ static void McpCheckNestedNode(const FString& Path, const FMcpParamDecl& Node,
 	}
 	if (Node.Kind != EMcpParamKind::Any && !McpJsonMatchesKind(Val->Type, Node.Kind))
 	{
-		OutErrors.Add(FString::Printf(TEXT("%s: expected %s, got %s"),
+		Out.Kind.Add(FString::Printf(TEXT("%s: expected %s, got %s"),
 			*Path, McpKindDisplayName(Node.Kind), McpJsonValueDisplayName(Val->Type)));
 		return; // wrong kind — do not descend into a mismatched value
 	}
@@ -105,12 +118,47 @@ static void McpCheckNestedNode(const FString& Path, const FMcpParamDecl& Node,
 		const TSharedPtr<FJsonObject>* Sub = nullptr;
 		if (Val->TryGetObject(Sub) && Sub && Sub->IsValid())
 		{
+			// Match each payload key to a declared member ignoring case (payload "X"
+			// matches declared "x"); an unmatched key is undeclared. Matched paths use
+			// the declared spelling; the undeclared path can only use the payload key.
+			for (const auto& Field : (*Sub)->Values)
+			{
+				const FMcpParamDecl* Match = nullptr;
+				for (const FMcpParamDecl& Member : Node.Members)
+				{
+					if (Field.Key.Equals(Member.Name, ESearchCase::IgnoreCase))
+					{
+						Match = &Member;
+						break;
+					}
+				}
+				if (!Match)
+				{
+					TArray<FString> Declared;
+					for (const FMcpParamDecl& Member : Node.Members) { Declared.Add(Member.Name); }
+					Out.Undeclared.Add(FString::Printf(
+						TEXT("%s.%s: not a declared member (declared: %s)"),
+						*Path, *Field.Key, *FString::Join(Declared, TEXT(", "))));
+					continue;
+				}
+				McpCheckNestedNode(FString::Printf(TEXT("%s.%s"), *Path, Match->Name),
+					*Match, Field.Value, Out);
+			}
+			// A present object must carry its required members (case-insensitive).
 			for (const FMcpParamDecl& Member : Node.Members)
 			{
-				const TSharedPtr<FJsonValue> Field = (*Sub)->Values.FindRef(Member.Name);
-				if (!Field.IsValid()) { continue; } // absent member: not an error
-				McpCheckNestedNode(FString::Printf(TEXT("%s.%s"), *Path, Member.Name),
-					Member, Field, OutErrors);
+				if (!Member.bRequired) { continue; }
+				bool bPresent = false;
+				for (const auto& Field : (*Sub)->Values)
+				{
+					if (Field.Key.Equals(Member.Name, ESearchCase::IgnoreCase)) { bPresent = true; break; }
+				}
+				if (!bPresent)
+				{
+					Out.MissingRequired.Add(FString::Printf(
+						TEXT("%s.%s is required when %s is provided"),
+						*Path, Member.Name, *Path));
+				}
 			}
 		}
 	}
@@ -123,7 +171,7 @@ static void McpCheckNestedNode(const FString& Path, const FMcpParamDecl& Node,
 			for (int32 i = 0; i < Arr->Num(); ++i)
 			{
 				McpCheckNestedNode(FString::Printf(TEXT("%s[%d]"), *Path, i),
-					Element, (*Arr)[i], OutErrors);
+					Element, (*Arr)[i], Out);
 			}
 		}
 	}
@@ -1788,10 +1836,11 @@ void FMcpNativeTransport::HandleToolsCall(
 						*ToolName, *ActionValue, *FString::Join(GroupClauses, TEXT("; ")));
 				}
 
-				// Recursive nested-kind check — for each present Object/Array param,
-				// type-check its declared members/elements by path. Same bypass path
-				// and response shape as the sibling checks.
-				TArray<FString> NestedKindErrors;
+				// Recursive nested walk — for each present Object/Array param, one pass
+				// yields three findings: wrong nested kind, an undeclared member, and a
+				// missing required member. Each rejects in its own block with the same
+				// bypass path and response shape as the sibling checks.
+				FMcpNestedWalkErrors NestedErrors;
 				for (const FMcpParamDecl& Param : Decl->Params)
 				{
 					const bool bStructured =
@@ -1800,9 +1849,9 @@ void FMcpNativeTransport::HandleToolsCall(
 					if (!bStructured) { continue; }
 					const TSharedPtr<FJsonValue> Val = Arguments->Values.FindRef(Param.Name);
 					if (!Val.IsValid()) { continue; }
-					McpCheckNestedNode(FString(Param.Name), Param, Val, NestedKindErrors);
+					McpCheckNestedNode(FString(Param.Name), Param, Val, NestedErrors);
 				}
-				if (NestedKindErrors.Num() > 0)
+				if (NestedErrors.Kind.Num() > 0)
 				{
 					bool bBypass = false;
 					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
@@ -1812,13 +1861,13 @@ void FMcpNativeTransport::HandleToolsCall(
 							TEXT("%s.%s has nested param(s) of the wrong type: %s. Fix the value's ")
 							TEXT("shape. If the handler tolerates it, retry with bypassParamCheck:true ")
 							TEXT("to proceed now, and report the miss (fork TODO.md)."),
-							*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.Kind, TEXT("; ")));
 						UE_LOG(LogMcpNativeTransport, Warning,
 							TEXT("tools/call rejected (nested kind): %s.%s: %s"),
-							*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.Kind, TEXT("; ")));
 						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
 						TArray<TSharedPtr<FJsonValue>> ErrJson;
-						for (const FString& E : NestedKindErrors) { ErrJson.Add(MakeShared<FJsonValueString>(E)); }
+						for (const FString& E : NestedErrors.Kind) { ErrJson.Add(MakeShared<FJsonValueString>(E)); }
 						Details->SetArrayField(TEXT("nestedKindViolations"), ErrJson);
 						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
 							false, Message, Details, TEXT("INVALID_PARAMS"));
@@ -1828,7 +1877,7 @@ void FMcpNativeTransport::HandleToolsCall(
 						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
 						return;
 					}
-					for (const FString& E : NestedKindErrors)
+					for (const FString& E : NestedErrors.Kind)
 					{
 						BypassedParamWarnings.Add(FString::Printf(
 							TEXT("nested kind mismatch (%s) for %s.%s (bypassed)"),
@@ -1836,7 +1885,89 @@ void FMcpNativeTransport::HandleToolsCall(
 					}
 					UE_LOG(LogMcpNativeTransport, Warning,
 						TEXT("nested-kind check BYPASSED: %s.%s: %s"),
-						*ToolName, *ActionValue, *FString::Join(NestedKindErrors, TEXT("; ")));
+						*ToolName, *ActionValue, *FString::Join(NestedErrors.Kind, TEXT("; ")));
+				}
+
+				// Undeclared nested member — a payload key of an object that declares
+				// members but has no case-insensitive declared match. Open bags (no
+				// declared members) never reach here. Same bypass path and shape.
+				if (NestedErrors.Undeclared.Num() > 0)
+				{
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s has undeclared nested member(s): %s. Remove them or fix the ")
+							TEXT("key's spelling. If the handler DOES read them, the action's declaration ")
+							TEXT("is wrong: retry with bypassParamCheck:true to proceed now, and report the ")
+							TEXT("miss (fork TODO.md)."),
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.Undeclared, TEXT("; ")));
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (nested undeclared): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.Undeclared, TEXT("; ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> ErrJson;
+						for (const FString& E : NestedErrors.Undeclared) { ErrJson.Add(MakeShared<FJsonValueString>(E)); }
+						Details->SetArrayField(TEXT("undeclaredMembers"), ErrJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("INVALID_PARAMS"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& E : NestedErrors.Undeclared)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("undeclared nested member (%s) for %s.%s (bypassed)"),
+							*E, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("nested-undeclared check BYPASSED: %s.%s: %s"),
+						*ToolName, *ActionValue, *FString::Join(NestedErrors.Undeclared, TEXT("; ")));
+				}
+
+				// Missing required nested member — a declared-required member absent from
+				// a PRESENT parent object (an absent optional parent stays legal; array
+				// element objects enforce per element with indexed paths). Same bypass
+				// path and shape as the missing-required sibling; code MISSING_REQUIRED.
+				if (NestedErrors.MissingRequired.Num() > 0)
+				{
+					bool bBypass = false;
+					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
+					if (!bBypass)
+					{
+						const FString Message = FString::Printf(
+							TEXT("%s.%s is missing required nested member(s): %s. Supply them. If the ")
+							TEXT("handler does NOT require them, the action's declaration is wrong: retry ")
+							TEXT("with bypassParamCheck:true to proceed now, and report the miss (fork TODO.md)."),
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.MissingRequired, TEXT("; ")));
+						UE_LOG(LogMcpNativeTransport, Warning,
+							TEXT("tools/call rejected (nested missing required): %s.%s: %s"),
+							*ToolName, *ActionValue, *FString::Join(NestedErrors.MissingRequired, TEXT("; ")));
+						TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+						TArray<TSharedPtr<FJsonValue>> ErrJson;
+						for (const FString& E : NestedErrors.MissingRequired) { ErrJson.Add(MakeShared<FJsonValueString>(E)); }
+						Details->SetArrayField(TEXT("missingNestedRequired"), ErrJson);
+						TSharedPtr<FJsonObject> ToolResult = FMcpJsonRpc::BuildToolResult(
+							false, Message, Details, TEXT("MISSING_REQUIRED"));
+						FString Body = FMcpJsonRpc::BuildResponse(Id, ToolResult);
+						SendHttpResponse(ClientSocket, 200, TEXT("application/json"), Body, {}, CorsOrigin);
+						ClientSocket->Close();
+						if (SocketSub) SocketSub->DestroySocket(ClientSocket);
+						return;
+					}
+					for (const FString& E : NestedErrors.MissingRequired)
+					{
+						BypassedParamWarnings.Add(FString::Printf(
+							TEXT("missing required nested member (%s) for %s.%s (bypassed)"),
+							*E, *ToolName, *ActionValue));
+					}
+					UE_LOG(LogMcpNativeTransport, Warning,
+						TEXT("nested-required check BYPASSED: %s.%s: %s"),
+						*ToolName, *ActionValue, *FString::Join(NestedErrors.MissingRequired, TEXT("; ")));
 				}
 			}
 		}

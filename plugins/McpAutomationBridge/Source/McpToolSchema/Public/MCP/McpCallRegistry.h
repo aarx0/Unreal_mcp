@@ -48,9 +48,9 @@ struct FMcpParamDecl
 	// authored sub-schema. For an Object param: the declared member schemas (each a
 	// FMcpParamDecl with its own Name/Kind, recursively). For an Array param:
 	// exactly one entry describing the element schema (Name = nullptr). Empty for
-	// scalars and for structured params authored without a sub-schema. bRequired is
-	// unused on nested nodes — nested-required is deliberately not enforced. The
-	// pointed-to arrays live in McpDeriveDecl's grow-only pools (process lifetime).
+	// scalars and for structured params authored without a sub-schema. Nested
+	// bRequired is enforced by the transport walk when the parent value is present.
+	// The pointed-to arrays live in McpDeriveDecl's grow-only pools (process lifetime).
 	TConstArrayView<FMcpParamDecl> Members;
 	TConstArrayView<FMcpParamDecl> Element;
 };
