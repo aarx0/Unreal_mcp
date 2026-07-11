@@ -165,7 +165,15 @@ E2 sweep find. `HandleMoveAsset` (`AssetWorkflowHandlers.cpp:1825`) is one line:
 `{sourcePath, assetPath, destinationPath, newName}` while `S_Rename` requires nothing — identical
 behavior, two validation contracts. Consolidation-pass input (keep one action, or align decls).
 
-### [ ] 2026-07-10 — two orphaned handlers left standing by the build_environment de-member (delete candidates)
+### [x] 2026-07-10 — two orphaned handlers left standing by the build_environment de-member (delete candidates)
+RESOLVED same day (kill batch, per Aaron's "extreme prejudice"): HandleWorldPartitionAction —
+whole WorldPartitionHandlers.cpp/.h deleted (647+21 lines, never routed); HandleEditLandscape —
+dispatcher cut, its 4 per-op internals verified live via their wrappers. PREMISE CORRECTION on
+the third: HandlePlayAnimMontage was NOT an orphan — the published play_montage's classed handler
+was a one-line forwarder into it; resolved by the ragdoll pattern (body inlined verbatim into
+HandleAnimPhysPlayMontage, 5-arg legacy signature + action-literal gate deleted,
+behavior-preserving; only the INVALID_PAYLOAD message stops naming the dead action name).
+Stale 'origin' allowlist pin pruned in the same batch.
 Found during 5f5eb09f: `HandleWorldPartitionAction` (WorldPartitionHandlers.cpp — manage_world_partition
 has no Calls-file registration, no ProcessRequest reference tree-wide) and `HandleEditLandscape`
 (LandscapeHandlers.cpp — aggregate dispatcher, zero callers). Both were converted to free functions
@@ -183,7 +191,13 @@ also unbounded but naturally bounded by the editor selection. NOTE the parity fi
 behavior change: previously-unbounded list_objects/find_by_class now default-cap at 50 (visible
 via truncated:true, matched=<pre-limit total>).
 
-### [ ] 2026-07-10 — set_modifier_magnitude advertises magnitudeType values it silently ignores
+### [x] 2026-07-10 — set_modifier_magnitude advertises magnitudeType values it silently ignores
+FIXED same day (retire + reject per Aaron): AttributeBased/CustomCalculationClass removed from the
+magnitudeCalculationType enum; the handler's silent catch-all is now an explicit ScalableFloat
+branch + INVALID_ARGUMENT reject naming the received value and the supported set
+(ScalableFloat/SetByCaller, casing-normalized). Absent-type default (→ScalableFloat with value)
+deliberately preserved. Golden re-pinned in the same wave.
+Original find below.
 Found during the exactly-one-of guard fix. The schema enum (McpCalls_ManageGas.cpp:346-351) advertises
 `AttributeBased` and `CustomCalculationClass`, but the handler's else branch
 (GASHandlers.cpp:~2904) treats every non-SetByCaller magnitudeType as ScalableFloat — a call with

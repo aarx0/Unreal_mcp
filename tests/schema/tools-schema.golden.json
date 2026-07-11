@@ -7225,9 +7225,7 @@
           "description": "How magnitude is calculated.",
           "enum": [
             "ScalableFloat",
-            "AttributeBased",
-            "SetByCaller",
-            "CustomCalculationClass"
+            "SetByCaller"
           ],
           "type": "string"
         },
