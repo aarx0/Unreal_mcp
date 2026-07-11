@@ -416,10 +416,6 @@ static void S_AddForceModule(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
 	 .String(TEXT("forceType"), TEXT(""))
 	 .Number(TEXT("forceStrength"), TEXT(""))
-	 .Object(TEXT("forceVector"), TEXT("3D force vector (x, y, z)."),
-		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
-	})
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }
 
@@ -433,10 +429,6 @@ static void S_AddVelocityModule(FMcpSchemaBuilder& B)
 	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
 	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
 	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
-	 .Object(TEXT("velocity"), TEXT("3D velocity vector (x, y, z)."),
-		[](FMcpSchemaBuilder& S) {
-		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
-	})
 	 .String(TEXT("velocityMode"), TEXT(""))
 	 .Required({TEXT("systemPath"), TEXT("emitterName")});
 }

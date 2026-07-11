@@ -586,7 +586,8 @@ static void S_SetSplinePointTangents(FMcpSchemaBuilder& B)
 	 .Object(TEXT("leaveTangent"),
 		TEXT("set_spline_point_tangents: outgoing tangent (x, y, z)."),
 		[](FMcpSchemaBuilder& S) {
-			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"));
+			S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+			 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
 		})
 	 .Required({TEXT("actorName")});
 }

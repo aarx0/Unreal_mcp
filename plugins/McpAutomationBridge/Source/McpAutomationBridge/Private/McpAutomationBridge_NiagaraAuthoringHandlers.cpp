@@ -1283,13 +1283,6 @@ bool McpHandlers::Effect::HandleNiagaraAddForceModule(UMcpAutomationBridgeSubsys
     }
 
     double ForceStrength = GetJsonNumberField(Payload, TEXT("forceStrength"), 980.0);
-    
-    const TSharedPtr<FJsonObject>* ForceVectorObj;
-    FVector ForceVector = FVector(0, 0, -980);
-    if (Payload->TryGetObjectField(TEXT("forceVector"), ForceVectorObj))
-    {
-        ForceVector = GetVectorFromJsonNiag(*ForceVectorObj);
-    }
 
     // Determine the module path based on force type
     FString ModulePath;
@@ -1383,13 +1376,6 @@ bool McpHandlers::Effect::HandleNiagaraAddVelocityModule(UMcpAutomationBridgeSub
     {
         S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
         return true;
-    }
-
-    const TSharedPtr<FJsonObject>* VelObj;
-    FVector Velocity = FVector(0, 0, 100);
-    if (Payload->TryGetObjectField(TEXT("velocity"), VelObj))
-    {
-        Velocity = GetVectorFromJsonNiag(*VelObj);
     }
 
     FString VelocityMode = GetJsonStringField(Payload, TEXT("velocityMode"), TEXT("Linear"));

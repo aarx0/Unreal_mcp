@@ -619,16 +619,14 @@ static bool HandleSetSplinePointTangents(
         return true;
     }
 
-    // Note: UE splines have a single tangent per point; arrive/leave tangents are computed from it
-    // If leaveTangent is provided, log a warning since it cannot be used independently
-    if (!LeaveTangent.IsZero() && LeaveTangent != ArriveTangent)
+    if (Payload->HasField(TEXT("leaveTangent")))
     {
-        UE_LOG(LogMcpSplineHandlers, Warning, 
-            TEXT("leaveTangent ignored for point %d - UE splines use a single tangent per point. Use arriveTangent only."), 
-            PointIndex);
+        SplineComp->SetTangentsAtSplinePoint(PointIndex, ArriveTangent, LeaveTangent, ESplineCoordinateSpace::Local, true);
     }
-    
-    SplineComp->SetTangentAtSplinePoint(PointIndex, ArriveTangent, ESplineCoordinateSpace::Local, true);
+    else
+    {
+        SplineComp->SetTangentAtSplinePoint(PointIndex, ArriveTangent, ESplineCoordinateSpace::Local, true);
+    }
     SplineComp->UpdateSpline();
 
     World->MarkPackageDirty();

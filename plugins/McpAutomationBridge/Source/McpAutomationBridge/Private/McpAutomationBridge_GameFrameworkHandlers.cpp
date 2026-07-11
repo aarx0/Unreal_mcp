@@ -1406,6 +1406,17 @@ bool McpHandlers::Networking::HandleGameFrameworkConfigurePlayerStart(
     
     TSharedPtr<FJsonObject> LocationObj = GetObjectField(Payload, TEXT("location"));
     TSharedPtr<FJsonObject> RotationObj = GetObjectField(Payload, TEXT("rotation"));
+
+    const bool bHasLocation = LocationObj.IsValid();
+    const FVector NewLocation = bHasLocation
+        ? FVector(GetNumberField(LocationObj, TEXT("x")), GetNumberField(LocationObj, TEXT("y")), GetNumberField(LocationObj, TEXT("z")))
+        : FVector::ZeroVector;
+
+    const bool bHasRotation = RotationObj.IsValid();
+    const FRotator NewRotation = bHasRotation
+        ? FRotator(GetNumberField(RotationObj, TEXT("pitch")), GetNumberField(RotationObj, TEXT("yaw")), GetNumberField(RotationObj, TEXT("roll")))
+        : FRotator::ZeroRotator;
+
     int32 TeamIndex = static_cast<int32>(GetNumberField(Payload, TEXT("teamIndex"), 0));
     bool bPlayerOnly = GetBoolField(Payload, TEXT("bPlayerOnly"), false);
 
@@ -1459,6 +1470,19 @@ bool McpHandlers::Networking::HandleGameFrameworkConfigurePlayerStart(
         if (!PlayerStartTag.IsEmpty())
         {
             PlayerStart->PlayerStartTag = FName(*PlayerStartTag);
+        }
+
+        if (bHasLocation || bHasRotation)
+        {
+            PlayerStart->Modify();
+            if (bHasLocation)
+            {
+                PlayerStart->SetActorLocation(NewLocation);
+            }
+            if (bHasRotation)
+            {
+                PlayerStart->SetActorRotation(NewRotation);
+            }
         }
 
         PlayerStart->MarkPackageDirty();
