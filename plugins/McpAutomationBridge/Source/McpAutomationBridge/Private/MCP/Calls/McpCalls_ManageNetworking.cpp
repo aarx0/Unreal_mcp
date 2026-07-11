@@ -420,8 +420,15 @@ static void S_ConfigurePlayerStart(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("save"), TEXT("Game framework actions: persist the created/modified asset (or level, for configure_player_start) after applying changes (default false)."))
 	 .String(TEXT("gameModeBlueprint"), TEXT("Alias of blueprintPath for GameFramework actions (set_default_pawn_class, set_player_controller_class, set_game_state_class, set_player_state_class, configure_game_rules, setup_match_states, configure_round_system, configure_team_system, configure_scoring_system, configure_spawn_system, set_respawn_rules, configure_spectating, get_game_framework_info)."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
-	 .Object(TEXT("location"), TEXT("configure_player_start: PlayerStart world location (x, y, z)."))
-	 .Object(TEXT("rotation"), TEXT("configure_player_start: PlayerStart world rotation (pitch, yaw, roll)."))
+	 .Object(TEXT("location"), TEXT("configure_player_start: PlayerStart world location (x, y, z)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z"))
+		 .Required({TEXT("x"), TEXT("y"), TEXT("z")});
+	})
+	 .Object(TEXT("rotation"), TEXT("configure_player_start: PlayerStart world rotation (pitch, yaw, roll)."),
+		[](FMcpSchemaBuilder& S) {
+		S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll"));
+	})
 	 .Integer(TEXT("teamIndex"), TEXT("configure_player_start: team index used to build the default PlayerStartTag."))
 	 .Bool(TEXT("bPlayerOnly"), TEXT("configure_player_start: restrict the PlayerStart to player pawns only."))
 	 .String(TEXT("playerStartName"), TEXT("configure_player_start: specific PlayerStart actor to configure (falls back to actorName)."))
