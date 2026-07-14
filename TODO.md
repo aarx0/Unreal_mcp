@@ -1383,6 +1383,13 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-14 — `control_editor screenshot` filename has 1-second granularity; same-second calls silently overwrite
+Found while verifying the wall-attack telegraph. Two `screenshot` calls in one batch both wrote
+`Screenshot_20260714_100740.png` — the second overwrote the first (both results reported
+success with the same `path`, different `bytes`), so the earlier frame was silently lost.
+Repro: two `{action:'screenshot'}` calls within the same wall-clock second. Fix: add a
+monotonic counter or millisecond suffix when the target filename already exists.
+
 ### [ ] 2026-07-07 — Two shadowed `set_default` / `set_scs_property` duplicates in HandleBlueprintAction (dead code)
 Found during the typed-params migration. `manage_blueprint` dispatch routes both actions to
 `HandleBlueprintAction`, which matches each at its FIRST `if (CleanAction.Equals(...))` and
