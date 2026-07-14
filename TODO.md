@@ -1383,6 +1383,15 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-14b — `manage_blueprint add_node` declares `x`/`y` but ignores them (wants `posX`/`posY`)
+`add_node {nodeType:'K2Node_CallFunction', functionName:'KismetSystemLibrary.ExecuteConsoleCommand', x:1150, y:-16}`
+succeeded but placed the node at (0,0) — response echoed `posX:0, posY:0`; re-sending with `posX`/`posY` positioned
+correctly. Both pairs are in acceptedParams, so `x`/`y` are declared-but-dead here (same class as the 2026-07-02
+param-reconciliation findings). Also note the terse failure mode from the same session: a bare
+`functionName:'ExecuteConsoleCommand'` (no class prefix) fails with `{"error":"ExecuteConsoleCommand"}` — no hint
+that the dotted `Class.Function` form is required. Fix: honor x/y as aliases (or drop them from the decl) and make
+the function-resolution error say what it tried.
+
 ### [ ] 2026-07-14 — `control_editor screenshot` filename has 1-second granularity; same-second calls silently overwrite
 Found while verifying the wall-attack telegraph. Two `screenshot` calls in one batch both wrote
 `Screenshot_20260714_100740.png` — the second overwrote the first (both results reported
