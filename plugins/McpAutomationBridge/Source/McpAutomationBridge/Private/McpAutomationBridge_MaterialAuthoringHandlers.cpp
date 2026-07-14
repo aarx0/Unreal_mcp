@@ -1506,6 +1506,9 @@ bool McpHandlers::Asset::HandleMaterialConnectNodes(
         } else if (InputName == TEXT("WorldPositionOffset")) {
           MCP_GET_MATERIAL_INPUT(Material, WorldPositionOffset).Expression = SourceExpr;
           bFound = true;
+        } else if (InputName == TEXT("FrontMaterial")) {
+          MCP_GET_MATERIAL_INPUT(Material, FrontMaterial).Expression = SourceExpr;
+          bFound = true;
         }
 #endif
 
@@ -1531,6 +1534,7 @@ bool McpHandlers::Asset::HandleMaterialConnectNodes(
           else if (InputName == TEXT("AmbientOcclusion")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, AmbientOcclusion)); }
           else if (InputName == TEXT("SubsurfaceColor")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, SubsurfaceColor)); }
           else if (InputName == TEXT("WorldPositionOffset")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, WorldPositionOffset)); }
+          else if (InputName == TEXT("FrontMaterial")) { SetMainInputOutputIndex(MCP_GET_MATERIAL_INPUT(Material, FrontMaterial)); }
 #endif
           // Root-aware place: position the (otherwise orphaned) material output
           // node just right of the source now wired into it — but ONLY if the

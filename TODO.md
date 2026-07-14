@@ -3145,3 +3145,17 @@ helpers twin. Verified on `IMC_GameCommands.DefaultKeyMappings.Mappings`.
 `get_referencers`/`get_asset_properties`/`set_asset_property` were already routed; added
 `propertyName`/`includeTransient` param docs. (The planned TypeScript-schema edits were a
 no-op for this native-only fork and were removed with the TypeScript bridge.)
+
+> **[ ] Found 2026-07-13 (wall-attack gym work): `control_actor find_by_class` misses classes
+> loaded after editor boot.** Repro: 4 live `AWallStrike` actors in PIE (confirmed via python
+> `GameplayStatics.get_all_actors_of_class` in the same frame window) while
+> `find_by_class {className:"WallStrike"}` returned `count:0`; `find_by_class WallTelegraph`
+> (same session, same module) worked, and ONE early WallStrike find succeeded before the misses
+> began. Both classes came from the game module loaded at boot, so it's not simply
+> new-module staleness — suspect the class-resolution cache in the find path going stale after
+> Live Coding patched the game module mid-session. `find_by_name` was unaffected.
+
+> **[ ] Found 2026-07-13 (wall-attack gym work): MCP HTTP sessions never expire.** Each
+> `initialize` allocates a session that lives until editor exit — one working session
+> accumulated 49 active sessions (`LogMcpNativeTransport: ... active sessions: 49`). Needs an
+> idle timeout / LRU cap in the native transport session map.
