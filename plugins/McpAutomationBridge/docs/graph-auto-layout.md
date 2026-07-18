@@ -209,9 +209,14 @@ not vibes).
   consumer's input pin row — straight data wires tucked below the exec spine.
   Exec edges never snap; unsnapped layouts are byte-identical to the old emit
   (legacy fixture in `McpBridge.GraphLayout.PinSnap`).
-- **Wave 3b (planned) — getter splitting** in `arrange_graph`
-  (`splitSharedGetters`, default true: VariableGet/Self outputs with N links
-  become N copies, one per consumer — semantics-safe, pure reads).
+- **Wave 3b (SHIPPED) — getter splitting** in `arrange_graph`
+  (`splitSharedGetters`, default true): VariableGet/Self outputs with N links
+  become N copies, one per consumer, rewired before layout (semantics-safe,
+  pure reads; link 0 stays on the original; scoped arranges split in-scope
+  links only, copies join the scope; unresolved-reference copies fail loudly).
+  Response reports `gettersSplit` + `splitNodes`; idempotent. The whole
+  arrange now runs in one "Arrange Graph" transaction — a single Ctrl+Z
+  reverts split + layout.
 
 Still deliberately unimplemented: barycenter/median crossing sweeps — revisit
 only if `wireCrossings` stays ugly after wave 3.
@@ -224,8 +229,8 @@ only if `wireCrossings` stays ugly after wave 3.
 3. **Phase 3** — SHIPPED: passive overlap report on graph-mutating responses +
    scoped rigid-block `arrange_graph` (Blueprint graphs; Material arrange is still
    full-graph only).
-4. **Phase 4** — waves 1 (wire metrics) + 2 (honest sizes, swim lanes) SHIPPED;
-   wave 3 (pin-snap, getter splitting) staged (see above).
+4. **Phase 4** — COMPLETE: wire metrics (wave 1), honest sizes + swim lanes
+   (wave 2), pin-snapped feeders (3a), getter splitting (3b).
 
 Known gap: a **full** (unscoped) arrange also moves comment boxes — they carry no pin
 topology, so they pile into column 0 instead of following the nodes they annotate.

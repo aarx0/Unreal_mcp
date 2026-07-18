@@ -2544,6 +2544,113 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
   }
 
   const bool bScoped = Scope.Num() > 0;
+
+  // One transaction for split + layout: Ctrl+Z reverts the whole arrange.
+  const FScopedTransaction Transaction(FText::FromString(TEXT("Arrange Graph")));
+  Blueprint->Modify();
+  TargetGraph->Modify();
+
+  // Getter splitting: a shared VariableGet/Self output stretched to N
+  // consumers becomes N copies, one per consumer — the human idiom, and
+  // semantics-safe (a pure read re-evaluates per consumer either way).
+  // Default ON; splitSharedGetters:false opts out. Scoped arranges only
+  // split links whose consumer is also in scope; copies join the scope so
+  // the block placement lays them out.
+  bool bSplitSharedGetters = true;
+  Payload->TryGetBoolField(TEXT("splitSharedGetters"), bSplitSharedGetters);
+
+  int32 GettersSplit = 0;
+  TArray<TSharedPtr<FJsonValue>> SplitNodesJson;
+  if (bSplitSharedGetters)
+  {
+    const TArray<UEdGraphNode*> Snapshot(TargetGraph->Nodes);   // we append while iterating
+    for (UEdGraphNode* N : Snapshot)
+    {
+      if (!N || (bScoped && !Scope.Contains(N))) { continue; }
+      const bool bGetter = N->IsA<UK2Node_VariableGet>();
+      if (!bGetter && !N->IsA<UK2Node_Self>()) { continue; }
+
+      UEdGraphPin* Out = nullptr;
+      for (UEdGraphPin* P : N->Pins)
+      {
+        if (P && P->Direction == EGPD_Output) { Out = P; break; }
+      }
+      if (!Out) { continue; }
+
+      TArray<UEdGraphPin*> Splittable;
+      for (UEdGraphPin* L : Out->LinkedTo)
+      {
+        if (L && L->GetOwningNode() &&
+            (!bScoped || Scope.Contains(L->GetOwningNode())))
+        {
+          Splittable.Add(L);
+        }
+      }
+      if (Splittable.Num() <= 1) { continue; }
+
+      N->Modify();
+      int32 Copies = 0;
+      for (int32 I = 1; I < Splittable.Num(); ++I)   // link 0 stays on the original
+      {
+        UEdGraphPin* Consumer = Splittable[I];
+        UEdGraphNode* Copy = nullptr;
+        if (bGetter)
+        {
+          FGraphNodeCreator<UK2Node_VariableGet> Creator(*TargetGraph);
+          UK2Node_VariableGet* NewGet = Creator.CreateNode(false);
+          NewGet->VariableReference =
+              CastChecked<UK2Node_VariableGet>(N)->VariableReference;
+          NewGet->NodePosX = N->NodePosX;
+          NewGet->NodePosY = N->NodePosY;
+          Creator.Finalize();
+          Copy = NewGet;
+        }
+        else
+        {
+          FGraphNodeCreator<UK2Node_Self> Creator(*TargetGraph);
+          UK2Node_Self* NewSelf = Creator.CreateNode(false);
+          NewSelf->NodePosX = N->NodePosX;
+          NewSelf->NodePosY = N->NodePosY;
+          Creator.Finalize();
+          Copy = NewSelf;
+        }
+
+        UEdGraphPin* CopyOut = nullptr;
+        for (UEdGraphPin* P : Copy->Pins)
+        {
+          if (P && P->Direction == EGPD_Output) { CopyOut = P; break; }
+        }
+        if (!CopyOut)
+        {
+          // A copy without an output pin means the variable reference didn't
+          // resolve — fail loudly rather than half-splitting the graph.
+          FBlueprintEditorUtils::RemoveNode(Blueprint, Copy, true);
+          S.SendAutomationError(
+              RequestingSocket, RequestId,
+              FString::Printf(
+                  TEXT("Splitting '%s' produced a copy with no output pin "
+                       "(unresolved variable reference?)."),
+                  *N->GetNodeTitle(ENodeTitleType::ListView).ToString()),
+              TEXT("SPLIT_FAILED"));
+          return true;
+        }
+
+        Consumer->GetOwningNode()->Modify();
+        Out->BreakLinkTo(Consumer);
+        CopyOut->MakeLinkTo(Consumer);
+        if (bScoped) { Scope.Add(Copy); }
+        ++Copies;
+      }
+
+      ++GettersSplit;
+      TSharedPtr<FJsonObject> SplitObj = McpHandlerUtils::CreateResultObject();
+      SplitObj->SetStringField(
+          TEXT("variable"), N->GetNodeTitle(ENodeTitleType::ListView).ToString());
+      SplitObj->SetNumberField(TEXT("copies"), Copies);
+      SplitNodesJson.Add(MakeShared<FJsonValueObject>(SplitObj));
+    }
+  }
+
   const int32 Arranged =
       ArrangeBlueprintGraph(TargetGraph, bScoped ? &Scope : nullptr);
   TargetGraph->NotifyGraphChanged();
@@ -2553,6 +2660,11 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
   Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
   Result->SetNumberField(TEXT("arrangedNodes"), Arranged);
   Result->SetBoolField(TEXT("scoped"), bScoped);
+  Result->SetNumberField(TEXT("gettersSplit"), GettersSplit);
+  if (SplitNodesJson.Num() > 0)
+  {
+    Result->SetArrayField(TEXT("splitNodes"), SplitNodesJson);
+  }
   TArray<TSharedPtr<FJsonValue>> NodePositions;
   for (UEdGraphNode *Node : TargetGraph->Nodes) {
     if (!Node) {

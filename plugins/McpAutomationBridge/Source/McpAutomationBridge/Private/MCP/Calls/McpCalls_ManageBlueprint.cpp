@@ -566,6 +566,7 @@ static void S_ArrangeGraph(FMcpSchemaBuilder& B)
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
 	 .Array(TEXT("nodes"), TEXT("arrange_graph: node GUIDs to lay out as one rigid block — anchored at the scope's current top-left, slid down until it clears unmoved nodes; every node outside the list stays put. Omit to arrange the whole graph."))
+	 .Bool(TEXT("splitSharedGetters"), TEXT("arrange_graph: before layout, split a VariableGet/Self node whose output feeds several consumers into one copy per consumer (default true; pure reads, semantics-safe — the human idiom). Scoped arranges only split links between in-scope nodes. Response reports gettersSplit + splitNodes."))
 	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 

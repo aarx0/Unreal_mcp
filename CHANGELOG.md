@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Getter splitting in arrange_graph (2026-07-18, wave 3b — wire-aware layout complete)
+
+- **`arrange_graph` now splits shared getters by default** (`splitSharedGetters`,
+  default true): a `VariableGet`/`Self` node whose output feeds N consumers
+  becomes N copies, one per consumer, rewired before layout — the human idiom
+  (semantics-safe: a pure read re-evaluates per consumer either way), and the
+  end of the long cross-lane wires that were most of the graph spaghetti. Link
+  0 stays on the original; scoped arranges split only links between in-scope
+  nodes and the copies join the scope; a copy that allocates no output pin
+  (unresolved reference) fails loudly (`SPLIT_FAILED`) instead of
+  half-splitting. Response: `gettersSplit` + `splitNodes` (`{variable,
+  copies}`); idempotent — the second arrange splits nothing.
+- The whole arrange (split + layout) now runs in **one `FScopedTransaction`**
+  ("Arrange Graph"), so a single Ctrl+Z reverts it — the handler previously had
+  no transaction at all.
+- Live proof: a getter shared by two Branch conditions across two lanes went
+  from 12 wires-through-nodes / 1 crossing to **0 / 0 / 0** after one default
+  arrange, each copy tucked at its consumer's Condition pin; the split graph
+  compiles clean.
+
 ### Pin-anchored feeder placement (2026-07-18, wave 3a of the wire-aware layout work)
 
 - **Feeders now snap to their consumer's input pin row.** Data-feeder layout
