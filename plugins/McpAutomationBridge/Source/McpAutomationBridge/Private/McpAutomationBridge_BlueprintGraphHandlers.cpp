@@ -153,6 +153,17 @@ FVector2D ArrangeEstimateNodeSize(UEdGraphNode* Node)
     return FVector2D(Width, Height);
 }
 
+// Extent for the overlap/obstacle passes: resizable nodes (comment boxes) carry
+// their real size in NodeWidth/NodeHeight; everything else gets the estimate.
+FVector2D ArrangeNodeExtent(UEdGraphNode* Node)
+{
+    if (Node->NodeWidth > 0 && Node->NodeHeight > 0)
+    {
+        return FVector2D((float)Node->NodeWidth, (float)Node->NodeHeight);
+    }
+    return ArrangeEstimateNodeSize(Node);
+}
+
 bool ArrangePinIsExec(const UEdGraphPin* Pin)
 {
     return Pin && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
@@ -438,12 +449,20 @@ static FString ClassifyBlueprintGraph(UBlueprint* Blueprint, UEdGraph* Graph)
     return Graph->GetClass()->GetName();
 }
 
-// Lay out every node in Graph; returns the count repositioned.
+// Lay out nodes in Graph; returns the count repositioned.
 // ArrangeColumn / ArrangeRow and the placement algorithm now live in the shared,
 // UE-agnostic core (McpGraphLayoutUtils). This adapter only translates the K2
 // exec/data pin topology into McpGraphLayout::FLayoutEdge / FLayoutNode, runs
 // the core, then writes the integral positions back onto the EdGraph nodes.
-int32 ArrangeBlueprintGraph(UEdGraph* Graph)
+//
+// Scope=null lays out the whole graph (absolute positions from (0,0), idempotent).
+// With a scope, only scoped nodes participate — edges to unscoped nodes are
+// dropped, and an in-scope node whose exec feed comes from outside the scope
+// becomes a root of the block — and the result is placed as a rigid block:
+// anchored at the scope's previous top-left, pushed straight down until it
+// clears every unmoved node (comments included: landing inside someone's
+// comment frame counts as a collision). Unscoped nodes never move.
+int32 ArrangeBlueprintGraph(UEdGraph* Graph, const TSet<UEdGraphNode*>* Scope = nullptr)
 {
     if (!Graph) { return 0; }
 
@@ -453,7 +472,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
     TMap<UEdGraphNode*, McpGraphLayout::FNodeId> NodeToId;
     for (UEdGraphNode* N : Graph->Nodes)
     {
-        if (!N) { continue; }
+        if (!N || (Scope && !Scope->Contains(N))) { continue; }
         NodeToId.Add(N, IdToNode.Num());
         IdToNode.Add(N);
     }
@@ -512,7 +531,13 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
             {
                 for (UEdGraphPin* L : P->LinkedTo)
                 {
-                    if (L && L->GetOwningNode()) { bHasExecInput = true; }
+                    // Only in-scope predecessors count: a scoped node fed from
+                    // outside the scope must root its block. (Unscoped, the map
+                    // holds every node, so this is the old any-link test.)
+                    if (L && L->GetOwningNode() && NodeToId.Contains(L->GetOwningNode()))
+                    {
+                        bHasExecInput = true;
+                    }
                 }
             }
             else if (!bExec && P->Direction == EGPD_Input)
@@ -540,6 +565,37 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
 
     const McpGraphLayout::FMcpGraphLayoutResult R = McpGraphLayout::LayoutGraph(In);
 
+    // Scoped: the core laid the block out from (0,0); place it rigidly at the
+    // scope's old top-left, sliding down past any unmoved node it would cover.
+    FVector2D Translation = FVector2D::ZeroVector;
+    if (Scope)
+    {
+        FVector2D Anchor(FLT_MAX, FLT_MAX);
+        for (UEdGraphNode* N : IdToNode)
+        {
+            Anchor.X = FMath::Min(Anchor.X, (float)N->NodePosX);
+            Anchor.Y = FMath::Min(Anchor.Y, (float)N->NodePosY);
+        }
+
+        TArray<McpGraphLayout::FNodeRect> Block;
+        Block.Reserve(R.Positions.Num());
+        for (const TPair<McpGraphLayout::FNodeId, FVector2D>& Pair : R.Positions)
+        {
+            if (!IdToNode.IsValidIndex(Pair.Key)) { continue; }
+            Block.Add({Pair.Key, Pair.Value, ArrangeEstimateNodeSize(IdToNode[Pair.Key])});
+        }
+
+        TArray<McpGraphLayout::FNodeRect> Obstacles;
+        for (UEdGraphNode* N : Graph->Nodes)
+        {
+            if (!N || Scope->Contains(N)) { continue; }
+            Obstacles.Add({INDEX_NONE, FVector2D(N->NodePosX, N->NodePosY),
+                           ArrangeNodeExtent(N)});
+        }
+
+        Translation = McpGraphLayout::PlaceBlock(Block, Obstacles, Anchor, ArrangeGapY);
+    }
+
     // Mutation loop (editor-only): write the core's integral positions back.
     int32 Count = 0;
     for (const TPair<McpGraphLayout::FNodeId, FVector2D>& Pair : R.Positions)
@@ -548,11 +604,71 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph)
         UEdGraphNode* N = IdToNode[Pair.Key];
         if (!N) { continue; }
         N->Modify();
-        N->NodePosX = FMath::RoundToInt(Pair.Value.X);
-        N->NodePosY = FMath::RoundToInt(Pair.Value.Y);
+        N->NodePosX = FMath::RoundToInt(Pair.Value.X + Translation.X);
+        N->NodePosY = FMath::RoundToInt(Pair.Value.Y + Translation.Y);
         ++Count;
     }
     return Count;
+}
+
+// Only interpenetration deeper than this per side is reported — sizes are
+// estimates, so a near-touching pair is measurement noise, not a finding.
+constexpr float OverlapReportSlack = 8.f;
+constexpr int32 OverlapReportMaxPairs = 10;
+
+// Passive overlap report, attached to every geometry-changing graph action's
+// response (and always to get_graph_details / arrange_graph). Detection only —
+// the caller decides when to run arrange_graph; nothing here moves a node.
+// Comment boxes are excluded: they overlap their contents by design.
+void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
+                      bool bIncludeWhenClean)
+{
+    if (!Result.IsValid() || !Graph) { return; }
+
+    TArray<UEdGraphNode*> Nodes;
+    TArray<McpGraphLayout::FNodeRect> Rects;
+    for (UEdGraphNode* N : Graph->Nodes)
+    {
+        if (!N || Cast<UEdGraphNode_Comment>(N)) { continue; }
+        Rects.Add({Nodes.Num(), FVector2D(N->NodePosX, N->NodePosY),
+                   ArrangeNodeExtent(N)});
+        Nodes.Add(N);
+    }
+
+    const TArray<McpGraphLayout::FOverlapPair> Pairs =
+        McpGraphLayout::DetectOverlaps(Rects, OverlapReportSlack);
+    if (Pairs.Num() == 0 && !bIncludeWhenClean) { return; }
+
+    TSharedPtr<FJsonObject> Layout = McpHandlerUtils::CreateResultObject();
+    Layout->SetNumberField(TEXT("overlappingPairs"), Pairs.Num());
+    TArray<TSharedPtr<FJsonValue>> PairsJson;
+    for (int32 I = 0; I < FMath::Min(Pairs.Num(), OverlapReportMaxPairs); ++I)
+    {
+        UEdGraphNode* A = Nodes[Pairs[I].A];
+        UEdGraphNode* B = Nodes[Pairs[I].B];
+        TSharedPtr<FJsonObject> P = McpHandlerUtils::CreateResultObject();
+        P->SetStringField(TEXT("a"), A->NodeGuid.ToString());
+        P->SetStringField(TEXT("aTitle"),
+                          A->GetNodeTitle(ENodeTitleType::ListView).ToString());
+        P->SetStringField(TEXT("b"), B->NodeGuid.ToString());
+        P->SetStringField(TEXT("bTitle"),
+                          B->GetNodeTitle(ENodeTitleType::ListView).ToString());
+        PairsJson.Add(MakeShared<FJsonValueObject>(P));
+    }
+    Layout->SetArrayField(TEXT("pairs"), PairsJson);
+    if (Pairs.Num() > OverlapReportMaxPairs)
+    {
+        Layout->SetNumberField(TEXT("pairsListed"), OverlapReportMaxPairs);
+    }
+    if (Pairs.Num() > 0)
+    {
+        Layout->SetStringField(
+            TEXT("hint"),
+            TEXT("Nodes overlap (sizes estimated). Run arrange_graph to lay out "
+                 "the whole graph, or arrange_graph with nodes:[...] to tidy just "
+                 "the nodes you touched without moving anything else."));
+    }
+    Result->SetObjectField(TEXT("layout"), Layout);
 }
 } // namespace
 #endif // WITH_EDITOR
@@ -776,6 +892,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
       Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
       McpHandlerUtils::AddVerification(Result, Blueprint);
+      AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
       S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node created."), Result);
     } else {
@@ -1505,6 +1622,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
     Result->SetStringField(TEXT("nodeId"), EventNode->NodeGuid.ToString());
     Result->SetStringField(TEXT("nodeName"), EventNode->GetName());
     McpHandlerUtils::AddVerification(Result, Blueprint);
+    AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
         TEXT("Custom event with parameters created using engine API."), Result);
     return true;
@@ -1682,6 +1800,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
     Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
     Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
     Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
+    AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node created."), Result);
     return true;
@@ -1705,6 +1824,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
       Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
       Result->SetStringField(TEXT("nodeClass"), NodeClass->GetName());
+      AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
       S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node created."), Result);
     } else {
@@ -1886,12 +2006,13 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphDeleteNode(
 
   if (TargetNode) {
     FBlueprintEditorUtils::RemoveNode(Blueprint, TargetNode, true);
-    
+
     // CRITICAL: Save the blueprint to persist changes.
     SaveLoadedAssetThrottled(Blueprint);
-    
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
+    AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Node deleted."), Result);
   } else {
@@ -1937,6 +2058,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateRerouteNode(
   Result->SetStringField(TEXT("nodeId"), RerouteNode->NodeGuid.ToString());
   Result->SetStringField(TEXT("nodeName"), RerouteNode->GetName());
   McpHandlerUtils::AddVerification(Result, Blueprint);
+  AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Reroute node created."), Result);
   return true;
@@ -2050,6 +2172,7 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphSetNodeProperty(
       Result->SetStringField(TEXT("nodeId"), TargetNode->NodeGuid.ToString());
       Result->SetStringField(TEXT("nodeName"), TargetNode->GetName());
       McpHandlerUtils::AddVerification(Result, Blueprint);
+      AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
       S.SendAutomationResponse(RequestingSocket, RequestId, true,
                              TEXT("Node property updated."), Result);
     } else {
@@ -2174,6 +2297,9 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphGetGraphDetails(
   TSharedPtr<FJsonObject> Result =
       BuildGraphDetailsJson(TargetGraph, bIncludePinLinks);
   McpHandlerUtils::AddVerification(Result, Blueprint);
+  // Hygiene readback: always include the layout block so a clean graph reads
+  // as an explicit overlappingPairs: 0, not an absence.
+  AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/true);
 
   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Graph details retrieved."), Result);
@@ -2192,16 +2318,58 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
     FMcpResponseHandle RequestingSocket) {
 #if WITH_EDITOR
   MCP_BPGRAPH_PREAMBLE();
-  // Auto-layout every node in TargetGraph: exec-flow columns for X, a
-  // non-resetting row cursor with parent-centering for Y. Works on any graph
-  // (generated or hand-edited), not just the chains the binders emit.
-  const int32 Arranged = ArrangeBlueprintGraph(TargetGraph);
+  // Auto-layout: exec-flow columns for X, a non-resetting row cursor with
+  // parent-centering for Y. Works on any graph (generated or hand-edited), not
+  // just the chains the binders emit. With nodes:[guids], only that set moves —
+  // laid out as one rigid block, anchored at the scope's current top-left,
+  // slid down until it clears every unmoved node.
+  TSet<UEdGraphNode*> Scope;
+  const TArray<TSharedPtr<FJsonValue>>* NodesParam = nullptr;
+  if (Payload->TryGetArrayField(TEXT("nodes"), NodesParam)) {
+    if (NodesParam->Num() == 0) {
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("nodes must be a non-empty array of node GUIDs; omit it to "
+               "arrange the whole graph."),
+          TEXT("INVALID_PARAMETER"));
+      return true;
+    }
+    TArray<FString> Unresolved;
+    for (const TSharedPtr<FJsonValue>& V : *NodesParam) {
+      FString NodeRef;
+      if (!V.IsValid() || !V->TryGetString(NodeRef)) {
+        S.SendAutomationError(RequestingSocket, RequestId,
+                            TEXT("nodes items must be node GUID strings."),
+                            TEXT("INVALID_PARAMETER"));
+        return true;
+      }
+      if (UEdGraphNode* Found = FindNodeByIdOrName(TargetGraph, NodeRef)) {
+        Scope.Add(Found);
+      } else {
+        Unresolved.Add(NodeRef);
+      }
+    }
+    if (Unresolved.Num() > 0) {
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("Node(s) not found in graph '%s': %s"),
+                          *TargetGraph->GetName(),
+                          *FString::Join(Unresolved, TEXT(", "))),
+          TEXT("NODE_NOT_FOUND"));
+      return true;
+    }
+  }
+
+  const bool bScoped = Scope.Num() > 0;
+  const int32 Arranged =
+      ArrangeBlueprintGraph(TargetGraph, bScoped ? &Scope : nullptr);
   TargetGraph->NotifyGraphChanged();
   McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
 
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
   Result->SetNumberField(TEXT("arrangedNodes"), Arranged);
+  Result->SetBoolField(TEXT("scoped"), bScoped);
   TArray<TSharedPtr<FJsonValue>> NodePositions;
   for (UEdGraphNode *Node : TargetGraph->Nodes) {
     if (!Node) {
@@ -2218,6 +2386,9 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
   }
   Result->SetArrayField(TEXT("nodes"), NodePositions);
   McpHandlerUtils::AddVerification(Result, Blueprint);
+  // Post-arrange readback: full arrange should report 0; a scoped arrange can
+  // legitimately leave overlaps among the nodes it was told not to touch.
+  AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/true);
   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Graph arranged."), Result);
   return true;

@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Overlap report + scoped rigid-block arrange_graph (2026-07-18)
+
+- **Graph-mutating Blueprint actions now report node overlaps in-band.** `create_node`
+  (every path), `create_reroute_node`, `delete_node`, and `set_node_property` attach a
+  `layout` block when nodes interpenetrate — `overlappingPairs`, up to 10 GUID+title
+  `pairs`, and a hint to run `arrange_graph` — so the authoring agent learns it made a
+  mess from its own tool results instead of a human finding the pile-up later.
+  `get_graph_details` and `arrange_graph` always include the block (explicit
+  `overlappingPairs: 0` when clean). Detection only: nothing auto-moves, ever. Rects
+  use the arranger's headless size estimates deflated 8px per side (comment boxes use
+  real `NodeWidth/NodeHeight` and are excluded from pairing).
+- **`arrange_graph` gained a `nodes: [guids]` scope.** The listed nodes are laid out by
+  the existing `LayoutGraph` core as an induced subgraph, then placed as one rigid
+  block (`McpGraphLayout::PlaceBlock`): anchored at the scope's previous top-left,
+  slid straight down until it clears every unmoved node (comments count as
+  obstacles). Nodes outside the scope move zero pixels — the answer to "arrange my new
+  chain without wrecking the hand-laid graph around it". Unknown GUIDs →
+  `NODE_NOT_FOUND`; non-string items / explicit empty list → `INVALID_PARAMETER`.
+- New pure-core geometry (`DetectOverlaps` / `PlaceBlock` in `McpGraphLayoutUtils`) is
+  spec-locked by the headless `McpBridge.GraphLayout.*` automation tests. Design and
+  the full authoring loop: `docs/graph-auto-layout.md` Phase 3.
+
 ### Boot validation certifies one FMcpCall class per published action (2026-07-10)
 
 - **`McpStartupValidation::ValidateActionRouting` now one-way-certifies dispatch.** After every family's calls register, it walks each canonical tool's published schema action enum and asserts every action resolves to exactly one registered `FMcpCall` class (`RegisterCall` already rejects duplicates at boot, so a hit is exactly one typed path); a miss is a boot `ensureMsgf`. The pass line logs the certified action count alongside the tool and routing-entry totals. This closes the loop the schema-union check opened — schema ⇔ routing ⇔ a live typed handler, all proven at editor boot. (`3981f117`)

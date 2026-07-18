@@ -265,4 +265,77 @@ FMcpGraphLayoutResult LayoutGraph(const FMcpGraphLayoutInput& In)
     return Result;
 }
 
+TArray<FOverlapPair> DetectOverlaps(const TArray<FNodeRect>& Rects, float Slack)
+{
+    TArray<FOverlapPair> Out;
+    for (int32 I = 0; I < Rects.Num(); ++I)
+    {
+        const FVector2D AMin = Rects[I].Pos + FVector2D(Slack, Slack);
+        const FVector2D AMax = Rects[I].Pos + Rects[I].Size - FVector2D(Slack, Slack);
+        if (AMax.X <= AMin.X || AMax.Y <= AMin.Y) { continue; }   // deflated to nothing
+        for (int32 J = I + 1; J < Rects.Num(); ++J)
+        {
+            const FVector2D BMin = Rects[J].Pos + FVector2D(Slack, Slack);
+            const FVector2D BMax = Rects[J].Pos + Rects[J].Size - FVector2D(Slack, Slack);
+            if (BMax.X <= BMin.X || BMax.Y <= BMin.Y) { continue; }
+            if (AMin.X < BMax.X && BMin.X < AMax.X &&
+                AMin.Y < BMax.Y && BMin.Y < AMax.Y)
+            {
+                Out.Add({Rects[I].Id, Rects[J].Id});
+            }
+        }
+    }
+    return Out;
+}
+
+FVector2D PlaceBlock(const TArray<FNodeRect>& Block,
+                     const TArray<FNodeRect>& Obstacles,
+                     const FVector2D& AnchorTopLeft,
+                     float ClearGap)
+{
+    if (Block.Num() == 0) { return FVector2D::ZeroVector; }
+
+    FVector2D Min(FLT_MAX, FLT_MAX);
+    FVector2D Max(-FLT_MAX, -FLT_MAX);
+    for (const FNodeRect& R : Block)
+    {
+        Min.X = FMath::Min(Min.X, R.Pos.X);
+        Min.Y = FMath::Min(Min.Y, R.Pos.Y);
+        Max.X = FMath::Max(Max.X, R.Pos.X + R.Size.X);
+        Max.Y = FMath::Max(Max.Y, R.Pos.Y + R.Size.Y);
+    }
+
+    FVector2D T = AnchorTopLeft - Min;
+
+    // Downward-only clearing: each pass jumps the block top below the bottom
+    // of the lowest currently-intersecting obstacle, so a cleared obstacle can
+    // never re-intersect and the loop runs at most Obstacles.Num() passes.
+    bool bMoved = true;
+    while (bMoved)
+    {
+        bMoved = false;
+        const float BlockTop = Min.Y + T.Y;
+        const FVector2D BMin = Min + T - FVector2D(ClearGap, ClearGap);
+        const FVector2D BMax = Max + T + FVector2D(ClearGap, ClearGap);
+        float RequiredTop = BlockTop;
+        for (const FNodeRect& O : Obstacles)
+        {
+            if (O.Pos.X < BMax.X && BMin.X < O.Pos.X + O.Size.X &&
+                O.Pos.Y < BMax.Y && BMin.Y < O.Pos.Y + O.Size.Y)
+            {
+                RequiredTop = FMath::Max(RequiredTop, O.Pos.Y + O.Size.Y + ClearGap);
+            }
+        }
+        if (RequiredTop > BlockTop)
+        {
+            T.Y += RequiredTop - BlockTop;
+            bMoved = true;
+        }
+    }
+
+    T.X = (float)FMath::RoundToInt(T.X);
+    T.Y = (float)FMath::RoundToInt(T.Y);
+    return T;
+}
+
 } // namespace McpGraphLayout

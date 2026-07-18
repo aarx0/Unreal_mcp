@@ -114,7 +114,7 @@ minimization, accept "fine."
   `McpAutomationBridge_WidgetAuthoringHandlers.cpp` offset each new chain by
   `BaseY = ExistingEventChains * McpWidgetChainRowGapY` (300px) before setting
   `NodePosX/NodePosY`, so generated chains stack instead of overlapping.
-- **`arrange_graph` (Phase 2) — IMPLEMENTED** in `HandleBlueprintGraphAction`
+- **`arrange_graph` (Phase 2) — IMPLEMENTED** in `HandleBlueprintGraphArrangeGraph`
   (`McpAutomationBridge_BlueprintGraphHandlers.cpp`): `ArrangeBlueprintGraph` classifies each
   `UEdGraphNode` (exec pins via `UEdGraphSchema_K2::PC_Exec`; pure = no exec pins) and
   translates the graph into `McpGraphLayout::FLayoutNode/FLayoutEdge`; the column/row
@@ -132,11 +132,62 @@ minimization, accept "fine."
 - Node sizes vary; approximate with a fixed column `GAP` (~320px) and row height from pin
   count, or call the node's estimated size. Pixel-perfect isn't required.
 
+## Phase 3 — Overlap report + scoped arrange (SHIPPED)
+
+Full-graph `arrange_graph` was deliberately never run automatically after edits — it
+would rewrite hand-laid layout. That left a gap: an authoring session that forgot the
+final arrange pass shipped a smooshed graph and nothing ever said so. Phase 3 closes
+the gap with two mechanisms, keeping the rule **detection is automatic, movement never
+is**:
+
+- **Passive overlap report.** Every geometry-changing Blueprint graph action
+  (`create_node` all paths, `create_reroute_node`, `delete_node`, `set_node_property`)
+  runs an AABB pass over the graph (`McpGraphLayout::DetectOverlaps`) and, when nodes
+  interpenetrate, rides a `layout` block on the response: `overlappingPairs`, up to 10
+  `pairs` (GUID + title each side), and a hint to run `arrange_graph`. Clean graph ⇒ no
+  block. `get_graph_details` and `arrange_graph` always include the block, so reviews
+  and post-arrange readbacks get an explicit `overlappingPairs: 0`. Sizes are the same
+  headless estimates the arranger uses (`ArrangeEstimateNodeSize`; comment boxes use
+  their real `NodeWidth/NodeHeight`), so each rect is deflated 8px per side first —
+  near-touching pairs are estimate noise, not findings. Comment boxes are excluded from
+  pairing (they overlap their contents by design).
+- **Scoped `arrange_graph`** (`nodes: [guids]`). Lays out only the listed nodes — the
+  induced subgraph goes through the same `LayoutGraph` core (edges to unscoped nodes
+  drop; a scoped node exec-fed from outside the scope roots its block) — then places
+  the result as a **rigid block** (`McpGraphLayout::PlaceBlock`): anchored at the
+  scope's previous bounding-box top-left, pushed straight down until it clears every
+  unmoved node (comments count as obstacles). Nodes outside the list never move.
+  Unknown GUIDs and non-string items fail loudly (`NODE_NOT_FOUND` /
+  `INVALID_PARAMETER`); an explicit empty list is an error, not a silent full arrange.
+
+The intended authoring loop: create/wire nodes (the report accumulates in-band as you
+go), finish the burst, then one `arrange_graph` with the `nodeId`s you created — your
+cluster comes out tidy, the human's hand layout stays untouched. Escalate to the
+unscoped full arrange only on graphs nobody hand-curates.
+
+Design lineage, for the curious: "preserve what the user placed" is the *mental map*
+problem (Misue/Eades/Lai/Sugiyama 1995); minimal-displacement overlap removal and
+partial/fixed-subset layout (yFiles "Partial Layout", ELK interactive modes) are the
+research-grade versions. The rigid-block variant trades their per-node optimality for
+a hard guarantee those methods don't give: untouched nodes move zero pixels.
+
+Geometry passes are unit-tested headlessly:
+`system_control { action: "run_tests", filter: "McpBridge.GraphLayout" }`
+(`McpAutomationBridge_GraphLayoutTests.cpp`).
+
 ## Status
 
 1. **Phase 1** — SHIPPED: generator self-layout for the two existing binders.
 2. **Phase 2** — SHIPPED: `arrange_graph` (Blueprint + Material graphs, shared
    `McpGraphLayoutUtils` core).
+3. **Phase 3** — SHIPPED: passive overlap report on graph-mutating responses +
+   scoped rigid-block `arrange_graph` (Blueprint graphs; Material arrange is still
+   full-graph only).
+
+Known gap: a **full** (unscoped) arrange also moves comment boxes — they carry no pin
+topology, so they pile into column 0 instead of following the nodes they annotate.
+Tracked in TODO.md; scoped arrange sidesteps it (comments outside the scope are
+obstacles and never move).
 
 Branch convention: land bridge changes on the fork's default branch `main`. Build/Live-
 Coding workflow in `docs/extending-the-bridge.md`.

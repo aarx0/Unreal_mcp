@@ -565,6 +565,7 @@ static void S_ArrangeGraph(FMcpSchemaBuilder& B)
 	B.String(TEXT("assetPath"), TEXT("Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath."))
 	 .String(TEXT("blueprintPath"), TEXT("Blueprint asset path."))
 	 .String(TEXT("graphName"), TEXT("Name of the graph."))
+	 .Array(TEXT("nodes"), TEXT("arrange_graph: node GUIDs to lay out as one rigid block — anchored at the scope's current top-left, slid down until it clears unmoved nodes; every node outside the list stays put. Omit to arrange the whole graph."))
 	 .RequiredAnyOf({TEXT("assetPath"), TEXT("blueprintPath")});
 }
 

@@ -78,4 +78,38 @@ namespace McpGraphLayout
     };
 
     FMcpGraphLayoutResult LayoutGraph(const FMcpGraphLayoutInput& In);
+
+    // ---- Estimated-geometry passes (overlap report + scoped arrange) --------
+
+    // Axis-aligned node extent: Pos is the top-left, Size the adapter's
+    // estimate (no Slate geometry exists headless, so all of this is
+    // approximate by construction).
+    struct FNodeRect
+    {
+        FNodeId   Id   = INDEX_NONE;
+        FVector2D Pos  = FVector2D::ZeroVector;
+        FVector2D Size = FVector2D::ZeroVector;
+    };
+
+    struct FOverlapPair
+    {
+        FNodeId A = INDEX_NONE;
+        FNodeId B = INDEX_NONE;
+    };
+
+    // Pairwise AABB interpenetration. Each rect is deflated by Slack on every
+    // side first: with estimated sizes a near-touching pair is measurement
+    // noise, not a finding. Exact edge contact never counts. Pairs preserve
+    // input order (A earlier than B).
+    TArray<FOverlapPair> DetectOverlaps(const TArray<FNodeRect>& Rects, float Slack);
+
+    // Rigid-block placement for scoped arrange. Translates Block (as one
+    // unit) so its bounding box's top-left lands on AnchorTopLeft, then
+    // pushes it straight down until the bbox clears every obstacle by at
+    // least ClearGap. Returns the integral translation to add to each block
+    // Pos; obstacles are never moved.
+    FVector2D PlaceBlock(const TArray<FNodeRect>& Block,
+                         const TArray<FNodeRect>& Obstacles,
+                         const FVector2D& AnchorTopLeft,
+                         float ClearGap);
 }

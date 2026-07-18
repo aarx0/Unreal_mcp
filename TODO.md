@@ -8,6 +8,15 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] Found 2026-07-18 (overlap-report/scoped-arrange work, code read): full `arrange_graph`
+> scatters comment boxes.** `ArrangeBlueprintGraph` iterates every `Graph->Nodes` entry; a
+> comment box has no pin topology, so the core sees an isolated node and piles it into
+> column 0 — it neither follows the nodes it annotates nor keeps its place. Repro: full
+> arrange on any graph with a comment box. Proper fix is treating comments as containers
+> (translate each comment with the centroid of the nodes inside its old bounds, or leave
+> comments unmoved). Scoped arrange (`nodes:[...]`) already sidesteps it: out-of-scope
+> comments are obstacles and never move.
+
 > **[x] Found 2026-07-09 (silent-success sweep, code read): `set_object_property` special-cased
 > transform paths silently zero on wrong value type.** In `HandleSetObjectProperty`
 > (PropertyHandlers.cpp:267-340), the ActorLocation/ActorRotation/ActorScale fast paths accept the
