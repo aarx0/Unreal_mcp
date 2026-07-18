@@ -1383,6 +1383,16 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-18 — `control_actor set_blueprint_variables` silently writes doomed values on non-instance-editable BP vars
+Root cause of a real gameplay bug (totem dummy's PillarField actor ref vanishing): the write lands on the live
+instance and reads back fine, but the variable lacked instance-editability (CPF_DisableEditOnInstance set), so the
+next BP recompile's reinstancing dropped it — the reinstancer only preserves editable instance deltas. The editor's
+Details panel can't even make this mistake (non-editable vars don't show on instances); the bridge bypassed that
+guard and reported success. Fix: refuse (or at least warn in the response) when the target property has
+CPF_DisableEditOnInstance. Related fix SHIPPED same day: `set_variable_metadata {instanceEditable}` now flips the
+real property flag via `FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag` — previously it wrote a useless
+metadata entry named "instanceEditable" and reported success (the trap that set up the data loss).
+
 ### [ ] 2026-07-17b — `inspect set_component_property` declares `properties` (map) but the handler demands `propertyName`
 Found authoring BP_Totem's component defaults. `set_component_property {objectPath:<CDO>, componentName:'Mesh',
 properties:{...}}` fails INVALID_ARGUMENT "propertyName (or propertyPath) required" — the declared batch-map path

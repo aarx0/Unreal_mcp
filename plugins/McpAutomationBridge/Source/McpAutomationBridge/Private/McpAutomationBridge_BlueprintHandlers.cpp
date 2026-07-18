@@ -2732,6 +2732,22 @@ bool McpHandlers::Blueprint::HandleBlueprintSetVariableMetadata(
           FMcpAutomationBridge_JsonValueToString(Pair.Value);
       const FName MetaKey = FMcpAutomationBridge_ResolveMetadataKey(KeyStr);
 
+      // instanceEditable is NOT metadata: it's the CPF_DisableEditOnInstance
+      // property flag. Writing it as a metadata entry reports success while the
+      // variable stays Blueprint-only editable - and any per-instance value a
+      // caller then sets is dropped on the next recompile's reinstancing (the
+      // reinstancer only preserves editable instance deltas).
+      if (KeyStr.Equals(TEXT("instanceEditable"), ESearchCase::IgnoreCase)) {
+        const bool bEditable = ValueStr.ToBool();
+        FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag(
+            Blueprint, VariableDesc->VarName, /*bNewBlueprintOnly=*/!bEditable);
+        UE_LOG(LogMcpAutomationBridgeSubsystem, Log,
+               TEXT("Set instance-editable=%s on variable '%s' (property flag, not metadata)"),
+               bEditable ? TEXT("true") : TEXT("false"), *VarName);
+        AppliedKeys.Add(TEXT("instanceEditable"));
+        continue;
+      }
+
       if (ValueStr.IsEmpty()) {
         FBlueprintEditorUtils::RemoveBlueprintVariableMetaData(
             Blueprint, VariableDesc->VarName, nullptr, MetaKey);
