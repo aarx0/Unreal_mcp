@@ -68,6 +68,10 @@ namespace McpGraphLayout
         float RowStep  = 180.f;   // ArrangeRowStepY
         float GapMajor = 96.f;    // ArrangeGapX (between columns)
         float GapMinor = 48.f;    // ArrangeGapY (within a column)
+        // Extra empty rows between root trees ("swim lanes"): each tree's rows
+        // stay contiguous, the cursor just skips this many rows before the next
+        // tree, so cross-tree wires travel through empty grid. 0 = legacy.
+        float TreeGapRows = 0.f;
     };
 
     struct FMcpGraphLayoutResult

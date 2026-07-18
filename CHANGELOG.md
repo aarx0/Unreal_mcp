@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Honest node sizes + swim-lane tree gaps (2026-07-18, wave 2 of the wire-aware layout work)
+
+- **`ArrangeEstimateNodeSize` now believes in pins.** Height = ~48px title band
+  + ~24px per visible pin row (busier side) + pad, for EVERY node class — the
+  engine's `EstimateNodeHeight` returns a flat 48 for anything that isn't a
+  CallFunction/Event, which let a ten-pin Print String hide a getter under its
+  lower half. Width adds the pin-label row and one inline value box
+  (unconnected default-editable input), capturing the ~330px Draw Debug String
+  reality; `UK2Node_Knot` is a 24×24 diamond (which also exempts knots from
+  wire-through reports). `ArrangePinIsVisible` is the shared visibility rule
+  for the estimator, the pin-row indexer, and the wire walk.
+- **Swim lanes: `TreeGapRows` (core, default 0) — the Blueprint arranger passes
+  1.** After each root tree consumes its rows, the cursor skips one empty row,
+  so independent event chains separate by a full lane and cross-tree wires run
+  through empty grid. Roots that place nothing (explicit-root fallback appends
+  every node) add no gap. Material arranger unchanged (default 0).
+- Space-only wave: both changes can add room, never tangle. Gated by wave-1
+  metrics on the totem fixture; `McpBridge.GraphLayout.TreeGap` locks the gap
+  semantics headlessly.
+
 ### Wire-quality metrics in the layout rider (2026-07-18, wave 1 of the wire-aware layout work)
 
 - **The `layout` block now measures wires, not just node boxes.** Every wire is

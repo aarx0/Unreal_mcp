@@ -195,9 +195,13 @@ not vibes).
   `break_pin_links` now carry the rider too. Core: `AnalyzeWires` +
   `EstimatePinAnchor`, spec-locked in `McpBridge.GraphLayout.*`. Zero layout
   change in this wave.
-- **Wave 2 (planned) — space only.** Honest size estimates (per-pin-row height
-  for ALL node classes, pin-label/value-box widths, tiny knots) + a one-row
-  swim-lane gap between root trees (`TreeGapRows`). Can only add room.
+- **Wave 2 (SHIPPED) — space only.** Honest size estimates: title band +
+  per-visible-pin-row height for ALL node classes (the engine's
+  `EstimateNodeHeight` is flat-48 outside CallFunction/Event), widths from pin
+  labels + one inline value box, knots 24×24 (`ArrangePinIsVisible` = the one
+  visibility rule). Swim lanes: `TreeGapRows` (core default 0; BP arranger
+  passes 1) skips one empty row between root trees so cross-tree wires travel
+  through empty grid; no-op roots add no gap. Material arranger unchanged.
 - **Wave 3 (planned) — sharp tools, separately revertible.** Pin-snapped feeder
   placement (feeder's output pin lands on its consumer's input pin row) and
   shared-getter splitting in `arrange_graph` (`splitSharedGetters`, default
@@ -215,7 +219,8 @@ only if `wireCrossings` stays ugly after wave 3.
 3. **Phase 3** — SHIPPED: passive overlap report on graph-mutating responses +
    scoped rigid-block `arrange_graph` (Blueprint graphs; Material arrange is still
    full-graph only).
-4. **Phase 4** — wave 1 (wire metrics) SHIPPED; waves 2-3 staged (see above).
+4. **Phase 4** — waves 1 (wire metrics) + 2 (honest sizes, swim lanes) SHIPPED;
+   wave 3 (pin-snap, getter splitting) staged (see above).
 
 Known gap: a **full** (unscoped) arrange also moves comment boxes — they carry no pin
 topology, so they pile into column 0 instead of following the nodes they annotate.

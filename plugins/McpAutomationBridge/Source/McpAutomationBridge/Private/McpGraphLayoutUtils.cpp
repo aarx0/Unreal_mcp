@@ -190,14 +190,25 @@ FMcpGraphLayoutResult LayoutGraph(const FMcpGraphLayoutInput& In)
 
     // Y — non-resetting cursor + parent-centering from each root, then any nodes
     // not reached from a root (orphans / disconnected) get their own rows.
+    // Tree gap: bump the cursor only when a root actually consumed rows —
+    // explicit-root mode appends every node as a fallback root, and a cached
+    // root must not widen the lane it already lives in.
     TMap<FNodeId, float> Row;
     {
         TSet<FNodeId> Visited;
         float Cursor = 0.0f;
-        for (FNodeId R : Roots) { ArrangeRow(R, Children, Row, Visited, Cursor); }
+        for (FNodeId R : Roots)
+        {
+            const float Before = Cursor;
+            ArrangeRow(R, Children, Row, Visited, Cursor);
+            if (Cursor > Before) { Cursor += In.TreeGapRows; }
+        }
         for (FNodeId N : Nodes)
         {
-            if (!Row.Contains(N)) { ArrangeRow(N, Children, Row, Visited, Cursor); }
+            if (Row.Contains(N)) { continue; }
+            const float Before = Cursor;
+            ArrangeRow(N, Children, Row, Visited, Cursor);
+            if (Cursor > Before) { Cursor += In.TreeGapRows; }
         }
     }
 

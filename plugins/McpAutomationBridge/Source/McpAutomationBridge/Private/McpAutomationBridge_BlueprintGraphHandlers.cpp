@@ -139,18 +139,67 @@ namespace
 constexpr int32 ArrangeRowStepY = 180; // target row spacing (px) for the Y cursor
 constexpr float ArrangeGapX = 96.f;    // horizontal gap between columns
 constexpr float ArrangeGapY = 48.f;    // minimum vertical clearance within a column
+constexpr float ArrangeTreeGapRows = 1.f; // empty rows between event trees (swim lanes)
+
+// A pin is drawn iff it isn't hidden and isn't an advanced pin on a node whose
+// advanced section is collapsed. Single home of the rule — the row indexer,
+// size estimator, and wire walk must all agree or anchors drift in 24px steps.
+bool ArrangePinIsVisible(const UEdGraphNode* Node, const UEdGraphPin* Pin)
+{
+    return Pin && !Pin->bHidden &&
+           !(Node->AdvancedPinDisplay == ENodeAdvancedPins::Hidden && Pin->bAdvancedView);
+}
 
 // Headless node-extent estimate (no Slate geometry exists for unopened graphs).
-// Height: the engine's canonical estimator (exists for exactly this reason —
-// "we don't know the actual size of the node until the next Slate tick").
-// Width: title length at ~7 px/char (Bold 10pt), floored at the engine's own
-// K2 node-width guess of 224 (BlueprintFunctionNodeSpawner's EstimatedVarNodeWidth).
+// Height: ~48px title band + ~24px per visible pin row on the busier side +
+// bottom pad, for EVERY node class — the engine's EstimateNodeHeight returns a
+// flat 48 for anything that isn't a CallFunction/Event, which is how a ten-pin
+// Print String hid a getter under its lower half. Width: widest of the title,
+// the pin-label row (input + output labels), and one inline value box (an
+// unconnected default-editable input draws its default inline — Draw Debug
+// String is ~330px wide for exactly that reason). Knots render as a tiny
+// diamond, and a zero-ish rect also exempts them from wire-through reports.
 FVector2D ArrangeEstimateNodeSize(UEdGraphNode* Node)
 {
-    const float Height = UEdGraphSchema_K2::EstimateNodeHeight(Node);
+    if (Cast<UK2Node_Knot>(Node))
+    {
+        return FVector2D(24.f, 24.f);
+    }
+
+    int32 NumIn = 0;
+    int32 NumOut = 0;
+    float MaxInLabel = 0.f;
+    float MaxOutLabel = 0.f;
+    float ValueBox = 0.f;
+    for (UEdGraphPin* P : Node->Pins)
+    {
+        if (!ArrangePinIsVisible(Node, P)) { continue; }
+        // Display name, not PinName: exec pins render an empty label.
+        const float LabelLen = (float)P->GetDisplayName().ToString().Len();
+        if (P->Direction == EGPD_Input)
+        {
+            ++NumIn;
+            MaxInLabel = FMath::Max(MaxInLabel, LabelLen);
+            if (P->LinkedTo.Num() == 0 && !P->bDefaultValueIsIgnored &&
+                !P->DefaultValue.IsEmpty())
+            {
+                ValueBox = FMath::Max(
+                    ValueBox, FMath::Min(120.f, 20.f + 7.f * P->DefaultValue.Len()));
+            }
+        }
+        else
+        {
+            ++NumOut;
+            MaxOutLabel = FMath::Max(MaxOutLabel, LabelLen);
+        }
+    }
+
+    const float Height = 48.f + FMath::Max(NumIn, NumOut) * 24.f + 12.f;
     const FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
-    const float Width = FMath::Max(224.f, 32.f + 7.f * Title.Len());
-    return FVector2D(Width, Height);
+    const float TitleWidth = 32.f + 7.f * Title.Len();
+    const float PinRowWidth =
+        24.f + 7.f * MaxInLabel + ValueBox + 40.f + 7.f * MaxOutLabel + 24.f;
+    return FVector2D(FMath::Max3(224.f, TitleWidth, PinRowWidth), Height);
 }
 
 // Extent for the overlap/obstacle passes: resizable nodes (comment boxes) carry
@@ -176,15 +225,13 @@ bool ArrangePinIsExec(const UEdGraphPin* Pin)
 int32 ArrangeVisiblePinRow(const UEdGraphNode* Node, const UEdGraphPin* Pin)
 {
     if (!Node || !Pin) { return INDEX_NONE; }
-    const bool bAdvancedCollapsed =
-        Node->AdvancedPinDisplay == ENodeAdvancedPins::Hidden;
     int32 Row = 0;
     for (const UEdGraphPin* P : Node->Pins)
     {
         if (!P || P->Direction != Pin->Direction) { continue; }
-        const bool bHiddenPin = P->bHidden || (bAdvancedCollapsed && P->bAdvancedView);
-        if (P == Pin) { return bHiddenPin ? INDEX_NONE : Row; }
-        if (!bHiddenPin) { ++Row; }
+        const bool bVisible = ArrangePinIsVisible(Node, P);
+        if (P == Pin) { return bVisible ? Row : INDEX_NONE; }
+        if (bVisible) { ++Row; }
     }
     return INDEX_NONE;
 }
@@ -503,6 +550,7 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph, const TSet<UEdGraphNode*>* Scope = 
     In.RowStep  = (float)ArrangeRowStepY;
     In.GapMajor = ArrangeGapX;
     In.GapMinor = ArrangeGapY;
+    In.TreeGapRows = ArrangeTreeGapRows;
     In.Nodes.Reserve(IdToNode.Num());
     for (McpGraphLayout::FNodeId Id = 0; Id < IdToNode.Num(); ++Id)
     {

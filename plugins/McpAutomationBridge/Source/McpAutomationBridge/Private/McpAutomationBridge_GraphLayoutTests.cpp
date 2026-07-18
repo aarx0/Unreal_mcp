@@ -171,6 +171,57 @@ bool FMcpGraphLayoutPlaceBlock::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpGraphLayoutTreeGap, "McpBridge.GraphLayout.TreeGap",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpGraphLayoutTreeGap::RunTest(const FString& Parameters)
+{
+    using namespace McpGraphLayout;
+
+    // Two independent exec chains 0->1 and 2->3 (one row each).
+    auto MakeInput = [](float TreeGapRows)
+    {
+        FMcpGraphLayoutInput In;
+        In.TreeGapRows = TreeGapRows;
+        for (int32 I = 0; I < 4; ++I)
+        {
+            FLayoutNode N;
+            N.Id = I;
+            N.Size = FVector2D(224, 64);
+            In.Nodes.Add(N);
+        }
+        FLayoutEdge E1; E1.FromId = 0; E1.ToId = 1; In.Edges.Add(E1);
+        FLayoutEdge E2; E2.FromId = 2; E2.ToId = 3; In.Edges.Add(E2);
+        return In;
+    };
+
+    // One empty row between trees: the second tree starts two rows down.
+    {
+        const FMcpGraphLayoutResult R = LayoutGraph(MakeInput(1.f));
+        TestEqual(TEXT("tree 1 row"), (int32)R.Positions.FindRef(0).Y, 0);
+        TestEqual(TEXT("tree 2 gapped"), (int32)R.Positions.FindRef(2).Y, 360);
+        TestEqual(TEXT("tree 2 chain level"), (int32)R.Positions.FindRef(3).Y, 360);
+    }
+
+    // Zero = legacy stacking.
+    {
+        const FMcpGraphLayoutResult R = LayoutGraph(MakeInput(0.f));
+        TestEqual(TEXT("legacy tree 2"), (int32)R.Positions.FindRef(2).Y, 180);
+    }
+
+    // Explicit-root mode appends every node as a fallback root; roots that
+    // place nothing (already reached) must not add gaps.
+    {
+        FMcpGraphLayoutInput In = MakeInput(1.f);
+        In.RootId = 0;
+        const FMcpGraphLayoutResult R = LayoutGraph(In);
+        TestEqual(TEXT("cached roots add no gap"), (int32)R.Positions.FindRef(2).Y, 360);
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FMcpGraphLayoutAnalyzeWires, "McpBridge.GraphLayout.AnalyzeWires",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
