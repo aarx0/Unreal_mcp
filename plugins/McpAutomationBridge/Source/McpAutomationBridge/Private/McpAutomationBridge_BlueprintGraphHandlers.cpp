@@ -76,6 +76,7 @@
 #include "K2Node_BreakStruct.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
+#include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_ConstructObjectFromClass.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
@@ -1551,6 +1552,83 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphCreateNode(
     UK2Node_InputAxisEvent *InputNode = NodeCreator.CreateNode(false);
     InputNode->InputAxisName = FName(*InputAxisName);
     FinalizeAndReport(NodeCreator, InputNode);
+    return true;
+  }
+
+  // ========== COMPONENT-BOUND EVENT (the Details-panel + button) ==========
+  // An event node bound to a component's BlueprintAssignable delegate, e.g.
+  // "On Phase Expired (TotemAttack)". variableName names the component property
+  // on this Blueprint's class; memberName names the delegate on the component's
+  // class. Must run before the dynamic fallback: without
+  // InitializeComponentBoundEventParams the generic spawn produces a pinless
+  // "None (None)" shell that breaks the next compile.
+  if (NodeType.Equals(TEXT("K2Node_ComponentBoundEvent"), ESearchCase::IgnoreCase) ||
+      NodeType.Equals(TEXT("ComponentBoundEvent"), ESearchCase::IgnoreCase)) {
+    FString ComponentVarName;
+    Payload->TryGetStringField(TEXT("variableName"), ComponentVarName);
+    FString DelegateName;
+    Payload->TryGetStringField(TEXT("memberName"), DelegateName);
+    if (ComponentVarName.IsEmpty() || DelegateName.IsEmpty()) {
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          TEXT("ComponentBoundEvent requires variableName (component property on "
+               "this Blueprint) and memberName (delegate on the component)."),
+          TEXT("INVALID_ARGUMENT"));
+      return true;
+    }
+
+    UClass *OwnerClass = Blueprint->GeneratedClass
+                             ? static_cast<UClass *>(Blueprint->GeneratedClass)
+                             : static_cast<UClass *>(Blueprint->SkeletonGeneratedClass);
+    FObjectProperty *ComponentProp =
+        OwnerClass ? FindFProperty<FObjectProperty>(OwnerClass, FName(*ComponentVarName))
+                   : nullptr;
+    if (!ComponentProp || !ComponentProp->PropertyClass ||
+        !ComponentProp->PropertyClass->IsChildOf(UActorComponent::StaticClass())) {
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("No component property '%s' on %s. SCS components "
+                               "gain their class property on compile - compile the "
+                               "Blueprint first."),
+                          *ComponentVarName,
+                          OwnerClass ? *OwnerClass->GetName() : TEXT("<no class>")),
+          TEXT("COMPONENT_NOT_FOUND"));
+      return true;
+    }
+
+    FMulticastDelegateProperty *DelegateProp = FindFProperty<FMulticastDelegateProperty>(
+        ComponentProp->PropertyClass, FName(*DelegateName));
+    if (!DelegateProp) {
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(TEXT("No multicast delegate '%s' on %s."), *DelegateName,
+                          *ComponentProp->PropertyClass->GetName()),
+          TEXT("DELEGATE_NOT_FOUND"));
+      return true;
+    }
+
+    // The engine allows one bound event per (component, delegate) - reuse it,
+    // exactly like the Details-panel button focusing the existing node.
+    TArray<UK2Node_ComponentBoundEvent *> ExistingBoundEvents;
+    FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_ComponentBoundEvent>(
+        Blueprint, ExistingBoundEvents);
+    for (UK2Node_ComponentBoundEvent *Existing : ExistingBoundEvents) {
+      if (Existing && Existing->ComponentPropertyName == ComponentProp->GetFName() &&
+          Existing->DelegatePropertyName == DelegateProp->GetFName()) {
+        TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+        Result->SetStringField(TEXT("nodeId"), Existing->NodeGuid.ToString());
+        Result->SetStringField(TEXT("nodeName"), Existing->GetName());
+        Result->SetBoolField(TEXT("reused"), true);
+        S.SendAutomationResponse(RequestingSocket, RequestId, true,
+                               TEXT("Existing bound event reused."), Result);
+        return true;
+      }
+    }
+
+    FGraphNodeCreator<UK2Node_ComponentBoundEvent> NodeCreator(*TargetGraph);
+    UK2Node_ComponentBoundEvent *EventNode = NodeCreator.CreateNode(false);
+    EventNode->InitializeComponentBoundEventParams(ComponentProp, DelegateProp);
+    FinalizeAndReport(NodeCreator, EventNode);
     return true;
   }
 
