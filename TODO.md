@@ -1383,6 +1383,19 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-17b — `inspect set_component_property` declares `properties` (map) but the handler demands `propertyName`
+Found authoring BP_Totem's component defaults. `set_component_property {objectPath:<CDO>, componentName:'Mesh',
+properties:{...}}` fails INVALID_ARGUMENT "propertyName (or propertyPath) required" — the declared batch-map path
+is unreachable, so every multi-property write costs one call per property. Either implement the `properties` loop
+(control_actor's variant has one) or drop the key from the decl.
+
+### [ ] 2026-07-17 — `inspect set_component_property` rejects object-refs by path; its sibling `set_property` accepts them
+Same session: `set_component_property {propertyName:'StaticMesh', stringValue:'/Engine/BasicShapes/Cylinder.Cylinder'}`
+fails VALUE_TYPE_MISMATCH ("you sent stringValue but the property type is 'TObjectPtr<UStaticMesh>'"), while
+`set_property` on the component subobject (`...Default__BP_Totem_C:Mesh`) with the identical stringValue succeeds —
+its docs even advertise "object-reference-by-path". One kind policy for the twins: teach the component setter the
+object-by-path stringValue form.
+
 ### [ ] 2026-07-14b — `manage_blueprint add_node` declares `x`/`y` but ignores them (wants `posX`/`posY`)
 `add_node {nodeType:'K2Node_CallFunction', functionName:'KismetSystemLibrary.ExecuteConsoleCommand', x:1150, y:-16}`
 succeeded but placed the node at (0,0) — response echoed `posX:0, posY:0`; re-sending with `posX`/`posY` positioned
