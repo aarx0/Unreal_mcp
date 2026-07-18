@@ -169,6 +169,26 @@ bool ArrangePinIsExec(const UEdGraphPin* Pin)
     return Pin && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
 }
 
+// Visible row index of Pin on its side (inputs and outputs count separately,
+// top-to-bottom in Pins order, mirroring SGraphNode::CreatePinWidgets), or
+// INDEX_NONE when the pin itself isn't rendered. Single home for the
+// visibility rule: bHidden, plus advanced pins on a collapsed node.
+int32 ArrangeVisiblePinRow(const UEdGraphNode* Node, const UEdGraphPin* Pin)
+{
+    if (!Node || !Pin) { return INDEX_NONE; }
+    const bool bAdvancedCollapsed =
+        Node->AdvancedPinDisplay == ENodeAdvancedPins::Hidden;
+    int32 Row = 0;
+    for (const UEdGraphPin* P : Node->Pins)
+    {
+        if (!P || P->Direction != Pin->Direction) { continue; }
+        const bool bHiddenPin = P->bHidden || (bAdvancedCollapsed && P->bAdvancedView);
+        if (P == Pin) { return bHiddenPin ? INDEX_NONE : Row; }
+        if (!bHiddenPin) { ++Row; }
+    }
+    return INDEX_NONE;
+}
+
 bool ArrangeNodeIsPure(const UEdGraphNode* Node)
 {
     if (!Node) { return true; }
@@ -615,10 +635,18 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph, const TSet<UEdGraphNode*>* Scope = 
 // estimates, so a near-touching pair is measurement noise, not a finding.
 constexpr float OverlapReportSlack = 8.f;
 constexpr int32 OverlapReportMaxPairs = 10;
+// Wire chords get less slack than node pairs: a chord clipping a corner is
+// already a mild finding, but grazes within estimate error stay silent.
+constexpr float WireReportSlack = 4.f;
+constexpr int32 WireReportMaxWorst = 5;
+constexpr int32 WireReportMaxWires = 2000;   // beyond this, skip wire math (and say so)
+const McpGraphLayout::FPinAnchorParams ArrangePinAnchors;   // shared Slate-row estimate
 
-// Passive overlap report, attached to every geometry-changing graph action's
-// response (and always to get_graph_details / arrange_graph). Detection only —
-// the caller decides when to run arrange_graph; nothing here moves a node.
+// Passive layout-quality report, attached to every geometry-changing graph
+// action's response (and always to get_graph_details / arrange_graph):
+// node-overlap pairs plus wire quality — wires passing through node boxes and
+// wire-wire crossings, both on the straight-chord model. Detection only — the
+// caller decides when to run arrange_graph; nothing here moves a node.
 // Comment boxes are excluded: they overlap their contents by design.
 void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
                       bool bIncludeWhenClean)
@@ -626,10 +654,12 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
     if (!Result.IsValid() || !Graph) { return; }
 
     TArray<UEdGraphNode*> Nodes;
+    TMap<const UEdGraphNode*, int32> NodeToId;
     TArray<McpGraphLayout::FNodeRect> Rects;
     for (UEdGraphNode* N : Graph->Nodes)
     {
         if (!N || Cast<UEdGraphNode_Comment>(N)) { continue; }
+        NodeToId.Add(N, Nodes.Num());
         Rects.Add({Nodes.Num(), FVector2D(N->NodePosX, N->NodePosY),
                    ArrangeNodeExtent(N)});
         Nodes.Add(N);
@@ -637,7 +667,58 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
 
     const TArray<McpGraphLayout::FOverlapPair> Pairs =
         McpGraphLayout::DetectOverlaps(Rects, OverlapReportSlack);
-    if (Pairs.Num() == 0 && !bIncludeWhenClean) { return; }
+
+    // Wire chords: one segment per link, emitted from the output side. Hidden
+    // pins draw no wire, so their links are skipped.
+    TArray<McpGraphLayout::FWireSegment> Wires;
+    struct FWirePinRefs { const UEdGraphPin* From; const UEdGraphPin* To; };
+    TArray<FWirePinRefs> WirePins;   // parallel to Wires, names for the report
+    bool bWireMetricsSkipped = false;
+    for (int32 Id = 0; Id < Nodes.Num() && !bWireMetricsSkipped; ++Id)
+    {
+        UEdGraphNode* N = Nodes[Id];
+        for (UEdGraphPin* P : N->Pins)
+        {
+            if (!P || P->Direction != EGPD_Output) { continue; }
+            const int32 FromRow = ArrangeVisiblePinRow(N, P);
+            if (FromRow == INDEX_NONE) { continue; }
+            for (UEdGraphPin* L : P->LinkedTo)
+            {
+                UEdGraphNode* M = L ? L->GetOwningNode() : nullptr;
+                const int32* MId = M ? NodeToId.Find(M) : nullptr;
+                if (!MId) { continue; }
+                const int32 ToRow = ArrangeVisiblePinRow(M, L);
+                if (ToRow == INDEX_NONE) { continue; }
+                if (Wires.Num() >= WireReportMaxWires)
+                {
+                    bWireMetricsSkipped = true;
+                    break;
+                }
+                McpGraphLayout::FWireSegment Seg;
+                Seg.FromNode = Id;
+                Seg.ToNode = *MId;
+                Seg.FromAnchor = McpGraphLayout::EstimatePinAnchor(
+                    Rects[Id], FromRow, /*bOutput=*/true, ArrangePinAnchors);
+                Seg.ToAnchor = McpGraphLayout::EstimatePinAnchor(
+                    Rects[*MId], ToRow, /*bOutput=*/false, ArrangePinAnchors);
+                Wires.Add(Seg);
+                WirePins.Add({P, L});
+            }
+            if (bWireMetricsSkipped) { break; }
+        }
+    }
+
+    McpGraphLayout::FWireQualityReport WireReport;
+    if (!bWireMetricsSkipped)
+    {
+        WireReport = McpGraphLayout::AnalyzeWires(Wires, Rects, WireReportSlack);
+    }
+
+    // Crossings alone never force the block onto a mutating response — they
+    // are near-universal in real graphs; the count is informational whenever
+    // the block is present (and always visible on the always-include calls).
+    const bool bClean = Pairs.Num() == 0 && WireReport.ThroughNodes.Num() == 0;
+    if (bClean && !bIncludeWhenClean) { return; }
 
     TSharedPtr<FJsonObject> Layout = McpHandlerUtils::CreateResultObject();
     Layout->SetNumberField(TEXT("overlappingPairs"), Pairs.Num());
@@ -660,11 +741,48 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
     {
         Layout->SetNumberField(TEXT("pairsListed"), OverlapReportMaxPairs);
     }
-    if (Pairs.Num() > 0)
+
+    Layout->SetNumberField(TEXT("wiresThroughNodes"), WireReport.ThroughNodes.Num());
+    Layout->SetNumberField(TEXT("wireCrossings"), WireReport.NumCrossings);
+    if (bWireMetricsSkipped)
+    {
+        Layout->SetBoolField(TEXT("wireMetricsSkipped"), true);
+    }
+    if (WireReport.ThroughNodes.Num() > 0)
+    {
+        TArray<TSharedPtr<FJsonValue>> Worst;
+        const int32 Listed =
+            FMath::Min(WireReport.ThroughNodes.Num(), WireReportMaxWorst);
+        for (int32 I = 0; I < Listed; ++I)
+        {
+            const McpGraphLayout::FWireThroughNode& T = WireReport.ThroughNodes[I];
+            const McpGraphLayout::FWireSegment& Seg = Wires[T.WireIndex];
+            UEdGraphNode* A = Nodes[Seg.FromNode];
+            UEdGraphNode* B = Nodes[Seg.ToNode];
+            UEdGraphNode* X = Nodes[T.NodeId];
+            TSharedPtr<FJsonObject> W = McpHandlerUtils::CreateResultObject();
+            W->SetStringField(TEXT("a"), A->NodeGuid.ToString());
+            W->SetStringField(TEXT("aTitle"),
+                              A->GetNodeTitle(ENodeTitleType::ListView).ToString());
+            W->SetStringField(TEXT("aPin"), WirePins[T.WireIndex].From->PinName.ToString());
+            W->SetStringField(TEXT("b"), B->NodeGuid.ToString());
+            W->SetStringField(TEXT("bTitle"),
+                              B->GetNodeTitle(ENodeTitleType::ListView).ToString());
+            W->SetStringField(TEXT("bPin"), WirePins[T.WireIndex].To->PinName.ToString());
+            W->SetStringField(TEXT("node"), X->NodeGuid.ToString());
+            W->SetStringField(TEXT("nodeTitle"),
+                              X->GetNodeTitle(ENodeTitleType::ListView).ToString());
+            Worst.Add(MakeShared<FJsonValueObject>(W));
+        }
+        Layout->SetArrayField(TEXT("throughNodeWorst"), Worst);
+    }
+
+    if (!bClean)
     {
         Layout->SetStringField(
             TEXT("hint"),
-            TEXT("Nodes overlap (sizes estimated). Run arrange_graph to lay out "
+            TEXT("Layout issues (geometry estimated): overlapping nodes and/or "
+                 "wires passing through node boxes. Run arrange_graph to lay out "
                  "the whole graph, or arrange_graph with nodes:[...] to tidy just "
                  "the nodes you touched without moving anything else."));
     }
@@ -1922,9 +2040,11 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphConnectPins(
 
   if (TargetGraph->GetSchema()->TryCreateConnection(FromPin, ToPin)) {
     McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
-    
+
     TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
     McpHandlerUtils::AddVerification(Result, Blueprint);
+    // Wire geometry changed even though no node moved.
+    AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
     S.SendAutomationResponse(RequestingSocket, RequestId, true,
                            TEXT("Pins connected."), Result);
   } else {
@@ -1974,9 +2094,11 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphBreakPinLinks(
   TargetNode->Modify();
   TargetGraph->GetSchema()->BreakPinLinks(*Pin, true);
   McpFinalizeBlueprint(Blueprint, /*bStructural=*/false, /*bSave=*/true);
-  
+
   TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
   McpHandlerUtils::AddVerification(Result, Blueprint);
+  // Wire geometry changed even though no node moved.
+  AddOverlapReport(Result, TargetGraph, /*bIncludeWhenClean=*/false);
   S.SendAutomationResponse(RequestingSocket, RequestId, true,
                          TEXT("Pin links broken."), Result);
   return true;

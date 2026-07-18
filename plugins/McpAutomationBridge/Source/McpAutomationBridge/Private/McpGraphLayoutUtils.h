@@ -112,4 +112,53 @@ namespace McpGraphLayout
                          const TArray<FNodeRect>& Obstacles,
                          const FVector2D& AnchorTopLeft,
                          float ClearGap);
+
+    // ---- Wire quality (straight-chord approximation) ------------------------
+    // The editor draws splines; these passes model each wire as the straight
+    // chord between its pin anchors. Advisory metrics, same philosophy as
+    // DetectOverlaps: estimated geometry, deflated by slack, never moves
+    // anything.
+
+    struct FWireSegment
+    {
+        FNodeId   FromNode = INDEX_NONE;   // endpoint nodes are exempt from through-tests
+        FNodeId   ToNode   = INDEX_NONE;
+        FVector2D FromAnchor = FVector2D::ZeroVector;   // absolute px
+        FVector2D ToAnchor   = FVector2D::ZeroVector;
+    };
+
+    struct FWireThroughNode
+    {
+        int32   WireIndex = INDEX_NONE;   // index into the Wires input
+        FNodeId NodeId    = INDEX_NONE;   // node the wire chord passes through
+        float   CutLength = 0.f;          // chord length inside the deflated rect
+    };
+
+    struct FWireQualityReport
+    {
+        // Worst-first: CutLength desc, then WireIndex, then NodeId.
+        TArray<FWireThroughNode> ThroughNodes;
+        int32 NumCrossings = 0;           // proper wire-wire crossings (count only)
+    };
+
+    // Rects are deflated by Slack per side; a rect deflated to nothing (knots)
+    // never reports. Crossings skip wire pairs sharing an endpoint node and
+    // count proper crossings only (collinear overlap / endpoint touch: no).
+    FWireQualityReport AnalyzeWires(const TArray<FWireSegment>& Wires,
+                                    const TArray<FNodeRect>& Rects,
+                                    float Slack);
+
+    // Estimated Slate pin-row geometry: a K2 node lays out a ~46px title band,
+    // then one ~24px row per visible pin per side, in Pins-array order.
+    struct FPinAnchorParams
+    {
+        float TitleBand = 46.f;
+        float RowPitch  = 24.f;
+    };
+
+    // Center of a pin's row edge: X = left edge (input) or right edge (output);
+    // Y = top + TitleBand + Row*RowPitch + RowPitch/2, clamped into the rect
+    // (size estimates can run shorter than the drawn node).
+    FVector2D EstimatePinAnchor(const FNodeRect& Node, int32 VisibleRowIndex,
+                                bool bOutput, const FPinAnchorParams& Params);
 }

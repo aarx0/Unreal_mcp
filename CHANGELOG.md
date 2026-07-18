@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Wire-quality metrics in the layout rider (2026-07-18, wave 1 of the wire-aware layout work)
+
+- **The `layout` block now measures wires, not just node boxes.** Every wire is
+  modeled as the straight chord between estimated pin anchors (title band ≈46px,
+  pin row ≈24px, `Pins`-array order per side, hidden/advanced-collapsed pins
+  skipped — mirrors `SGraphNode::CreatePinWidgets`). New fields:
+  `wiresThroughNodes` (chords passing through a non-endpoint node's box, rects
+  deflated 4px/side), `throughNodeWorst` (≤5, ranked by cut length: wire
+  endpoints + pins + the crossed node, GUIDs and titles), and `wireCrossings`
+  (proper chord-chord crossings, wires sharing an endpoint node exempt; count
+  only). Crossings alone never force the block onto a mutating response —
+  they're near-universal — but are always visible on `get_graph_details` /
+  `arrange_graph`. Guard: >2000 wires skips wire math and says so
+  (`wireMetricsSkipped`).
+- **`connect_pins` and `break_pin_links` now carry the rider** — they change
+  wire geometry without moving a node, so they were blind spots.
+- Pure-core geometry (`AnalyzeWires` Liang-Barsky clip + orientation crossings,
+  `EstimatePinAnchor`) spec-locked by new `McpBridge.GraphLayout.AnalyzeWires` /
+  `.PinAnchor` headless tests. Detection only — this wave changes NO layout
+  output. Later waves (honest sizes, swim-lane gaps, pin-snapped feeders,
+  shared-getter splitting) are gated by these metrics.
+
 ### Overlap report + scoped rigid-block arrange_graph (2026-07-18)
 
 - **Graph-mutating Blueprint actions now report node overlaps in-band.** `create_node`

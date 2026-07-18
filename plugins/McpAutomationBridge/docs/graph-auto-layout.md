@@ -175,6 +175,38 @@ Geometry passes are unit-tested headlessly:
 `system_control { action: "run_tests", filter: "McpBridge.GraphLayout" }`
 (`McpAutomationBridge_GraphLayoutTests.cpp`).
 
+## Phase 4 — Wire quality & swim lanes (IN PROGRESS, staged)
+
+Nodes stopped overlapping (Phase 3), but wires still tangled: chords through
+node boxes, wire-wire crossings, feeders centered on their consumer's body
+instead of tucked at the target pin, and one shared getter stretched across
+every event chain. Phase 4 lands in risk-ordered waves; the standing rule is
+unchanged (**detection automatic, movement only inside arrange_graph**), and
+wave 1's metrics gate every later wave (before/after numbers on real graphs,
+not vibes).
+
+- **Wave 1 (SHIPPED) — detection.** The `layout` rider gains
+  `wiresThroughNodes` + `throughNodeWorst` (≤5, ranked by chord cut length) and
+  `wireCrossings` (count only; crossings alone never force the block onto a
+  mutating response). Wires are straight chords between estimated pin anchors:
+  title band ≈46px, row ≈24px, `Pins`-array order per side, hidden pins skipped
+  (`ArrangeVisiblePinRow` is the single home of the visibility rule; the editor
+  draws splines, so treat all of this as advisory). `connect_pins` /
+  `break_pin_links` now carry the rider too. Core: `AnalyzeWires` +
+  `EstimatePinAnchor`, spec-locked in `McpBridge.GraphLayout.*`. Zero layout
+  change in this wave.
+- **Wave 2 (planned) — space only.** Honest size estimates (per-pin-row height
+  for ALL node classes, pin-label/value-box widths, tiny knots) + a one-row
+  swim-lane gap between root trees (`TreeGapRows`). Can only add room.
+- **Wave 3 (planned) — sharp tools, separately revertible.** Pin-snapped feeder
+  placement (feeder's output pin lands on its consumer's input pin row) and
+  shared-getter splitting in `arrange_graph` (`splitSharedGetters`, default
+  true: VariableGet/Self outputs with N links become N copies, one per
+  consumer — semantics-safe, pure reads).
+
+Still deliberately unimplemented: barycenter/median crossing sweeps — revisit
+only if `wireCrossings` stays ugly after wave 3.
+
 ## Status
 
 1. **Phase 1** — SHIPPED: generator self-layout for the two existing binders.
@@ -183,6 +215,7 @@ Geometry passes are unit-tested headlessly:
 3. **Phase 3** — SHIPPED: passive overlap report on graph-mutating responses +
    scoped rigid-block `arrange_graph` (Blueprint graphs; Material arrange is still
    full-graph only).
+4. **Phase 4** — wave 1 (wire metrics) SHIPPED; waves 2-3 staged (see above).
 
 Known gap: a **full** (unscoped) arrange also moves comment boxes — they carry no pin
 topology, so they pile into column 0 instead of following the nodes they annotate.

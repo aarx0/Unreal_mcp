@@ -25,6 +25,17 @@ namespace McpGraphLayoutTestUtil
         R.Size = FVector2D(W, H);
         return R;
     }
+
+    static McpGraphLayout::FWireSegment Wire(int32 FromNode, int32 ToNode,
+                                             float X0, float Y0, float X1, float Y1)
+    {
+        McpGraphLayout::FWireSegment W;
+        W.FromNode = FromNode;
+        W.ToNode = ToNode;
+        W.FromAnchor = FVector2D(X0, Y0);
+        W.ToAnchor = FVector2D(X1, Y1);
+        return W;
+    }
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -154,6 +165,151 @@ bool FMcpGraphLayoutPlaceBlock::RunTest(const FString& Parameters)
             {Rect(-1, 480, 45, 200, 50)},
             FVector2D(500, 100), 10.f);
         TestTrue(TEXT("gap enforced"), T.Equals(FVector2D(500, 105), 0.01f));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpGraphLayoutAnalyzeWires, "McpBridge.GraphLayout.AnalyzeWires",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpGraphLayoutAnalyzeWires::RunTest(const FString& Parameters)
+{
+    using namespace McpGraphLayout;
+    using namespace McpGraphLayoutTestUtil;
+
+    const TArray<FNodeRect> ABC_Clear = {
+        Rect(0, 0, 0, 100, 50), Rect(1, 400, 0, 100, 50), Rect(2, 200, 200, 100, 50)};
+    const TArray<FNodeRect> ABC_Blocking = {
+        Rect(0, 0, 0, 100, 50), Rect(1, 400, 0, 100, 50), Rect(2, 200, 0, 100, 50)};
+
+    // Wire clear of every non-endpoint rect: nothing reports.
+    {
+        const FWireQualityReport R =
+            AnalyzeWires({Wire(0, 1, 100, 25, 400, 25)}, ABC_Clear, 4.f);
+        TestEqual(TEXT("clear through"), R.ThroughNodes.Num(), 0);
+        TestEqual(TEXT("clear crossings"), R.NumCrossings, 0);
+    }
+
+    // Chord through a mid rect: exact clipped length (rect deflated 4/side:
+    // x in [204,296] of a 300px horizontal chord => 92).
+    {
+        const FWireQualityReport R =
+            AnalyzeWires({Wire(0, 1, 100, 25, 400, 25)}, ABC_Blocking, 4.f);
+        TestEqual(TEXT("through count"), R.ThroughNodes.Num(), 1);
+        if (R.ThroughNodes.Num() == 1)
+        {
+            TestEqual(TEXT("through wire"), R.ThroughNodes[0].WireIndex, 0);
+            TestEqual(TEXT("through node"), R.ThroughNodes[0].NodeId, 2);
+            TestTrue(TEXT("through cut"),
+                     FMath::IsNearlyEqual(R.ThroughNodes[0].CutLength, 92.f, 0.1f));
+        }
+    }
+
+    // A wire's own endpoint nodes never report, even when the chord runs
+    // straight through them.
+    {
+        const FWireQualityReport R =
+            AnalyzeWires({Wire(0, 2, 100, 25, 250, 25)}, ABC_Blocking, 4.f);
+        TestEqual(TEXT("endpoint exempt"), R.ThroughNodes.Num(), 0);
+    }
+
+    // Slack forgives a graze along the deflated border.
+    {
+        const TArray<FNodeRect> Grazed = {
+            Rect(0, 0, 0, 100, 50), Rect(1, 400, 0, 100, 50), Rect(2, 200, 10, 100, 50)};
+        const FWireQualityReport Miss =
+            AnalyzeWires({Wire(0, 1, 100, 12, 400, 12)}, Grazed, 4.f);
+        TestEqual(TEXT("graze forgiven"), Miss.ThroughNodes.Num(), 0);
+        const FWireQualityReport Hit =
+            AnalyzeWires({Wire(0, 1, 100, 25, 400, 25)}, Grazed, 4.f);
+        TestEqual(TEXT("deep hit"), Hit.ThroughNodes.Num(), 1);
+    }
+
+    // Worst-first ordering: full-span cut beats a corner clip.
+    {
+        const FWireQualityReport R = AnalyzeWires(
+            {Wire(0, 1, 100, 25, 400, 25), Wire(0, 1, 150, 60, 210, 0)},
+            ABC_Blocking, 4.f);
+        TestEqual(TEXT("worst count"), R.ThroughNodes.Num(), 2);
+        if (R.ThroughNodes.Num() == 2)
+        {
+            TestEqual(TEXT("worst first"), R.ThroughNodes[0].WireIndex, 0);
+            TestEqual(TEXT("worst second"), R.ThroughNodes[1].WireIndex, 1);
+            TestTrue(TEXT("worst ordering"),
+                     R.ThroughNodes[0].CutLength > R.ThroughNodes[1].CutLength);
+        }
+    }
+
+    // X-pattern between four distinct nodes: one proper crossing.
+    {
+        const FWireQualityReport R = AnalyzeWires(
+            {Wire(0, 1, 0, 0, 100, 100), Wire(2, 3, 0, 100, 100, 0)}, {}, 4.f);
+        TestEqual(TEXT("x crossing"), R.NumCrossings, 1);
+    }
+
+    // Same X-pattern but the wires share an endpoint node: fan-out, not a crossing.
+    {
+        const FWireQualityReport R = AnalyzeWires(
+            {Wire(0, 1, 0, 0, 100, 100), Wire(1, 3, 0, 100, 100, 0)}, {}, 4.f);
+        TestEqual(TEXT("shared endpoint"), R.NumCrossings, 0);
+    }
+
+    // Collinear overlap is not a proper crossing.
+    {
+        const FWireQualityReport R = AnalyzeWires(
+            {Wire(0, 1, 0, 0, 100, 0), Wire(2, 3, 50, 0, 150, 0)}, {}, 4.f);
+        TestEqual(TEXT("collinear"), R.NumCrossings, 0);
+    }
+
+    // Determinism: identical input, identical report.
+    {
+        const TArray<FWireSegment> Wires = {
+            Wire(0, 1, 100, 25, 400, 25), Wire(0, 1, 150, 60, 210, 0)};
+        const FWireQualityReport R1 = AnalyzeWires(Wires, ABC_Blocking, 4.f);
+        const FWireQualityReport R2 = AnalyzeWires(Wires, ABC_Blocking, 4.f);
+        TestEqual(TEXT("det crossings"), R1.NumCrossings, R2.NumCrossings);
+        TestEqual(TEXT("det through count"), R1.ThroughNodes.Num(), R2.ThroughNodes.Num());
+        for (int32 I = 0; I < FMath::Min(R1.ThroughNodes.Num(), R2.ThroughNodes.Num()); ++I)
+        {
+            TestEqual(TEXT("det wire"), R1.ThroughNodes[I].WireIndex, R2.ThroughNodes[I].WireIndex);
+            TestEqual(TEXT("det node"), R1.ThroughNodes[I].NodeId, R2.ThroughNodes[I].NodeId);
+            TestEqual(TEXT("det cut"), R1.ThroughNodes[I].CutLength, R2.ThroughNodes[I].CutLength);
+        }
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpGraphLayoutPinAnchor, "McpBridge.GraphLayout.PinAnchor",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpGraphLayoutPinAnchor::RunTest(const FString& Parameters)
+{
+    using namespace McpGraphLayout;
+    using namespace McpGraphLayoutTestUtil;
+
+    const FNodeRect Node = Rect(0, 100, 200, 224, 120);
+    const FPinAnchorParams P;   // TitleBand 46, RowPitch 24
+
+    // Input row 0: left edge, title band + half a row.
+    {
+        const FVector2D A = EstimatePinAnchor(Node, 0, /*bOutput=*/false, P);
+        TestTrue(TEXT("input row 0"), A.Equals(FVector2D(100, 258), 0.01f));
+    }
+
+    // Output row 2: right edge, two rows down.
+    {
+        const FVector2D A = EstimatePinAnchor(Node, 2, /*bOutput=*/true, P);
+        TestTrue(TEXT("output row 2"), A.Equals(FVector2D(324, 306), 0.01f));
+    }
+
+    // A row beyond the estimated height clamps into the rect.
+    {
+        const FVector2D A = EstimatePinAnchor(Node, 10, /*bOutput=*/false, P);
+        TestTrue(TEXT("row clamps"), A.Equals(FVector2D(100, 320), 0.01f));
     }
 
     return true;

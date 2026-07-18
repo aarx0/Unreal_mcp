@@ -338,4 +338,125 @@ FVector2D PlaceBlock(const TArray<FNodeRect>& Block,
     return T;
 }
 
+namespace
+{
+// Liang-Barsky clip of segment [A,B] to rect [RMin,RMax]. True when a
+// non-degenerate portion lies inside; T0/T1 bound that portion parametrically.
+bool ClipSegmentToRect(const FVector2D& A, const FVector2D& B,
+                       const FVector2D& RMin, const FVector2D& RMax,
+                       double& T0, double& T1)
+{
+    T0 = 0.0;
+    T1 = 1.0;
+    const double DX = B.X - A.X;
+    const double DY = B.Y - A.Y;
+    const double P[4] = { -DX, DX, -DY, DY };
+    const double Q[4] = { A.X - RMin.X, RMax.X - A.X, A.Y - RMin.Y, RMax.Y - A.Y };
+    for (int32 I = 0; I < 4; ++I)
+    {
+        if (P[I] == 0.0)
+        {
+            if (Q[I] < 0.0) { return false; }   // parallel and outside this slab
+        }
+        else
+        {
+            const double R = Q[I] / P[I];
+            if (P[I] < 0.0)
+            {
+                if (R > T1) { return false; }
+                if (R > T0) { T0 = R; }
+            }
+            else
+            {
+                if (R < T0) { return false; }
+                if (R < T1) { T1 = R; }
+            }
+        }
+    }
+    return T1 > T0;
+}
+
+double Orient(const FVector2D& A, const FVector2D& B, const FVector2D& C)
+{
+    return (B.X - A.X) * (C.Y - A.Y) - (B.Y - A.Y) * (C.X - A.X);
+}
+
+// Proper crossing only: each segment strictly separates the other's endpoints.
+// Any collinearity or endpoint touch (an orientation of exactly 0) is not a
+// crossing — chords touching at shared coordinates are layout noise.
+bool SegmentsProperlyCross(const FVector2D& A, const FVector2D& B,
+                           const FVector2D& C, const FVector2D& D)
+{
+    const double O1 = Orient(A, B, C);
+    const double O2 = Orient(A, B, D);
+    const double O3 = Orient(C, D, A);
+    const double O4 = Orient(C, D, B);
+    if (O1 == 0.0 || O2 == 0.0 || O3 == 0.0 || O4 == 0.0) { return false; }
+    return ((O1 > 0.0) != (O2 > 0.0)) && ((O3 > 0.0) != (O4 > 0.0));
+}
+} // namespace
+
+FWireQualityReport AnalyzeWires(const TArray<FWireSegment>& Wires,
+                                const TArray<FNodeRect>& Rects,
+                                float Slack)
+{
+    FWireQualityReport Report;
+
+    for (int32 W = 0; W < Wires.Num(); ++W)
+    {
+        const FWireSegment& Wire = Wires[W];
+        for (const FNodeRect& R : Rects)
+        {
+            if (R.Id == Wire.FromNode || R.Id == Wire.ToNode) { continue; }
+            const FVector2D RMin = R.Pos + FVector2D(Slack, Slack);
+            const FVector2D RMax = R.Pos + R.Size - FVector2D(Slack, Slack);
+            if (RMax.X <= RMin.X || RMax.Y <= RMin.Y) { continue; }   // deflated away
+            double T0, T1;
+            if (ClipSegmentToRect(Wire.FromAnchor, Wire.ToAnchor, RMin, RMax, T0, T1))
+            {
+                const double Cut = (Wire.ToAnchor - Wire.FromAnchor).Size() * (T1 - T0);
+                if (Cut > 0.0)
+                {
+                    Report.ThroughNodes.Add({W, R.Id, (float)Cut});
+                }
+            }
+        }
+    }
+    Report.ThroughNodes.Sort([](const FWireThroughNode& A, const FWireThroughNode& B)
+    {
+        if (A.CutLength != B.CutLength) { return A.CutLength > B.CutLength; }
+        if (A.WireIndex != B.WireIndex) { return A.WireIndex < B.WireIndex; }
+        return A.NodeId < B.NodeId;
+    });
+
+    for (int32 I = 0; I < Wires.Num(); ++I)
+    {
+        for (int32 J = I + 1; J < Wires.Num(); ++J)
+        {
+            const FWireSegment& A = Wires[I];
+            const FWireSegment& B = Wires[J];
+            if (A.FromNode == B.FromNode || A.FromNode == B.ToNode ||
+                A.ToNode == B.FromNode || A.ToNode == B.ToNode)
+            {
+                continue;   // wires meeting at a node fan out, they don't "cross"
+            }
+            if (SegmentsProperlyCross(A.FromAnchor, A.ToAnchor, B.FromAnchor, B.ToAnchor))
+            {
+                ++Report.NumCrossings;
+            }
+        }
+    }
+    return Report;
+}
+
+FVector2D EstimatePinAnchor(const FNodeRect& Node, int32 VisibleRowIndex,
+                            bool bOutput, const FPinAnchorParams& Params)
+{
+    const double X = bOutput ? (Node.Pos.X + Node.Size.X) : Node.Pos.X;
+    double Y = Node.Pos.Y + Params.TitleBand +
+               VisibleRowIndex * Params.RowPitch + Params.RowPitch * 0.5;
+    Y = FMath::Clamp(Y, (double)Node.Pos.Y, Node.Pos.Y + Node.Size.Y);
+    return FVector2D(X, Y);
+}
+
 } // namespace McpGraphLayout
