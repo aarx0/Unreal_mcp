@@ -171,6 +171,99 @@ bool FMcpGraphLayoutPlaceBlock::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpGraphLayoutPinSnap, "McpBridge.GraphLayout.PinSnap",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpGraphLayoutPinSnap::RunTest(const FString& Parameters)
+{
+    using namespace McpGraphLayout;
+
+    auto Node = [](int32 Id)
+    {
+        FLayoutNode N;
+        N.Id = Id;
+        N.Size = FVector2D(224, 120);
+        return N;
+    };
+    // Data-feeder edge with pin-snap offsets (46 title + row*24 + 12 center).
+    auto Feeder = [](int32 From, int32 To, float ToOffset, float FromOffset)
+    {
+        FLayoutEdge E;
+        E.FromId = From;
+        E.ToId = To;
+        E.bCenterParentIsTo = true;
+        E.ToPinOffsetY = ToOffset;
+        E.FromPinOffsetY = FromOffset;
+        return E;
+    };
+
+    // Single feeder: its output pin (row 0 => offset 58) lands exactly on the
+    // consumer's input pin row 2 (offset 106): feeder Y = 0 + 106 - 58 = 48.
+    {
+        FMcpGraphLayoutInput In;
+        In.Nodes = {Node(0), Node(1)};
+        In.Edges = {Feeder(0, 1, 106.f, 58.f)};
+        const FMcpGraphLayoutResult R = LayoutGraph(In);
+        TestEqual(TEXT("consumer at row"), (int32)R.Positions.FindRef(1).Y, 0);
+        TestEqual(TEXT("feeder snapped"), (int32)R.Positions.FindRef(0).Y, 48);
+    }
+
+    // Feeder chain G->T->K: right-to-left emission means T snaps to K's FINAL
+    // Y and G snaps to T's — offsets accumulate (48, 96), not reset to rows.
+    {
+        FMcpGraphLayoutInput In;
+        In.Nodes = {Node(0), Node(1), Node(2)};
+        In.Edges = {Feeder(0, 1, 106.f, 58.f), Feeder(1, 2, 106.f, 58.f)};
+        const FMcpGraphLayoutResult R = LayoutGraph(In);
+        TestEqual(TEXT("chain consumer"), (int32)R.Positions.FindRef(2).Y, 0);
+        TestEqual(TEXT("chain mid"), (int32)R.Positions.FindRef(1).Y, 48);
+        TestEqual(TEXT("chain feeder"), (int32)R.Positions.FindRef(0).Y, 96);
+    }
+
+    // Two feeders into adjacent pins (24px apart) can't both snap — the
+    // push-down pass stacks the second below the first with GapMinor, and the
+    // result stays overlap-free.
+    {
+        FMcpGraphLayoutInput In;
+        In.Nodes = {Node(0), Node(1), Node(2)};
+        In.Edges = {Feeder(0, 2, 82.f, 58.f), Feeder(1, 2, 106.f, 58.f)};
+        const FMcpGraphLayoutResult R = LayoutGraph(In);
+        TestEqual(TEXT("stack consumer"), (int32)R.Positions.FindRef(2).Y, 90);
+        TestEqual(TEXT("stack first"), (int32)R.Positions.FindRef(0).Y, 114);
+        TestEqual(TEXT("stack second"), (int32)R.Positions.FindRef(1).Y, 282);
+
+        TArray<FNodeRect> Rects;
+        for (const FLayoutNode& N : In.Nodes)
+        {
+            Rects.Add({N.Id, R.Positions.FindRef(N.Id), N.Size});
+        }
+        TestEqual(TEXT("stack overlap-free"), DetectOverlaps(Rects, 0.f).Num(), 0);
+    }
+
+    // Legacy regression: edges without offsets reproduce the pre-snap layout
+    // exactly (right-to-left emission is invisible for unsnapped graphs).
+    {
+        FMcpGraphLayoutInput In;
+        for (int32 I = 0; I < 4; ++I)
+        {
+            FLayoutNode N;
+            N.Id = I;
+            N.Size = FVector2D(224, 64);
+            In.Nodes.Add(N);
+        }
+        FLayoutEdge E1; E1.FromId = 0; E1.ToId = 1; In.Edges.Add(E1);
+        FLayoutEdge E2; E2.FromId = 2; E2.ToId = 3; In.Edges.Add(E2);
+        const FMcpGraphLayoutResult R = LayoutGraph(In);
+        TestTrue(TEXT("legacy 0"), R.Positions.FindRef(0).Equals(FVector2D(0, 0), 0.01f));
+        TestTrue(TEXT("legacy 1"), R.Positions.FindRef(1).Equals(FVector2D(320, 0), 0.01f));
+        TestTrue(TEXT("legacy 2"), R.Positions.FindRef(2).Equals(FVector2D(0, 180), 0.01f));
+        TestTrue(TEXT("legacy 3"), R.Positions.FindRef(3).Equals(FVector2D(320, 180), 0.01f));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FMcpGraphLayoutTreeGap, "McpBridge.GraphLayout.TreeGap",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

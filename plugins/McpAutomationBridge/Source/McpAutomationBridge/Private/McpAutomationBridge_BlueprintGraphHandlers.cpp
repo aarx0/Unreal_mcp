@@ -140,6 +140,7 @@ constexpr int32 ArrangeRowStepY = 180; // target row spacing (px) for the Y curs
 constexpr float ArrangeGapX = 96.f;    // horizontal gap between columns
 constexpr float ArrangeGapY = 48.f;    // minimum vertical clearance within a column
 constexpr float ArrangeTreeGapRows = 1.f; // empty rows between event trees (swim lanes)
+const McpGraphLayout::FPinAnchorParams ArrangePinAnchors; // shared Slate-row estimate
 
 // A pin is drawn iff it isn't hidden and isn't an advanced pin on a node whose
 // advanced section is collapsed. Single home of the rule — the row indexer,
@@ -622,6 +623,19 @@ int32 ArrangeBlueprintGraph(UEdGraph* Graph, const TSet<UEdGraphNode*>* Scope = 
                             E.FromId = *FId; E.ToId = Id;          // feeder pushes N right (X)
                             E.bContributesToRowCentering = ArrangeNodeIsPure(F);
                             E.bCenterParentIsTo = true;            // ...but N centers over F (Y), matching original
+                            // Pin-snap offsets: the feeder's output pin lands on
+                            // this input pin's row. Hidden pins draw no wire.
+                            const int32 ToRow = ArrangeVisiblePinRow(N, P);
+                            const int32 FromRow = ArrangeVisiblePinRow(F, L);
+                            if (ToRow != INDEX_NONE && FromRow != INDEX_NONE)
+                            {
+                                E.ToPinOffsetY = ArrangePinAnchors.TitleBand +
+                                    ToRow * ArrangePinAnchors.RowPitch +
+                                    ArrangePinAnchors.RowPitch * 0.5f;
+                                E.FromPinOffsetY = ArrangePinAnchors.TitleBand +
+                                    FromRow * ArrangePinAnchors.RowPitch +
+                                    ArrangePinAnchors.RowPitch * 0.5f;
+                            }
                             In.Edges.Add(E);
                         }
                     }
@@ -688,7 +702,6 @@ constexpr int32 OverlapReportMaxPairs = 10;
 constexpr float WireReportSlack = 4.f;
 constexpr int32 WireReportMaxWorst = 5;
 constexpr int32 WireReportMaxWires = 2000;   // beyond this, skip wire math (and say so)
-const McpGraphLayout::FPinAnchorParams ArrangePinAnchors;   // shared Slate-row estimate
 
 // Passive layout-quality report, attached to every geometry-changing graph
 // action's response (and always to get_graph_details / arrange_graph):

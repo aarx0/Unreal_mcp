@@ -202,11 +202,16 @@ not vibes).
   visibility rule). Swim lanes: `TreeGapRows` (core default 0; BP arranger
   passes 1) skips one empty row between root trees so cross-tree wires travel
   through empty grid; no-op roots add no gap. Material arranger unchanged.
-- **Wave 3 (planned) — sharp tools, separately revertible.** Pin-snapped feeder
-  placement (feeder's output pin lands on its consumer's input pin row) and
-  shared-getter splitting in `arrange_graph` (`splitSharedGetters`, default
-  true: VariableGet/Self outputs with N links become N copies, one per
-  consumer — semantics-safe, pure reads).
+- **Wave 3a (SHIPPED) — pin-snapped feeders.** Data-feeder edges carry
+  pin-row offsets; the core emits columns right-to-left (consumers final before
+  feeders) and a snapped feeder targets
+  `consumerY + ToPinOffsetY − FromPinOffsetY`, landing its output pin on the
+  consumer's input pin row — straight data wires tucked below the exec spine.
+  Exec edges never snap; unsnapped layouts are byte-identical to the old emit
+  (legacy fixture in `McpBridge.GraphLayout.PinSnap`).
+- **Wave 3b (planned) — getter splitting** in `arrange_graph`
+  (`splitSharedGetters`, default true: VariableGet/Self outputs with N links
+  become N copies, one per consumer — semantics-safe, pure reads).
 
 Still deliberately unimplemented: barycenter/median crossing sweeps — revisit
 only if `wireCrossings` stays ugly after wave 3.

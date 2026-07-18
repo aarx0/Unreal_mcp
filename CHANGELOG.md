@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Pin-anchored feeder placement (2026-07-18, wave 3a of the wire-aware layout work)
+
+- **Feeders now snap to their consumer's input pin row.** Data-feeder layout
+  edges carry `ToPinOffsetY`/`FromPinOffsetY` (px from node top to the linked
+  pin's row center, from the shared Slate-row estimate); the core emits columns
+  **right-to-left** so consumers are final before their feeders, and a snapped
+  feeder's target Y becomes `consumerY + ToPinOffsetY − FromPinOffsetY` — its
+  output pin lands exactly on the consumer's input pin row, i.e. a straight
+  horizontal data wire tucked below the exec spine (the human idiom). Feeder
+  chains (getter → conversion → consumer) resolve in one pass; competing
+  feeders on adjacent pins stack via the unchanged push-down pass; exec edges
+  never snap, and only Source-role horizontal layouts snap (Material Sink
+  arranges are untouched).
+- Unsnapped layouts are **byte-identical** to the old left-to-right emit
+  (targets are a monotone map of rows; columns are independent) — locked by the
+  legacy fixture in the new `McpBridge.GraphLayout.PinSnap` spec, alongside
+  exact-snap, chain-accumulation, and stack-without-overlap cases.
+
 ### Honest node sizes + swim-lane tree gaps (2026-07-18, wave 2 of the wire-aware layout work)
 
 - **`ArrangeEstimateNodeSize` now believes in pins.** Height = ~48px title band

@@ -237,24 +237,65 @@ FMcpGraphLayoutResult LayoutGraph(const FMcpGraphLayoutInput& In)
     ByCol.SetNum(MaxCol + 1);
     for (FNodeId N : Nodes) { ByCol[FinalCol.FindRef(N)].Add(N); }
 
+    // Pin-snap lookup: the deterministically-first eligible snap edge per
+    // feeder (edge input order). The strict column guard keeps the
+    // right-to-left finality invariant — a consumer the cycle-guarded
+    // longest-path left level with (or left of) its feeder can't be snapped to.
+    TMap<FNodeId, const FLayoutEdge*> SnapEdge;
+    if (In.Orientation.Axis == ELayoutAxis::Horizontal &&
+        In.Orientation.RootRole == ERootRole::Source)
+    {
+        for (const FLayoutEdge& E : In.Edges)
+        {
+            if (!E.bCenterParentIsTo || E.ToPinOffsetY < 0.f || E.FromPinOffsetY < 0.f) { continue; }
+            if (E.FromId == INDEX_NONE || E.ToId == INDEX_NONE || E.FromId == E.ToId) { continue; }
+            if (FinalCol.FindRef(E.ToId) <= FinalCol.FindRef(E.FromId)) { continue; }
+            if (!SnapEdge.Contains(E.FromId)) { SnapEdge.Add(E.FromId, &E); }
+        }
+    }
+
+    // Emit right-to-left so consumers are final before their feeders: a
+    // snapped feeder chain (getter -> conversion -> consumer) resolves in one
+    // pass. Columns are otherwise independent, so unsnapped layouts are
+    // byte-identical to the old left-to-right emit.
+    TMap<FNodeId, float> FinalMinor;
     int32 Count = 0;
-    for (int32 C = 0; C <= MaxCol; ++C)
+    for (int32 C = MaxCol; C >= 0; --C)
     {
         TArray<FNodeId>& Column = ByCol[C];
-        // Determinism fix 2: total order — sort by Row, tie-break on FNodeId.
-        Column.Sort([&Row](const FNodeId& A, const FNodeId& B)
+
+        // Per-node minor-axis target: pin-snap to the consumer's final Y when
+        // available, else the row target. For unsnapped nodes Target is a
+        // monotone map of Row, so the sort below is order-equivalent to the
+        // old (Row, id) sort.
+        TMap<FNodeId, float> Target;
+        for (FNodeId N : Column)
         {
-            const float RA = Row.FindRef(A);
-            const float RB = Row.FindRef(B);
-            if (RA != RB) { return RA < RB; }
+            float T = Row.FindRef(N) * In.RowStep;
+            if (const FLayoutEdge* const* EPtr = SnapEdge.Find(N))
+            {
+                if (const float* ConsumerY = FinalMinor.Find((*EPtr)->ToId))
+                {
+                    T = *ConsumerY + (*EPtr)->ToPinOffsetY - (*EPtr)->FromPinOffsetY;
+                }
+            }
+            Target.Add(N, T);
+        }
+
+        // Determinism fix 2: total order — sort by Target, tie-break on FNodeId.
+        Column.Sort([&Target](const FNodeId& A, const FNodeId& B)
+        {
+            const float TA = Target.FindRef(A);
+            const float TB = Target.FindRef(B);
+            if (TA != TB) { return TA < TB; }
             return A < B;
         });
 
         float PrevBottom = -FLT_MAX;
         for (FNodeId N : Column)
         {
-            const float TargetY = Row.FindRef(N) * In.RowStep;
-            const float Y = FMath::Max(TargetY, PrevBottom);
+            const float Y = FMath::Max(Target.FindRef(N), PrevBottom);
+            FinalMinor.Add(N, Y);
 
             // Axis emit (final step): Horizontal => (ColX, Y); Vertical => swap.
             const float Major = ColX[C];

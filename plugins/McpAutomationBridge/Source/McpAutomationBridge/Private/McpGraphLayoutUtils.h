@@ -49,6 +49,15 @@ namespace McpGraphLayout
         // (parent=consumer) the way the original Blueprint arranger did. Ignored
         // for the Sink role (RootRole==Sink already forces parent=ToId).
         bool bCenterParentIsTo = false;
+        // Pin-snap (both >= 0 and bCenterParentIsTo): px from each node's top
+        // to the linked pin's row center — To = consumer input pin, From =
+        // feeder output pin. The feeder's minor-axis target becomes
+        // "consumer's final Y + ToPinOffsetY - FromPinOffsetY", landing its
+        // output pin exactly on the consumer's input pin row (a straight
+        // horizontal data wire). Negative = no snap; exec edges never snap.
+        // Only honored for Source-role horizontal layouts.
+        float ToPinOffsetY   = -1.f;
+        float FromPinOffsetY = -1.f;
     };
 
     struct FLayoutNode
