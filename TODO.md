@@ -17,6 +17,16 @@ as they land.
 > comments unmoved). Scoped arrange (`nodes:[...]`) already sidesteps it: out-of-scope
 > comments are obstacles and never move.
 
+> **[ ] Found 2026-07-18 (totem-dummy widget wiring, live repro): scoped `arrange_graph` is
+> unreachable from a typed MCP client — `nodes` is in the decl but not the published schema.**
+> The overlap hint says "arrange_graph with nodes:[...]", and the decl accepts it
+> (INVALID_PARAMS on a wrong param name lists `nodes` as read), but the published
+> manage_blueprint schema never declares the param — so a schema-driven client serializes the
+> array value as a string and the type check rejects it: "argument 'nodes' must be of type
+> 'array' but was sent as a string". Catch-22: the recommended remedy can't be invoked. Fix:
+> declare `nodes` (array of node GUIDs) in the published schema; until then the hint
+> advertises a dead path. (Full-graph arrange worked fine as the workaround.)
+
 > **[x] Found 2026-07-09 (silent-success sweep, code read): `set_object_property` special-cased
 > transform paths silently zero on wrong value type.** In `HandleSetObjectProperty`
 > (PropertyHandlers.cpp:267-340), the ActorLocation/ActorRotation/ActorScale fast paths accept the
