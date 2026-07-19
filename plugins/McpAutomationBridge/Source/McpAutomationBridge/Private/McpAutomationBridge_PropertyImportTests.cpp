@@ -318,4 +318,190 @@ bool FMcpPropertyImportObjectPath::RunTest(const FString& Parameters)
     return true;
 }
 
+// =============================================================================
+// Template-write propagation spec (CaptureArchetypeInstances /
+// PropagateDefaultToInstances / AddPropagationReport).
+// Fixtures use UMcpPropagationTestObject's CDO as the template; instances are
+// MarkAsGarbage()d at test end so re-runs in the same session see none of them.
+// =============================================================================
+
+namespace McpPropagationTestUtil
+{
+    static UMcpPropagationTestObject* NewInstance()
+    {
+        return NewObject<UMcpPropagationTestObject>(GetTransientPackage());
+    }
+
+    static FProperty* Prop(const TCHAR* Name)
+    {
+        return UMcpPropagationTestObject::StaticClass()->FindPropertyByName(Name);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// A non-template owner produces no sweep and no report field.
+// -----------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpPropagationNonTemplate, "McpBridge.PropertyImport.Propagation.NonTemplate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpPropagationNonTemplate::RunTest(const FString& Parameters)
+{
+    using namespace McpPropertyReflection;
+    using namespace McpPropagationTestUtil;
+
+    UMcpPropagationTestObject* Instance = NewInstance();
+    if (!Instance) { AddError(TEXT("fixture null")); return false; }
+
+    FMcpDefaultPropagation State = CaptureArchetypeInstances(Instance, Prop(TEXT("IntProp")));
+    TestFalse(TEXT("instance is not a template target"), State.bTemplateTarget);
+
+    PropagateDefaultToInstances(State);
+    TestEqual(TEXT("nothing updated"), State.InstancesUpdated, 0);
+
+    TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
+    AddPropagationReport(Response, State);
+    TestFalse(TEXT("no report field for non-template writes"),
+              Response->HasField(TEXT("defaultPropagation")));
+
+    Instance->MarkAsGarbage();
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// The CDO sweep: instances still on the old default follow the new one;
+// an instance that diverged keeps its override and is counted, not touched.
+// -----------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpPropagationCdoSweep, "McpBridge.PropertyImport.Propagation.CdoSweep",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpPropagationCdoSweep::RunTest(const FString& Parameters)
+{
+    using namespace McpPropertyReflection;
+    using namespace McpPropagationTestUtil;
+    using McpPropertyImportTestUtil::JNum;
+
+    UMcpPropagationTestObject* CDO = GetMutableDefault<UMcpPropagationTestObject>();
+    const int32 OriginalDefault = CDO->IntProp;
+
+    UMcpPropagationTestObject* Follows1 = NewInstance();
+    UMcpPropagationTestObject* Follows2 = NewInstance();
+    UMcpPropagationTestObject* Overridden = NewInstance();
+    if (!Follows1 || !Follows2 || !Overridden) { AddError(TEXT("fixture null")); return false; }
+    Overridden->IntProp = 42;
+
+    FMcpDefaultPropagation State = CaptureArchetypeInstances(CDO, Prop(TEXT("IntProp")));
+    TestTrue(TEXT("CDO is a template target"), State.bTemplateTarget);
+
+    FString Err;
+    TestTrue(TEXT("CDO write applies"),
+             ApplyJsonValueToProperty(CDO, Prop(TEXT("IntProp")), JNum(99), Err));
+    PropagateDefaultToInstances(State);
+
+    TestEqual(TEXT("matching instance 1 follows"), Follows1->IntProp, 99);
+    TestEqual(TEXT("matching instance 2 follows"), Follows2->IntProp, 99);
+    TestEqual(TEXT("overridden instance untouched"), Overridden->IntProp, 42);
+    TestEqual(TEXT("updated count"), State.InstancesUpdated, 2);
+    TestEqual(TEXT("leftOverridden count"), State.InstancesLeftOverridden, 1);
+    TestEqual(TEXT("skipped count"), State.InstancesSkipped, 0);
+
+    TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
+    AddPropagationReport(Response, State);
+    const TSharedPtr<FJsonObject>* Report = nullptr;
+    if (TestTrue(TEXT("report field present"),
+                 Response->TryGetObjectField(TEXT("defaultPropagation"), Report)))
+    {
+        TestEqual(TEXT("report instancesUpdated"),
+                  static_cast<int32>((*Report)->GetNumberField(TEXT("instancesUpdated"))), 2);
+        TestEqual(TEXT("report instancesLeftOverridden"),
+                  static_cast<int32>((*Report)->GetNumberField(TEXT("instancesLeftOverridden"))), 1);
+    }
+
+    CDO->IntProp = OriginalDefault;
+    Follows1->MarkAsGarbage();
+    Follows2->MarkAsGarbage();
+    Overridden->MarkAsGarbage();
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// Struct roots match and copy whole: divergence anywhere inside the root
+// struct protects the entire instance value.
+// -----------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpPropagationStructRoot, "McpBridge.PropertyImport.Propagation.StructRoot",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpPropagationStructRoot::RunTest(const FString& Parameters)
+{
+    using namespace McpPropertyReflection;
+    using namespace McpPropagationTestUtil;
+
+    UMcpPropagationTestObject* CDO = GetMutableDefault<UMcpPropagationTestObject>();
+    const FMcpPropImportTestSub OriginalDefault = CDO->SubProp;
+
+    UMcpPropagationTestObject* Follows = NewInstance();
+    UMcpPropagationTestObject* Overridden = NewInstance();
+    if (!Follows || !Overridden) { AddError(TEXT("fixture null")); return false; }
+    Overridden->SubProp.A = 5;
+
+    FMcpDefaultPropagation State = CaptureArchetypeInstances(CDO, Prop(TEXT("SubProp")));
+
+    // Direct member write on the CDO stands in for a nested-path import
+    // ("SubProp.B"): propagation only sees the root struct property.
+    CDO->SubProp.B = 2.5f;
+    PropagateDefaultToInstances(State);
+
+    TestEqual(TEXT("matching instance follows whole struct"), Follows->SubProp.B, 2.5f);
+    TestEqual(TEXT("diverged instance keeps its A"), Overridden->SubProp.A, 5);
+    TestEqual(TEXT("diverged instance keeps its B"), Overridden->SubProp.B, 0.f);
+    TestEqual(TEXT("updated count"), State.InstancesUpdated, 1);
+    TestEqual(TEXT("leftOverridden count"), State.InstancesLeftOverridden, 1);
+
+    CDO->SubProp = OriginalDefault;
+    Follows->MarkAsGarbage();
+    Overridden->MarkAsGarbage();
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// Instanced-subobject properties are never binary-copied into instances:
+// counted as skipped and reported, values untouched.
+// -----------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMcpPropagationInstancedSkip, "McpBridge.PropertyImport.Propagation.InstancedSkip",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMcpPropagationInstancedSkip::RunTest(const FString& Parameters)
+{
+    using namespace McpPropertyReflection;
+    using namespace McpPropagationTestUtil;
+
+    UMcpPropagationTestObject* CDO = GetMutableDefault<UMcpPropagationTestObject>();
+    UMcpPropagationTestObject* Instance = NewInstance();
+    if (!Instance) { AddError(TEXT("fixture null")); return false; }
+
+    FMcpDefaultPropagation State = CaptureArchetypeInstances(CDO, Prop(TEXT("InstancedRef")));
+    TestTrue(TEXT("CDO is a template target"), State.bTemplateTarget);
+    TestEqual(TEXT("instance counted as skipped"), State.InstancesSkipped, 1);
+
+    PropagateDefaultToInstances(State);
+    TestEqual(TEXT("nothing updated"), State.InstancesUpdated, 0);
+
+    TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
+    AddPropagationReport(Response, State);
+    const TSharedPtr<FJsonObject>* Report = nullptr;
+    if (TestTrue(TEXT("report field present"),
+                 Response->TryGetObjectField(TEXT("defaultPropagation"), Report)))
+    {
+        TestEqual(TEXT("report skipped count"),
+                  static_cast<int32>((*Report)->GetNumberField(
+                      TEXT("instancesSkippedInstancedProperty"))), 1);
+    }
+
+    Instance->MarkAsGarbage();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS

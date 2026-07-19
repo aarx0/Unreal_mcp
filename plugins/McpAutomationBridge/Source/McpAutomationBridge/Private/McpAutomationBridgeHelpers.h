@@ -1360,13 +1360,18 @@ static inline int32 GetJsonIntField(const TSharedPtr<FJsonObject>& Obj, const FS
  * resolved property on success; remains nullptr on failure.
  * @param OutError Set to a descriptive error message on failure; cleared on
  * entry.
+ * @param OutNearestOwner Optional: the deepest UObject crossed on the walk
+ * (RootObject when the path never descends through an object reference).
+ * @param OutOwnerRootProperty Optional: the first path property under
+ * OutNearestOwner — the class-level member that contains the resolved leaf.
+ * The pair feeds template-write propagation (CaptureArchetypeInstances).
  * @returns Pointer to the resolved FProperty for the final segment, or nullptr
  * if resolution failed.
  */
-static inline FProperty *ResolveNestedPropertyPath(UObject *RootObject,
-                                                   const FString &PropertyPath,
-                                                   void *&OutContainerPtr,
-                                                   FString &OutError) {
+static inline FProperty *ResolveNestedPropertyPath(
+    UObject *RootObject, const FString &PropertyPath, void *&OutContainerPtr,
+    FString &OutError, UObject **OutNearestOwner = nullptr,
+    FProperty **OutOwnerRootProperty = nullptr) {
   OutError.Empty();
   OutContainerPtr = nullptr;
 
@@ -1391,6 +1396,9 @@ static inline FProperty *ResolveNestedPropertyPath(UObject *RootObject,
   UStruct *CurrentTypeScope = RootObject->GetClass();
   void *CurrentContainer = RootObject;
   FProperty *CurrentProperty = nullptr;
+  UObject *NearestOwner = RootObject;
+  FProperty *OwnerRootProperty = nullptr;
+  bool bAtObjectBase = true;
 
   for (int32 i = 0; i < PathSegments.Num(); ++i) {
     const FString &Segment = PathSegments[i];
@@ -1407,9 +1415,20 @@ static inline FProperty *ResolveNestedPropertyPath(UObject *RootObject,
       return nullptr;
     }
 
+    if (bAtObjectBase) {
+      OwnerRootProperty = CurrentProperty;
+      bAtObjectBase = false;
+    }
+
     // If this is the last segment, we've found our target
     if (bIsLastSegment) {
       OutContainerPtr = CurrentContainer;
+      if (OutNearestOwner) {
+        *OutNearestOwner = NearestOwner;
+      }
+      if (OutOwnerRootProperty) {
+        *OutOwnerRootProperty = OwnerRootProperty;
+      }
       return CurrentProperty;
     }
 
@@ -1426,6 +1445,8 @@ static inline FProperty *ResolveNestedPropertyPath(UObject *RootObject,
       }
       CurrentContainer = NextObject;
       CurrentTypeScope = NextObject->GetClass();
+      NearestOwner = NextObject;
+      bAtObjectBase = true;
     } else if (FStructProperty *StructProp =
                    CastField<FStructProperty>(CurrentProperty)) {
       CurrentContainer =

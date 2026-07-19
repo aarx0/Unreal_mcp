@@ -3092,6 +3092,7 @@ bool McpHandlers::Blueprint::HandleBlueprintAddVariable(
     // then mirror the value into the variable description so the editor's
     // details panel and future compiles agree.
     TSharedPtr<FJsonValue> AppliedDefault;
+    McpPropertyReflection::FMcpDefaultPropagation DefaultPropagation;
     if (DefaultVal.IsValid()) {
       McpSafeCompileBlueprint(Blueprint);
       UObject *CDO = Blueprint->GeneratedClass
@@ -3101,6 +3102,13 @@ bool McpHandlers::Blueprint::HandleBlueprintAddVariable(
           Blueprint->GeneratedClass
               ? Blueprint->GeneratedClass->FindPropertyByName(FName(*VarName))
               : nullptr;
+      if (CDO && DefaultProp) {
+        // The compile above reinstanced loaded instances with the type default;
+        // sweep them along to the requested default before the next compile
+        // fossilizes the stale value as a per-instance override.
+        DefaultPropagation =
+            McpPropertyReflection::CaptureArchetypeInstances(CDO, DefaultProp);
+      }
       FString DefaultError;
       if (!CDO || !DefaultProp ||
           !ApplyJsonValueToProperty(CDO, DefaultProp, DefaultVal,
@@ -3123,6 +3131,7 @@ bool McpHandlers::Blueprint::HandleBlueprintAddVariable(
             TEXT("DEFAULT_VALUE_FAILED"));
         return true;
       }
+      McpPropertyReflection::PropagateDefaultToInstances(DefaultPropagation);
       FString ExportedDefault;
       if (void *ValuePtr = DefaultProp->ContainerPtrToValuePtr<void>(CDO)) {
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
@@ -3199,6 +3208,7 @@ bool McpHandlers::Blueprint::HandleBlueprintAddVariable(
       // Read back from the CDO, not echoed from the request.
       Response->SetField(TEXT("defaultValue"), AppliedDefault);
     }
+    McpPropertyReflection::AddPropagationReport(Response, DefaultPropagation);
     const TSharedPtr<FJsonObject> Snapshot =
         FMcpAutomationBridge_BuildBlueprintSnapshot(Blueprint, RegistryKey);
     if (Snapshot.IsValid()) {
@@ -3320,13 +3330,16 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
     void *TargetContainer = nullptr;
     FProperty *Property = nullptr;
     FString ResolveError;
+    UObject *PropOwner = CDO;
+    FProperty *PropRoot = nullptr;
 
     if (PropertyName.Contains(TEXT("."))) {
       Property = ResolveNestedPropertyPath(CDO, PropertyName, TargetContainer,
-                                           ResolveError);
+                                           ResolveError, &PropOwner, &PropRoot);
     } else {
       TargetContainer = CDO;
       Property = CDO->GetClass()->FindPropertyByName(*PropertyName);
+      PropRoot = Property;
       if (!Property) {
         ResolveError =
             FString::Printf(TEXT("Property '%s' not found"), *PropertyName);
@@ -3344,6 +3357,9 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
     Blueprint->Modify();
     CDO->Modify();
 
+    McpPropertyReflection::FMcpDefaultPropagation Propagation =
+        McpPropertyReflection::CaptureArchetypeInstances(PropOwner, PropRoot);
+
     FString ConversionError;
     if (!ApplyJsonValueToProperty(TargetContainer, Property, ValueField,
                                   ConversionError)) {
@@ -3352,6 +3368,10 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
                              TEXT("CONVERSION_FAILED"));
       return true;
     }
+    // Before the finalize below: a compile delta-serializes each loaded
+    // instance against the just-written archetype, which would fossilize any
+    // still-stale instance value as a per-instance override.
+    McpPropertyReflection::PropagateDefaultToInstances(Propagation);
 
     // Capture the value before compilation invalidates the Property pointer
     const TSharedPtr<FJsonValue> CurrentValue =
@@ -3366,6 +3386,7 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
     if (CurrentValue.IsValid()) {
       Result->SetField(TEXT("value"), CurrentValue);
     }
+    McpPropertyReflection::AddPropagationReport(Result, Propagation);
 
     // Add verification data for the blueprint asset
     McpHandlerUtils::AddVerification(Result, Blueprint);

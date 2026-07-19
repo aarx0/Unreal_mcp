@@ -434,6 +434,108 @@ int32 ApplyJsonValuesToObject(UObject* Object, const TMap<FName, TSharedPtr<FJso
     return SuccessCount;
 }
 
+FMcpDefaultPropagation CaptureArchetypeInstances(UObject* Owner, FProperty* RootProperty)
+{
+    FMcpDefaultPropagation State;
+    if (!Owner || !RootProperty || !Owner->IsTemplate())
+    {
+        return State;
+    }
+    State.bTemplateTarget = true;
+    State.Owner = Owner;
+    State.RootProperty = RootProperty;
+
+    TArray<UObject*> Instances;
+    Owner->GetArchetypeInstances(Instances);
+
+    const bool bInstancedContents = RootProperty->HasAnyPropertyFlags(
+        CPF_InstancedReference | CPF_ContainsInstancedReference | CPF_PersistentInstance);
+
+    for (UObject* Instance : Instances)
+    {
+        if (!IsValid(Instance) ||
+            Instance->GetClass()->HasAnyClassFlags(CLASS_NewerVersionExists))
+        {
+            continue;
+        }
+        if (bInstancedContents)
+        {
+            // A binary copy would alias the template's subobject into the
+            // instance instead of giving it its own; count and leave alone.
+            State.InstancesSkipped++;
+            continue;
+        }
+        bool bMatchesOldDefault = true;
+        for (int32 Dim = 0; Dim < RootProperty->ArrayDim && bMatchesOldDefault; ++Dim)
+        {
+            bMatchesOldDefault = RootProperty->Identical_InContainer(Instance, Owner, Dim);
+        }
+        if (bMatchesOldDefault)
+        {
+            State.PendingMatches.Add(Instance);
+        }
+        else
+        {
+            State.InstancesLeftOverridden++;
+        }
+    }
+    return State;
+}
+
+void PropagateDefaultToInstances(FMcpDefaultPropagation& State)
+{
+    UObject* Owner = State.Owner.Get();
+    if (!State.bTemplateTarget || !Owner || !State.RootProperty)
+    {
+        State.PendingMatches.Empty();
+        return;
+    }
+    for (const TWeakObjectPtr<UObject>& Weak : State.PendingMatches)
+    {
+        UObject* Instance = Weak.Get();
+        if (!Instance)
+        {
+            continue;
+        }
+#if WITH_EDITOR
+        Instance->Modify();
+        Instance->PreEditChange(State.RootProperty);
+#endif
+        State.RootProperty->CopyCompleteValue_InContainer(Instance, Owner);
+#if WITH_EDITOR
+        FPropertyChangedEvent ChangeEvent(State.RootProperty, EPropertyChangeType::ValueSet);
+        Instance->PostEditChangeProperty(ChangeEvent);
+#endif
+        State.InstancesUpdated++;
+    }
+    State.PendingMatches.Empty();
+}
+
+void AddPropagationReport(const TSharedPtr<FJsonObject>& Target, const FMcpDefaultPropagation& State)
+{
+    if (!Target.IsValid() || !State.bTemplateTarget)
+    {
+        return;
+    }
+    TSharedPtr<FJsonObject> Report = MakeShared<FJsonObject>();
+    Report->SetNumberField(TEXT("instancesUpdated"), State.InstancesUpdated);
+    Report->SetNumberField(TEXT("instancesLeftOverridden"), State.InstancesLeftOverridden);
+    if (State.InstancesSkipped > 0)
+    {
+        Report->SetNumberField(TEXT("instancesSkippedInstancedProperty"), State.InstancesSkipped);
+        Report->SetStringField(TEXT("note"),
+            TEXT("Property carries instanced subobjects; loaded instances were not touched — "
+                 "re-apply per instance if they should follow the new default."));
+    }
+    else if (State.InstancesLeftOverridden > 0)
+    {
+        Report->SetStringField(TEXT("note"),
+            TEXT("leftOverridden instances had already diverged from the old default "
+                 "and keep their own value."));
+    }
+    Target->SetObjectField(TEXT("defaultPropagation"), Report);
+}
+
 FString GetPropertyTypeName(FProperty* Property)
 {
     if (!Property)

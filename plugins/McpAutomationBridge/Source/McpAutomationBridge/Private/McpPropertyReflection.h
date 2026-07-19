@@ -140,6 +140,69 @@ namespace McpPropertyReflection
         TMap<FName, FString>* OutErrors = nullptr);
 
     // =========================================================================
+    // Template-write propagation (CDO / archetype -> loaded instances)
+    // =========================================================================
+
+    /**
+     * Receipt for a default-value write aimed at a template object (a CDO, an
+     * SCS component template, or a native default subobject).
+     *
+     * When a class default changes, the editor's Details panel sweeps loaded
+     * archetype instances and updates every instance whose value still matched
+     * the old default. Without that sweep the stale instance value survives,
+     * and the next level save diffs it against the NEW archetype and fossilizes
+     * it as a per-instance override — every future default write then silently
+     * no-ops for that instance. Bridge template writes must imitate the sweep
+     * and report what it did.
+     *
+     * Usage: CaptureArchetypeInstances BEFORE the write,
+     * PropagateDefaultToInstances after the write succeeded,
+     * AddPropagationReport onto the response payload.
+     */
+    struct FMcpDefaultPropagation
+    {
+        bool bTemplateTarget = false;      // owner is a template; the sweep applies
+        int32 InstancesUpdated = 0;        // matched the old default -> new value copied in
+        int32 InstancesLeftOverridden = 0; // already diverged -> deliberately untouched
+        int32 InstancesSkipped = 0;        // instanced-subobject property; binary copy unsafe
+
+        TWeakObjectPtr<UObject> Owner;
+        FProperty* RootProperty = nullptr;
+        TArray<TWeakObjectPtr<UObject>> PendingMatches;
+    };
+
+    /**
+     * Phase 1 — call BEFORE writing on Owner. No-op (bTemplateTarget false)
+     * unless Owner->IsTemplate(). RootProperty must be the class-level property
+     * on Owner containing the write (for a nested path: the first segment under
+     * the nearest owning UObject). Matching and the later copy are whole-root,
+     * so an instance that diverged anywhere inside the root is left alone —
+     * conservative by design.
+     */
+    MCPAUTOMATIONBRIDGE_API FMcpDefaultPropagation CaptureArchetypeInstances(
+        UObject* Owner,
+        FProperty* RootProperty);
+
+    /**
+     * Phase 2 — call after the write on Owner succeeded: copies the new root
+     * value into each instance captured as matching (Modify + PreEditChange +
+     * copy + PostEditChangeProperty). Must run before any blueprint compile the
+     * handler triggers, or the reinstancer delta-serializes the stale instance
+     * value into a permanent override.
+     */
+    MCPAUTOMATIONBRIDGE_API void PropagateDefaultToInstances(
+        FMcpDefaultPropagation& State);
+
+    /**
+     * Attach the receipt as a "defaultPropagation" object field. Emits nothing
+     * when the write target was not a template, so instance-level setters stay
+     * noise-free.
+     */
+    MCPAUTOMATIONBRIDGE_API void AddPropagationReport(
+        const TSharedPtr<FJsonObject>& Target,
+        const FMcpDefaultPropagation& State);
+
+    // =========================================================================
     // Property Type Utilities
     // =========================================================================
 

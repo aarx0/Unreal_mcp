@@ -30,6 +30,21 @@ struct FMcpPropImportTestSub
     float B = 0.f;
 };
 
+// Dedicated fixture for the template-write propagation spec
+// (CaptureArchetypeInstances / PropagateDefaultToInstances). Separate from
+// UMcpPropImportTestObject so instance counts in those tests are not polluted
+// by fixtures other import tests leave behind before GC.
+UCLASS()
+class UMcpPropagationTestObject : public UObject
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY() int32 IntProp = 7;
+    UPROPERTY() FMcpPropImportTestSub SubProp;
+    UPROPERTY(Instanced) TObjectPtr<UObject> InstancedRef;
+};
+
 UCLASS()
 class UMcpPropImportTestObject : public UObject
 {

@@ -8,9 +8,16 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
-> **[ ] Found 2026-07-18 (totem-dummy bNeverDie, live repro): CDO writes don't propagate to
+> **[x] Found 2026-07-18 (totem-dummy bNeverDie, live repro): CDO writes don't propagate to
 > loaded archetype instances — a later level save fossilizes the stale value as a per-instance
-> override.** The editor's Details-panel path updates live instances whose value still matches
+> override.** FIXED same day: `McpPropertyReflection::CaptureArchetypeInstances` /
+> `PropagateDefaultToInstances` mirror the Details panel's sweep (instances still matching the
+> old default follow the new one; diverged instances stay) and every wired response carries a
+> `defaultPropagation` receipt (`instancesUpdated` / `instancesLeftOverridden`). Wired into
+> blueprint_set_default, add_variable defaultValue, set_object_property, set_scs_property, and
+> manage_asset set_property; instanced-subobject properties are skipped and reported instead of
+> aliased. Headless spec: `McpBridge.PropertyImport.Propagation`. Already-fossilized overrides
+> are NOT healed (indistinguishable from intent) — re-set per instance. The editor's Details-panel path updates live instances whose value still matches
 > the old default when a class default changes; bridge CDO writes (`set_default`,
 > `manage_blueprint create properties`, direct CDO `set_property`) skip that propagation. If the
 > level holding instances is open, the loaded actor keeps the old value, and the next level save
@@ -21,6 +28,17 @@ as they land.
 > `GetArchetypeInstances()` and copy the new value into instances whose current value equals the
 > old default (mirror `FBlueprintEditorUtils`' propagation), or at minimum report
 > `loadedInstancesNotUpdated: N` in the response so the caller knows to touch instances.
+
+> **[ ] Found 2026-07-18 (propagation live verify, repro): `set_blueprint_variables` happily
+> "overrides" a non-instance-editable variable — and the next BP compile silently discards it.**
+> The handler writes any reflected property on the actor instance; for a variable with
+> `CPF_DisableEditOnInstance` (add_variable's default, isPublic:false) the editor's reinstancer
+> normalizes instances back to the class default on the next compile, so the reported success
+> evaporates at an unpredictable later moment. Repro: add_variable (default flags) →
+> set_blueprint_variables on a placed instance → blueprint_set_default (structural compile) →
+> instance reads the new class default, override gone. The Details panel never offers such an
+> override, so the write should either fail loud (NOT_INSTANCE_EDITABLE) or warn in the
+> response that the value won't survive a compile.
 
 > **[ ] Found 2026-07-18 (totem PIE verification, live repro): `find_by_class` returns empty
 > SUCCESS when the class name doesn't resolve.** `inspect find_by_class className:"Totem"`
@@ -41,8 +59,11 @@ as they land.
 > comments unmoved). Scoped arrange (`nodes:[...]`) already sidesteps it: out-of-scope
 > comments are obstacles and never move.
 
-> **[ ] Found 2026-07-18 (totem-dummy widget wiring, live repro): scoped `arrange_graph` is
+> **[x] Found 2026-07-18 (totem-dummy widget wiring, live repro): scoped `arrange_graph` is
 > unreachable from a typed MCP client — `nodes` is in the decl but not the published schema.**
+> FIXED same day (wire-aware layout waves): `S_ArrangeGraph` now publishes `nodes` (array) and
+> `splitSharedGetters` (bool). Sessions whose client cached the older schema still stringify
+> the array until they reconnect.
 > The overlap hint says "arrange_graph with nodes:[...]", and the decl accepts it
 > (INVALID_PARAMS on a wrong param name lists `nodes` as read), but the published
 > manage_blueprint schema never declares the param — so a schema-driven client serializes the

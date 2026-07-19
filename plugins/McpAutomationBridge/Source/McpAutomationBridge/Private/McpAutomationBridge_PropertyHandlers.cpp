@@ -390,11 +390,13 @@ bool McpHandlers::Inspect::HandleSetObjectProperty(
 
   void* TargetContainer = nullptr;
   FProperty* Property = nullptr;
+  UObject* PropOwner = RootObject;
+  FProperty* PropRoot = nullptr;
 
   if (PropertyName.Contains(TEXT("."))) {
       // Nested property path (e.g., "MyComponent.PropertyName")
       FString ResolveError;
-      Property = ResolveNestedPropertyPath(RootObject, PropertyName, TargetContainer, ResolveError);
+      Property = ResolveNestedPropertyPath(RootObject, PropertyName, TargetContainer, ResolveError, &PropOwner, &PropRoot);
       if (!Property || !TargetContainer) {
           S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Failed to resolve nested property path '%s': %s"), *PropertyName, *ResolveError),
@@ -407,6 +409,7 @@ bool McpHandlers::Inspect::HandleSetObjectProperty(
       // Simple property name - look it up directly
       TargetContainer = RootObject;
       Property = RootObject->GetClass()->FindPropertyByName(*PropertyName);
+      PropRoot = Property;
       if (!Property) {
           S.SendAutomationError(RequestingSocket, RequestId,
               FString::Printf(TEXT("Property '%s' not found on object '%s'."), *PropertyName, *ObjectPath),
@@ -432,12 +435,16 @@ bool McpHandlers::Inspect::HandleSetObjectProperty(
   RootObject->Modify();
 #endif
 
+  McpPropertyReflection::FMcpDefaultPropagation Propagation =
+      McpPropertyReflection::CaptureArchetypeInstances(PropOwner, PropRoot);
+
   FString ConversionError;
   if (!ApplyJsonValueToProperty(TargetContainer, Property, ValueField, ConversionError))
   {
       S.SendAutomationError(RequestingSocket, RequestId, ConversionError, TEXT("PROPERTY_CONVERSION_FAILED"));
       return true;
   }
+  McpPropertyReflection::PropagateDefaultToInstances(Propagation);
 
   // --- Mark Dirty (optional) ---
   const bool bMarkDirty = GetJsonBoolField(Payload, TEXT("markDirty"), true);
@@ -526,6 +533,7 @@ bool McpHandlers::Inspect::HandleSetObjectProperty(
   {
       ResultPayload->SetField(TEXT("value"), CurrentValue);
   }
+  McpPropertyReflection::AddPropagationReport(ResultPayload, Propagation);
 
   S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Property value updated."), ResultPayload);
   return true;

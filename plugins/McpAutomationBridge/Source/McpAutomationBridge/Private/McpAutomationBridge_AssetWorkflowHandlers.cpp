@@ -2182,6 +2182,7 @@ struct FMcpResolvedPropertyPath {
   FProperty *Prop = nullptr;     // resolved leaf (the array Inner when the last segment is indexed)
   FProperty *RootProp = nullptr; // first segment's class-level property (for PostEditChangeProperty)
   UObject *OwnerObject = nullptr; // deepest UObject on the walk (instancing Outer / PostEditChange target)
+  FProperty *OwnerRootProp = nullptr; // first path property under OwnerObject (template-write propagation root)
 };
 
 // Resolves a dotted property path with optional array indices —
@@ -2208,6 +2209,7 @@ bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
   const UStruct *Scope = Asset->GetClass();
   UObject *OwnerObject = Asset;
   FProperty *Prop = nullptr;
+  bool bAtObjectBase = true;
 
   for (int32 SegIdx = 0; SegIdx < Segments.Num(); ++SegIdx) {
     const FString &Seg = Segments[SegIdx];
@@ -2271,6 +2273,10 @@ bool ResolveAssetPropertyPath(UObject *Asset, const FString &PropertyPath,
     }
     if (SegIdx == 0) {
       Out.RootProp = Prop;
+    }
+    if (bAtObjectBase) {
+      Out.OwnerRootProp = Prop;
+      bAtObjectBase = false;
     }
 
     for (const int32 Idx : Indices) {
@@ -2475,6 +2481,10 @@ bool McpHandlers::Asset::HandleSetAssetProperty(
   // already-offset value pointer (passing one applies the offset twice — silent
   // corruption for PODs, an access violation for strings).
   void *Container = Resolved.Container;
+  McpPropertyReflection::FMcpDefaultPropagation Propagation =
+      McpPropertyReflection::CaptureArchetypeInstances(
+          Resolved.OwnerObject ? Resolved.OwnerObject : Asset,
+          Resolved.OwnerRootProp ? Resolved.OwnerRootProp : Prop);
   FString ApplyError;
   // Pass the deepest object on the path as the owner so Instanced subobject
   // values ({"__class", ...}) re-instance Outered into the right package
@@ -2488,6 +2498,7 @@ bool McpHandlers::Asset::HandleSetAssetProperty(
         TEXT("SET_PROPERTY_FAILED"));
     return true;
   }
+  McpPropertyReflection::PropagateDefaultToInstances(Propagation);
 
   // Notify with the ROOT class-level property: for a subpath write the leaf
   // FProperty doesn't belong to the asset's class, and editors (e.g. the IMC
@@ -2525,6 +2536,7 @@ bool McpHandlers::Asset::HandleSetAssetProperty(
   Resp->SetBoolField(TEXT("saved"), bSaved);
   Resp->SetField(TEXT("value"),
                  McpPropertyReflection::ExportPropertyToJsonValue(Container, Prop));
+  McpPropertyReflection::AddPropagationReport(Resp, Propagation);
   S.SendAutomationResponse(Socket, RequestId, true, TEXT("Asset property set"), Resp,
                          FString());
   return true;

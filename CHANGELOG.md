@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Template writes now sweep loaded instances (2026-07-18)
+
+- **CDO/archetype property writes propagate to loaded instances, with a
+  receipt.** A bridge write to a template (a CDO, an SCS component template, a
+  native default subobject) used to update only the template: any placed
+  instance kept the old value in memory, and the next level save diffed it
+  against the NEW archetype and fossilized the stale value as a per-instance
+  override — silently, permanently (repro: gym totem dummy `bNeverDie`).
+  Template-writing handlers now mirror the Details panel's sweep: before the
+  write, `McpPropertyReflection::CaptureArchetypeInstances` records which
+  loaded archetype instances still match the old default; after it,
+  `PropagateDefaultToInstances` copies the new value into exactly those
+  (Modify + PreEditChange + PostEditChangeProperty each — diverged instances
+  keep their override). Runs before any compile the handler triggers, so the
+  reinstancer can no longer fossilize the stale value either.
+- Wired into `blueprint_set_default`, `blueprint_add_variable` (defaultValue),
+  `set_object_property`, `set_scs_property`, and `manage_asset set_property`.
+  Each response carries a `defaultPropagation` receipt: `instancesUpdated`,
+  `instancesLeftOverridden`, and `instancesSkippedInstancedProperty` for
+  instanced-subobject properties (never binary-copied — aliasing the
+  template's subobject into an instance would be corruption, so those are
+  skipped and reported). Absent entirely when the write target is not a
+  template, so instance-level setters stay noise-free.
+- `ResolveNestedPropertyPath` / `ResolveAssetPropertyPath` now report the
+  nearest owning UObject on a dotted path plus the first property under it —
+  the propagation root (matching is whole-root, so divergence anywhere inside
+  a struct protects the instance's entire value; conservative by design).
+- Headless spec: `McpBridge.PropertyImport.Propagation` (CDO sweep, override
+  preserved, struct-root conservatism, instanced skip, non-template no-op).
+- NOT healed: overrides that already fossilized before this change — they are
+  indistinguishable from intentional per-instance values. Re-set those per
+  instance once; the receipt's `instancesLeftOverridden` tells you they exist.
+
 ### Getter splitting in arrange_graph (2026-07-18, wave 3b — wire-aware layout complete)
 
 - **`arrange_graph` now splits shared getters by default** (`splitSharedGetters`,

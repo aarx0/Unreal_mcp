@@ -1220,6 +1220,7 @@ TSharedPtr<FJsonObject> FSCSHandlers::SetSCSComponentProperty(
     return Result;
   }
 
+  McpPropertyReflection::FMcpDefaultPropagation Propagation;
   if (PropertyValue.IsValid()) {
     // ResolveNestedPropertyPath now returns the container pointer
     void *ContainerPtr = nullptr;
@@ -1227,9 +1228,12 @@ TSharedPtr<FJsonObject> FSCSHandlers::SetSCSComponentProperty(
     FString FailureMessage;
     FString FailureCode;
     bool bAppliedValue = false;
+    UObject *PropOwner = ComponentNode->ComponentTemplate;
+    FProperty *PropRoot = nullptr;
     FProperty *TargetProp =
         ResolveNestedPropertyPath(ComponentNode->ComponentTemplate,
-                                  PropertyName, ContainerPtr, ResolveError);
+                                  PropertyName, ContainerPtr, ResolveError,
+                                  &PropOwner, &PropRoot);
 
     if (!TargetProp || !ContainerPtr) {
       Result->SetBoolField(TEXT("success"), false);
@@ -1242,9 +1246,16 @@ TSharedPtr<FJsonObject> FSCSHandlers::SetSCSComponentProperty(
       return Result;
     }
 
+    Propagation =
+        McpPropertyReflection::CaptureArchetypeInstances(PropOwner, PropRoot);
+
     if (ApplyJsonValueToProperty(ContainerPtr, TargetProp, PropertyValue,
                                  FailureMessage)) {
       bAppliedValue = true;
+      // Before the compile in FinalizeBlueprintSCSChange below — reinstancing
+      // delta-serializes each loaded component against the just-written
+      // template, which would fossilize a stale value as an instance override.
+      McpPropertyReflection::PropagateDefaultToInstances(Propagation);
     } else {
       FailureCode = TEXT("SCS_PROPERTY_APPLY_FAILED");
     }
@@ -1316,6 +1327,7 @@ TSharedPtr<FJsonObject> FSCSHandlers::SetSCSComponentProperty(
                       *PropertyName, *ComponentName));
   Result->SetBoolField(TEXT("compiled"), bCompiled);
   Result->SetBoolField(TEXT("saved"), bSaved);
+  McpPropertyReflection::AddPropagationReport(Result, Propagation);
   AddSCSNodeVerification(Result, SCS, VerifiedNode);
   if (VerifiedValue.IsValid()) {
     Result->SetField(TEXT("verifiedValue"), VerifiedValue);
