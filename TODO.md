@@ -1458,6 +1458,14 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-19 — `control_editor open_level` returns HANDLER_NO_RESPONSE on success
+Repro: `control_editor {action:'open_level', path:'/Game/Maps/LavaMap'}` from HubWorld → client gets
+`Error [HANDLER_NO_RESPONSE]: Handler for 'control_editor' consumed the request without sending a response`,
+but `manage_level get_current_level` immediately after confirms LavaMap loaded fine. Likely the world teardown
+during the map transition destroys/invalidates whatever the handler would respond through (same family as the
+transport mid-call-drop notes). Caller-side workaround is easy (re-query current level), but the call should
+send its response before initiating the load, or re-acquire the socket after.
+
 ### [ ] 2026-07-18 — `control_actor set_blueprint_variables` silently writes doomed values on non-instance-editable BP vars
 Root cause of a real gameplay bug (totem dummy's PillarField actor ref vanishing): the write lands on the live
 instance and reads back fine, but the variable lacked instance-editability (CPF_DisableEditOnInstance set), so the
