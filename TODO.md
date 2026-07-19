@@ -214,6 +214,17 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
+### [ ] 2026-07-19 — compile-warning hygiene found during the game repo's warning-unification build
+Surfaced while rebuilding the whole plugin under the game's new stricter Win64 flags.
+- **Five C4457 shadow warnings** (`S` locals/loop vars hiding the `UMcpAutomationBridgeSubsystem& S`
+  handler param): SkeletonHandlers.cpp:650, ControlHandlers.cpp:1178, PropertyHandlers.cpp:1000,
+  :1023, :1459-1460, EffectHandlers.cpp:1288. Rename the inner ones; they print in every build.
+- **Latent literal narrowing**: GeometryHandlers.cpp:3101 `WeldOptions.Tolerance = 0.001;`
+  (double literal into float member). Invisible under the module's /fp:fast (MSVC only emits
+  C4305 under /fp:precise), but it's the exact bug class the game modules now error on — add
+  the `f` suffix. Note for the future: engine headers the bridge includes (GeometryScripting,
+  ChaosVehicles) have their own C4305 hits, so do NOT opt the bridge into precise+/we4305.
+
 ### [ ] 2026-07-11 — description-sweep finds: non-functional published params + manage_sequence unit bugs
 Surfaced while filling the 501 blank schema descriptions (every param was verified against its
 handler read site; the non-functional ones got truthful "currently ignored" descriptions rather
