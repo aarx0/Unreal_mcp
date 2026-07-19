@@ -8,6 +8,30 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] Found 2026-07-18 (totem-dummy bNeverDie, live repro): CDO writes don't propagate to
+> loaded archetype instances — a later level save fossilizes the stale value as a per-instance
+> override.** The editor's Details-panel path updates live instances whose value still matches
+> the old default when a class default changes; bridge CDO writes (`set_default`,
+> `manage_blueprint create properties`, direct CDO `set_property`) skip that propagation. If the
+> level holding instances is open, the loaded actor keeps the old value, and the next level save
+> diffs it against the NEW archetype → writes the stale value as an explicit override delta.
+> From then on the CDO is irrelevant for that actor and every future CDO fix silently no-ops.
+> Repro: BP_TrainingDummy_Totem Attributes.bNeverDie — CDO true, gym instance fossilized false
+> (dummy died in PIE despite the "can't die" design). Fix: after a CDO property write, walk
+> `GetArchetypeInstances()` and copy the new value into instances whose current value equals the
+> old default (mirror `FBlueprintEditorUtils`' propagation), or at minimum report
+> `loadedInstancesNotUpdated: N` in the response so the caller knows to touch instances.
+
+> **[ ] Found 2026-07-18 (totem PIE verification, live repro): `find_by_class` returns empty
+> SUCCESS when the class name doesn't resolve.** `inspect find_by_class className:"Totem"`
+> answered "Found 0 actors" (success) while the log showed `Failed to find object 'Class
+> /Script/Engine.Totem'` — the short name was resolved against /Script/Engine only, and the
+> resolution failure was swallowed into a legitimate-looking empty result. A missing class and
+> "class exists, zero instances" are different answers; the first must be CLASS_NOT_FOUND.
+> Also try game-module resolution for short names (the class lived at
+> /Script/RhyaTowerOfWishes.Totem; full path worked). Workaround: always pass the full
+> /Script/Module.Class path.
+
 > **[ ] Found 2026-07-18 (overlap-report/scoped-arrange work, code read): full `arrange_graph`
 > scatters comment boxes.** `ArrangeBlueprintGraph` iterates every `Graph->Nodes` entry; a
 > comment box has no pin topology, so the core sees an isolated node and piles it into
