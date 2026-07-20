@@ -913,6 +913,19 @@ static inline UObject *McpLoadAssetPieSafe(const FString &AssetPath) {
   return LoadObject<UObject>(nullptr, *ObjectPath);
 }
 
+// A class superseded by Live Coding / hot reload / Blueprint reinstancing
+// still exists under its old identity; resolving to it makes IsA() checks
+// silently miss every reinstanced live actor (find_by_class returned 0
+// WallStrikes while four stood in the level after a Live Coding patch,
+// 2026-07-13). Refuse those at every resolution step.
+static inline bool McpClassIsStale(const UClass *C) {
+  return !C || C->HasAnyClassFlags(CLASS_NewerVersionExists) ||
+         C->GetName().StartsWith(TEXT("REINST_")) ||
+         C->GetName().StartsWith(TEXT("TRASHCLASS_")) ||
+         C->GetName().StartsWith(TEXT("HOTRELOADED_")) ||
+         C->GetName().StartsWith(TEXT("LIVECODING_"));
+}
+
 // Resolve a UClass by a variety of heuristics: try full path lookup, attempt
 // to load an asset by path (UBlueprint or UClass), then fall back to scanning
 // loaded classes by name or path suffix. This replaces previous usages of
@@ -937,7 +950,8 @@ static inline UClass *ResolveClassByName(const FString &ClassNameOrPath) {
 
   // 2) Try a direct FindObject using nullptr/explicit outer (expects full path)
   if (UClass *Direct = FindObject<UClass>(nullptr, *ClassNameOrPath))
-    return Direct;
+    if (!McpClassIsStale(Direct))
+      return Direct;
 
   // 2.5) Try guessing generic engine locations for common components (e.g.
   // StaticMeshComponent -> /Script/Engine.StaticMeshComponent) This helps when
@@ -947,16 +961,19 @@ static inline UClass *ResolveClassByName(const FString &ClassNameOrPath) {
     FString EnginePath =
         FString::Printf(TEXT("/Script/Engine.%s"), *ClassNameOrPath);
     if (UClass *EngineClass = FindObject<UClass>(nullptr, *EnginePath))
-      return EngineClass;
+      if (!McpClassIsStale(EngineClass))
+        return EngineClass;
 
     // Attempt load for engine class (unlikely to need load for native, but just
     // in case)
     if (UClass *EngineClassLoaded = LoadObject<UClass>(nullptr, *EnginePath))
-      return EngineClassLoaded;
+      if (!McpClassIsStale(EngineClassLoaded))
+        return EngineClassLoaded;
 
     FString UMGPath = FString::Printf(TEXT("/Script/UMG.%s"), *ClassNameOrPath);
     if (UClass *UMGClass = FindObject<UClass>(nullptr, *UMGPath))
-      return UMGClass;
+      if (!McpClassIsStale(UMGClass))
+        return UMGClass;
   }
 
   // Special handling for common ambiguous types
@@ -972,7 +989,7 @@ static inline UClass *ResolveClassByName(const FString &ClassNameOrPath) {
   UClass *BestMatch = nullptr;
   for (TObjectIterator<UClass> It; It; ++It) {
     UClass *C = *It;
-    if (!C)
+    if (!C || McpClassIsStale(C))
       continue;
 
     // Exact short name match
@@ -1735,14 +1752,16 @@ static inline UClass *ResolveUClass(const FString &Input) {
   if (Input.IsEmpty())
     return nullptr;
 
-  // 1. Try finding it directly (full path or already loaded)
+  // 1. Try finding it directly (full path or already loaded).
+  // Stale (reinstanced) classes are refused everywhere here for the same
+  // reason as in ResolveClassByName above.
   UClass *Found = FindObject<UClass>(nullptr, *Input);
-  if (Found)
+  if (Found && !McpClassIsStale(Found))
     return Found;
 
   // 2. Try loading it directly
   Found = LoadObject<UClass>(nullptr, *Input);
-  if (Found)
+  if (Found && !McpClassIsStale(Found))
     return Found;
 
   // 3. Handle Blueprint Generated Classes explicitly
@@ -1766,10 +1785,10 @@ static inline UClass *ResolveUClass(const FString &Input) {
   for (const FString &Pkg : ScriptPackages) {
     FString TryPath = FString::Printf(TEXT("%s.%s"), *Pkg, *Input);
     Found = FindObject<UClass>(nullptr, *TryPath);
-    if (Found)
+    if (Found && !McpClassIsStale(Found))
       return Found;
     Found = LoadObject<UClass>(nullptr, *TryPath);
-    if (Found)
+    if (Found && !McpClassIsStale(Found))
       return Found;
   }
 
@@ -1777,7 +1796,7 @@ static inline UClass *ResolveUClass(const FString &Input) {
   // plugins)
   // Only doing this for exact short name matches to avoid false positives
   for (TObjectIterator<UClass> It; It; ++It) {
-    if (It->GetName() == Input) {
+    if (It->GetName() == Input && !McpClassIsStale(*It)) {
       return *It;
     }
   }
