@@ -413,10 +413,6 @@
           "description": "create_blend_space_2d: horizontal axis minimum (default -180).",
           "type": "number"
         },
-        "interpolationType": {
-          "description": "set_interpolation_settings: currently ignored; only targetWeightInterpolationSpeed is applied.",
-          "type": "string"
-        },
         "intValue": {
           "description": "Set an integer node property.",
           "type": "integer"
@@ -555,10 +551,6 @@
         },
         "parentBoneName": {
           "description": "Alias of parentBone for add_bone.",
-          "type": "string"
-        },
-        "parentClass": {
-          "description": "create_animation_blueprint: currently ignored; the AnimBlueprint is always parented to AnimInstance.",
           "type": "string"
         },
         "path": {
@@ -911,10 +903,6 @@
         },
         "vehicleName": {
           "description": "Legacy alias of actorName for configure_vehicle.",
-          "type": "string"
-        },
-        "vehicleType": {
-          "description": "configure_vehicle: type label echoed in the response (default WheeledVehicle4W); the movement component is always WheeledVehicleMovementComponent4W.",
           "type": "string"
         },
         "verticalAxisName": {
@@ -1880,6 +1868,10 @@
         "parentActor": {
           "description": "Name of the parent actor (for attach operations).",
           "type": "string"
+        },
+        "properties": {
+          "description": "set_component_property: map of property name to raw JSON value, applied fail-in-place (alternative to a single propertyName + typed value field).",
+          "type": "object"
         },
         "propertyName": {
           "description": "Name of the property.",
@@ -3413,7 +3405,6 @@
             "arrange_graph",
             "add_material_node",
             "rebuild_material",
-            "set_material_parameter",
             "get_material_node_details",
             "remove_material_node",
             "set_two_sided",
@@ -4001,10 +3992,6 @@
         },
         "parameterName": {
           "description": "Name of the parameter.",
-          "type": "string"
-        },
-        "parameterType": {
-          "description": "set_material_parameter: unused — the action always fails with AMBIGUOUS_ACTION; call set_scalar_parameter_value/set_vector_parameter_value/set_texture_parameter_value instead.",
           "type": "string"
         },
         "parentMaterial": {
@@ -4633,11 +4620,11 @@
           "type": "object"
         },
         "fadeInTime": {
-          "description": "set_sound_mix_class_override: fade-in seconds for the override (default 1.0); add_mix_modifier accepts but ignores it.",
+          "description": "set_sound_mix_class_override: fade-in seconds for the override (default 1.0).",
           "type": "number"
         },
         "fadeOutTime": {
-          "description": "clear_sound_mix_class_override: fade-out seconds for the override (default 1.0); add_mix_modifier accepts but ignores it.",
+          "description": "clear_sound_mix_class_override: fade-out seconds for the override (default 1.0).",
           "type": "number"
         },
         "fadeTime": {
@@ -4959,7 +4946,7 @@
           "type": "string"
         },
         "startTime": {
-          "description": "Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it).",
+          "description": "Playback start offset in seconds (default 0).",
           "type": "number"
         },
         "stringValue": {
@@ -10151,7 +10138,7 @@
           "type": "number"
         },
         "endFrame": {
-          "description": "add_section: section end frame (default 100; raw tick-resolution frame number).",
+          "description": "add_section: section end in display-rate frames (default 100; same units as add_keyframe).",
           "type": "integer"
         },
         "floatValue": {
@@ -10167,7 +10154,7 @@
           "type": "string"
         },
         "lengthInFrames": {
-          "description": "set_properties: playback-range length in frames from playbackStart (ignored when playbackEnd is given).",
+          "description": "set_properties: playback-range length in display-rate frames from playbackStart (ignored when playbackEnd is given).",
           "type": "integer"
         },
         "locked": {
@@ -10191,11 +10178,11 @@
           "type": "string"
         },
         "playbackEnd": {
-          "description": "set_properties: playback range end (raw tick-resolution frame number; wins over lengthInFrames).",
+          "description": "set_properties: playback range end in display-rate frames (wins over lengthInFrames).",
           "type": "integer"
         },
         "playbackStart": {
-          "description": "set_properties: playback range start (raw tick-resolution frame number, not display-rate frames).",
+          "description": "set_properties: playback range start in display-rate frames (same units as add_keyframe).",
           "type": "integer"
         },
         "property": {
@@ -10219,7 +10206,7 @@
           "type": "number"
         },
         "startFrame": {
-          "description": "add_section: section start frame (default 0; raw tick-resolution frame number).",
+          "description": "add_section: section start in display-rate frames (default 0; same units as add_keyframe).",
           "type": "integer"
         },
         "structValue": {
@@ -10227,7 +10214,7 @@
           "type": "object"
         },
         "trackName": {
-          "description": "add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: echoed in the response only (the new track is not renamed).",
+          "description": "add_section/remove_track/set_track_muted/set_track_solo/set_track_locked: substring matched against track names to pick the target track; add_track: display name for the new track (the name the other track actions match on).",
           "type": "string"
         },
         "trackType": {

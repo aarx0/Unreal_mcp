@@ -227,10 +227,19 @@ Surfaced while rebuilding the whole plugin under the game's new stricter Win64 f
   the `f` suffix. Note for the future: engine headers the bridge includes (GeometryScripting,
   ChaosVehicles) have their own C4305 hits, so do NOT opt the bridge into precise+/we4305.
 
-### [ ] 2026-07-11 — description-sweep finds: non-functional published params + manage_sequence unit bugs
-Surfaced while filling the 501 blank schema descriptions (every param was verified against its
-handler read site; the non-functional ones got truthful "currently ignored" descriptions rather
-than invented semantics — fix the handler or retire the param, then update the text).
+### [x] 2026-07-11 — description-sweep finds: non-functional published params + manage_sequence unit bugs
+RESOLVED 2026-07-19 (Aaron's call: delete dead params, fix real bugs). Fixed: sequence
+set_properties/add_section now convert display-rate frames→ticks like add_keyframe (verified:
+playbackEnd 300 → 240000 ticks; readback in display frames + ticks); create_audio_component
+reads volume/pitch as numbers (verified 0.25/1.5 land); add_track.trackName now really sets the
+display name (implemented rather than deleted — the sibling track actions match on it);
+get_source_control_state decl dropped the unread assetPaths. Deleted (param + handler read):
+set_interpolation_settings.interpolationType, create_anim_blueprint.parentClass,
+configure_vehicle.vehicleType, create_ambient_sound/spawn_sound_at_location startTime,
+add_mix_modifier fadeInTime/fadeOutTime. Retired: the set_material_parameter tombstone action
+(now rejected at the schema enum). Left as documented behavior: create_sound_cue conditional
+params, set_track_solo/locked semantics, fade targetVolume (functional on fade-in); the format
+description was already combined during the sweep.
 - **manage_sequence frame-unit inconsistency**: `set_properties` playbackStart/playbackEnd/
   lengthInFrames (SequenceHandlers.cpp:428-445) and `add_section` startFrame/endFrame
   (:1966-1971, fetched TickResolution unused) apply raw ints at TICK resolution, while
@@ -1456,6 +1465,11 @@ Wwise/FMOD, EOS/Steam, Chaos, accessibility, modding). Mostly not relevant to
 RhyaTowerOfWishes' near-term needs — tracked there, not re-listed here. The one to watch for
 a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if the game needs it.
 
+> **Parked (Aaron, 2026-07-19): the HTTP session leak** (sessions never expire; 49 accumulated in
+> one working session, 2026-07-13 find). Ruled unlikely to ever matter for our usage — editor
+> sessions are hours long and the entries are tiny. Fix if ever needed: idle-timeout sweep or LRU
+> cap in the native transport's session map (~20 lines).
+
 ---
 
 ## Bugs (found while using the bridge — track, fix when convenient)
@@ -1472,7 +1486,12 @@ Repro: `control_editor {action:'open_level', path:'/Game/Maps/LavaMap'}` from Hu
 `Error [HANDLER_NO_RESPONSE]: Handler for 'control_editor' consumed the request without sending a response`,
 but `manage_level get_current_level` immediately after confirms LavaMap loaded fine.
 
-### [ ] 2026-07-18 — `control_actor set_blueprint_variables` silently writes doomed values on non-instance-editable BP vars
+### [x] 2026-07-18 — `control_actor set_blueprint_variables` silently writes doomed values on non-instance-editable BP vars
+FIXED 2026-07-19 (Aaron's call: refuse). The handler now refuses with NOT_INSTANCE_EDITABLE when
+the target is an EDITOR-world instance and the property carries CPF_DisableEditOnInstance; the
+error names both outs (set_variable_metadata {instanceEditable:true} first, or set_default on the
+class). PIE instances stay writable — transient by nature, written deliberately by live tests.
+Verified live both ways on a scratch BP (refusal, then flag flip → write lands).
 Root cause of a real gameplay bug (totem dummy's PillarField actor ref vanishing): the write lands on the live
 instance and reads back fine, but the variable lacked instance-editability (CPF_DisableEditOnInstance set), so the
 next BP recompile's reinstancing dropped it — the reinstancer only preserves editable instance deltas. The editor's
@@ -1482,13 +1501,20 @@ CPF_DisableEditOnInstance. Related fix SHIPPED same day: `set_variable_metadata 
 real property flag via `FBlueprintEditorUtils::SetBlueprintOnlyEditableFlag` — previously it wrote a useless
 metadata entry named "instanceEditable" and reported success (the trap that set up the data loss).
 
-### [ ] 2026-07-17b — `inspect set_component_property` declares `properties` (map) but the handler demands `propertyName`
+### [x] 2026-07-17b — `inspect set_component_property` declares `properties` (map) but the handler demands `propertyName`
+FIXED 2026-07-19: the `properties` map path is implemented (shared ApplyOne with the
+SimulatePhysics/Mobility special cases; fail-in-place per entry, applied+failed arrays,
+PARTIAL_FAILURE when any entry fails). Verified live on the BP_Totem CDO Mesh — the original
+repro. control_actor's fragment now declares `properties` too.
 Found authoring BP_Totem's component defaults. `set_component_property {objectPath:<CDO>, componentName:'Mesh',
 properties:{...}}` fails INVALID_ARGUMENT "propertyName (or propertyPath) required" — the declared batch-map path
 is unreachable, so every multi-property write costs one call per property. Either implement the `properties` loop
 (control_actor's variant has one) or drop the key from the decl.
 
-### [ ] 2026-07-17 — `inspect set_component_property` rejects object-refs by path; its sibling `set_property` accepts them
+### [x] 2026-07-17 — `inspect set_component_property` rejects object-refs by path; its sibling `set_property` accepts them
+FIXED 2026-07-19: the "string" kind check now admits FObjectPropertyBase (the shared importer
+already handled object-by-path). Verified live: the exact repro (`stringValue:
+'/Engine/BasicShapes/Cylinder.Cylinder'` on the totem Mesh) now succeeds.
 Same session: `set_component_property {propertyName:'StaticMesh', stringValue:'/Engine/BasicShapes/Cylinder.Cylinder'}`
 fails VALUE_TYPE_MISMATCH ("you sent stringValue but the property type is 'TObjectPtr<UStaticMesh>'"), while
 `set_property` on the component subobject (`...Default__BP_Totem_C:Mesh`) with the identical stringValue succeeds —
@@ -3274,14 +3300,20 @@ helpers twin. Verified on `IMC_GameCommands.DefaultKeyMappings.Mappings`.
 `propertyName`/`includeTransient` param docs. (The planned TypeScript-schema edits were a
 no-op for this native-only fork and were removed with the TypeScript bridge.)
 
-> **[ ] Found 2026-07-13 (wall-attack gym work): `control_actor find_by_class` misses classes
-> loaded after editor boot.** Repro: 4 live `AWallStrike` actors in PIE (confirmed via python
+> **[x] Found 2026-07-13 (wall-attack gym work): `control_actor find_by_class` misses classes
+> loaded after editor boot.** FIXED 2026-07-19: there is no cache — the staleness mechanism is
+> that a superseded UClass (Live Coding / hot reload / BP reinstancing) lives on under its old
+> identity and wins resolution, and `IsA(oldClass)` is false for every reinstanced actor. Both
+> resolvers (`ResolveClassByName` + `ResolveUClass` in McpAutomationBridgeHelpers.h) now refuse
+> stale classes at every step (`McpClassIsStale`: CLASS_NewerVersionExists flag +
+> REINST_/TRASHCLASS_/HOTRELOADED_/LIVECODING_ name prefixes). Verified: PillarStrike still
+> resolves and finds its instance after a live_coding_compile patch of its own TU. Honest
+> caveat: a body-only patch may not reinstance the class, so the exact original failure wasn't
+> synthetically reproduced — the filter is verified harmless and closes the only known
+> staleness mechanism; reopen with a repro if a miss recurs.
+> Original repro: 4 live `AWallStrike` actors in PIE (confirmed via python
 > `GameplayStatics.get_all_actors_of_class` in the same frame window) while
-> `find_by_class {className:"WallStrike"}` returned `count:0`; `find_by_class WallTelegraph`
-> (same session, same module) worked, and ONE early WallStrike find succeeded before the misses
-> began. Both classes came from the game module loaded at boot, so it's not simply
-> new-module staleness — suspect the class-resolution cache in the find path going stale after
-> Live Coding patched the game module mid-session. `find_by_name` was unaffected.
+> `find_by_class {className:"WallStrike"}` returned `count:0`; `find_by_name` was unaffected.
 
 > **[ ] Found 2026-07-13 (wall-attack gym work): MCP HTTP sessions never expire.** Each
 > `initialize` allocates a session that lives until editor exit — one working session

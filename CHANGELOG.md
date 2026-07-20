@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Bug burn-down: doomed writes, batch component writes, stale classes, units (2026-07-19)
+
+- **`set_blueprint_variables` refuses doomed writes.** A non-instance-editable
+  variable written on an editor-world instance lands, reads back, and then
+  silently vanishes at the next recompile (reinstancing only preserves editable
+  instance deltas — this cost a real gameplay bug, the totem's PillarField ref).
+  Now refused with `NOT_INSTANCE_EDITABLE` naming both outs
+  (`set_variable_metadata {instanceEditable:true}` or `set_default`). PIE
+  instances stay writable: transient by nature, written deliberately by tests.
+- **`set_component_property` batch mode is real** (both the inspect and
+  control_actor spellings): the declared `properties` map now applies
+  fail-in-place per entry (applied + failed arrays, `PARTIAL_FAILURE` if any
+  entry fails) instead of being unreachable. Its `stringValue` also accepts
+  object-references-by-path, matching `set_property`.
+- **Stale-class resolution after Live Coding / reinstancing.** A superseded
+  UClass lives on under its old identity and used to win class resolution,
+  making `find_by_class` miss every reinstanced live actor. Both resolvers now
+  refuse stale classes (`CLASS_NewerVersionExists` +
+  REINST_/TRASHCLASS_/HOTRELOADED_/LIVECODING_ prefixes) at every step.
+- **`manage_sequence` speaks one unit.** `set_properties`
+  (playbackStart/End/lengthInFrames) and `add_section` (startFrame/endFrame)
+  now convert display-rate frames to ticks like `add_keyframe` — raw ints
+  previously landed ~800× short. Readback reports display frames plus raw
+  ticks. `add_track.trackName` now actually names the track (the display name
+  the other track actions match on).
+- **Dead-param deletion sweep** (params read-then-ignored, per the 2026-07-11
+  description sweep): `set_interpolation_settings.interpolationType`,
+  `create_anim_blueprint.parentClass`, `configure_vehicle.vehicleType`,
+  ambient/spawn-sound `startTime`, `add_mix_modifier` fadeIn/fadeOutTime — all
+  removed from schema and handlers. The `set_material_parameter` tombstone
+  action (could only ever return AMBIGUOUS_ACTION) is retired outright.
+  `get_source_control_state` no longer advertises an `assetPaths` array its
+  handler never read. `create_audio_component` reads volume/pitch as numbers
+  (was string-only, silently dropping JSON numbers).
+- Parked by design: the HTTP session leak (sessions never expire) — unlikely
+  to matter at this fork's usage; fix sketch lives in TODO.md.
+
 ### Niagara module input values: readback + `set_module_input` (2026-07-19)
 
 - **`manage_effect get_niagara_info` now returns module VALUES, not just
