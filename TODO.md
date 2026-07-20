@@ -29,8 +29,10 @@ as they land.
 > old default (mirror `FBlueprintEditorUtils`' propagation), or at minimum report
 > `loadedInstancesNotUpdated: N` in the response so the caller knows to touch instances.
 
-> **[ ] Found 2026-07-18 (propagation live verify, repro): `set_blueprint_variables` happily
+> **[x] Found 2026-07-18 (propagation live verify, repro): `set_blueprint_variables` happily
 > "overrides" a non-instance-editable variable — and the next BP compile silently discards it.**
+> FIXED 2026-07-19 (duplicate of the Bugs-section 2026-07-18 entry): fails loud with
+> NOT_INSTANCE_EDITABLE on editor-world instances; PIE instances stay writable.
 > The handler writes any reflected property on the actor instance; for a variable with
 > `CPF_DisableEditOnInstance` (add_variable's default, isPublic:false) the editor's reinstancer
 > normalizes instances back to the class default on the next compile, so the reported success
@@ -98,8 +100,10 @@ as they land.
 >   HandleAnimPhysConfigureVehicle). Mutation on a no-changes response. Move creation behind the
 >   any-field-requested check (same shape as the camera-rig fix in ConfigureCameraComponent).
 
-> **[ ] Found 2026-07-11 (pillar-field gym work): `control_editor open_level` →
-> HANDLER_NO_RESPONSE on a real map switch.** Repro: editor sitting in HubWorld,
+> **[x] Found 2026-07-11 (pillar-field gym work): `control_editor open_level` →
+> HANDLER_NO_RESPONSE on a real map switch.** FIXED 2026-07-19 (duplicate of the Bugs-section
+> 2026-07-19 entry): the handler's deferred response was undeclared — `MarkRequestDeferred`
+> added; cross-map open verified returning real success. Repro: editor sitting in HubWorld,
 > `control_editor {action:"open_level", levelPath:"/Game/Maps/L_CombatGym"}` — the load
 > SUCCEEDS (world switches; `manage_level get_current_level` confirms) but the client gets
 > HANDLER_NO_RESPONSE and the log shows `McpSafeLoadMap: Current world 'HubWorld' has World
@@ -3335,8 +3339,10 @@ no-op for this native-only fork and were removed with the TypeScript bridge.)
 > (e.g. `InitializeParticle`, `GravityForce`) but none of the module inputs (color, lifetime,
 > sphere radius, spawn rate) — couldn't answer "what is the color set to" over MCP.
 
-> **[ ] Found 2026-07-19 (same session, follow-up): `execute_python` + `NiagaraPythonEmitter`
-> spelunking is editor-fatal.** Two findings while probing for the value readback above:
+> **[x] Found 2026-07-19 (same session, follow-up): `execute_python` + `NiagaraPythonEmitter`
+> spelunking is editor-fatal.** Actionable core DONE same day: the module-value readback +
+> set_module_input shipped natively (RapidIterationParameters walk in C++). The crash gotcha
+> below stands as a durable warning — never construct a bare NiagaraPythonEmitter via python. Two findings while probing for the value readback above:
 > (1) the colon subobject path DOES reach a system-owned emitter from python
 > (`find_object(None, '/Game/VFX/NS_LavaBombTrail.NS_LavaBombTrail:Fountain')` -> NiagaraEmitter),
 > so an eventual implementation has a clean object route; (2) constructing a bare
