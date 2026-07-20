@@ -214,7 +214,9 @@ as they land.
 > Reuses the Phase 2 fragments; the gating unknown is whether the client honors top-level
 > `oneOf` — proposes a one-rebuild `control_editor` pilot to decide before any rollout.
 
-### [ ] 2026-07-19 — compile-warning hygiene found during the game repo's warning-unification build
+### [x] 2026-07-19 — compile-warning hygiene found during the game repo's warning-unification build
+FIXED same day: all five `S` shadows renamed (Candidate/Str/Name) and the Tolerance literal got
+its `f` suffix. The engine-header caveat below still stands — bridge stays on /fp:fast, no /we4305.
 Surfaced while rebuilding the whole plugin under the game's new stricter Win64 flags.
 - **Five C4457 shadow warnings** (`S` locals/loop vars hiding the `UMcpAutomationBridgeSubsystem& S`
   handler param): SkeletonHandlers.cpp:650, ControlHandlers.cpp:1178, PropertyHandlers.cpp:1000,
@@ -1458,13 +1460,17 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] 2026-07-19 — `control_editor open_level` returns HANDLER_NO_RESPONSE on success
+### [x] 2026-07-19 — `control_editor open_level` returns HANDLER_NO_RESPONSE on success
+FIXED same day. Root cause was not the transport: the handler defers the load + response to a
+next-tick ticker but never called `MarkRequestDeferred`, so the post-dispatch
+still-parked-request check failed the call instantly; the ticker's real response then hit an
+already-completed request. One-line fix (declare the deferral); the response still arrives
+AFTER the load with the true result. Same undeclared-deferral bug found and fixed in
+`system_control run_benchmark` (final response after `duration` seconds, never declared);
+import was the only site that had it right.
 Repro: `control_editor {action:'open_level', path:'/Game/Maps/LavaMap'}` from HubWorld → client gets
 `Error [HANDLER_NO_RESPONSE]: Handler for 'control_editor' consumed the request without sending a response`,
-but `manage_level get_current_level` immediately after confirms LavaMap loaded fine. Likely the world teardown
-during the map transition destroys/invalidates whatever the handler would respond through (same family as the
-transport mid-call-drop notes). Caller-side workaround is easy (re-query current level), but the call should
-send its response before initiating the load, or re-acquire the socket after.
+but `manage_level get_current_level` immediately after confirms LavaMap loaded fine.
 
 ### [ ] 2026-07-18 — `control_actor set_blueprint_variables` silently writes doomed values on non-instance-editable BP vars
 Root cause of a real gameplay bug (totem dummy's PillarField actor ref vanishing): the write lands on the live
@@ -3281,3 +3287,30 @@ no-op for this native-only fork and were removed with the TypeScript bridge.)
 > `initialize` allocates a session that lives until editor exit — one working session
 > accumulated 49 active sessions (`LogMcpNativeTransport: ... active sessions: 49`). Needs an
 > idle timeout / LRU cap in the native transport session map.
+
+> **[x] Found 2026-07-19 (lava-bomb smoke-trail lesson): `manage_effect get_niagara_info` returns
+> module structure but no module VALUES.** FIXED same day, both halves. Readback: each emitter's
+> module entries now carry an `inputs` array (name/type/value) plus a full
+> `rapidIterationParameters` dump (and `systemRapidIterationParameters` for SystemSpawn/Update
+> stacks); values decode float/int/bool/enum/Vec2-4/Position/Quat/Color, unknown structs dump
+> hex, DI/UObject inputs report type-only. Setter: new `set_module_input` action
+> (moduleName+inputName+typed value field) matches existing rapid-iteration constants across all
+> scripts (never constructs names), writes every mirrored store copy, calls
+> RefreshSystemParametersFromEmitter, requests a recompile for static-switch inputs, and
+> receipts with a store re-read. Absence still means "not directly set" — inputs overridden to
+> dynamic inputs/links are out of scope by design (that path needs NiagaraEditor view models).
+> Original repro: `get_niagara_info /Game/VFX/NS_LavaBombTrail` lists emitter/stage/module names
+> (e.g. `InitializeParticle`, `GravityForce`) but none of the module inputs (color, lifetime,
+> sphere radius, spawn rate) — couldn't answer "what is the color set to" over MCP.
+
+> **[ ] Found 2026-07-19 (same session, follow-up): `execute_python` + `NiagaraPythonEmitter`
+> spelunking is editor-fatal.** Two findings while probing for the value readback above:
+> (1) the colon subobject path DOES reach a system-owned emitter from python
+> (`find_object(None, '/Game/VFX/NS_LavaBombTrail.NS_LavaBombTrail:Fountain')` -> NiagaraEmitter),
+> so an eventual implementation has a clean object route; (2) constructing a bare
+> `unreal.NiagaraPythonEmitter()` and calling `get_modules()` / `call_method('Init', ...)` on it
+> ASSERTS (SharedPointer IsValid, inside NiagaraEditor, via PythonScriptPlugin) and kills the
+> editor - the wrapper is only valid inside Epic's versioned-upgrade context. Crash dump:
+> UECC-Windows-3FE55568...0001, 7:41 PM. Reinforces: implement the module-value readback NATIVELY
+> (RapidIterationParameters walk in C++), don't script it; and don't probe undocumented
+> editor-only APIs against a live working session.

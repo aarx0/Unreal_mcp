@@ -828,7 +828,7 @@ inline const TArray<FString>& ManageEffect()
 		TEXT("add_event_generator"), TEXT("add_event_receiver"),
 		TEXT("enable_gpu_simulation"),
 		TEXT("add_simulation_stage"), TEXT("get_niagara_info"),
-		TEXT("validate_niagara_system")
+		TEXT("validate_niagara_system"), TEXT("set_module_input")
 	};
 	return Actions;
 }

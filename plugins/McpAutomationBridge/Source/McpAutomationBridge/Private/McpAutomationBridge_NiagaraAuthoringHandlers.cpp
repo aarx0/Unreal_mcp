@@ -232,6 +232,250 @@ static TArray<TSharedPtr<FJsonValue>> CollectNiagaraModuleStack(UNiagaraScriptSo
     }
     return ModulesArray;
 }
+
+// -----------------------------------------------------------------------------
+// Rapid-iteration parameter readback/write. Direct module-input values (the
+// ones the stack UI edits without a recompile) live as raw bytes in each
+// script's RapidIterationParameters store, named
+//   Constants.[EmitterName - absent in system scripts].[ModuleName].[InputName]
+// (format documented in NiagaraCommon.cpp AliasRapidIterationConstant). Inputs
+// overridden to dynamic inputs or linked parameters leave the store, so absence
+// here means "not a directly-set value", not "no such input".
+// -----------------------------------------------------------------------------
+
+static TSharedPtr<FJsonValue> NiagaraRapidIterationValueToJson(const FNiagaraTypeDefinition& TypeDef, const uint8* Data)
+{
+    if (!Data)
+    {
+        return nullptr;
+    }
+    const FNiagaraTypeDefinition BaseDef = TypeDef.RemoveStaticDef();
+    const float* Floats = reinterpret_cast<const float*>(Data);
+    auto FloatObj = [&](std::initializer_list<const TCHAR*> Fields) -> TSharedPtr<FJsonValue>
+    {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        int32 Index = 0;
+        for (const TCHAR* Field : Fields)
+        {
+            Obj->SetNumberField(Field, Floats[Index++]);
+        }
+        return MakeShared<FJsonValueObject>(Obj);
+    };
+    if (BaseDef == FNiagaraTypeDefinition::GetFloatDef())
+    {
+        return MakeShared<FJsonValueNumber>(Floats[0]);
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetIntDef())
+    {
+        return MakeShared<FJsonValueNumber>(*reinterpret_cast<const int32*>(Data));
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetBoolDef())
+    {
+        return MakeShared<FJsonValueBoolean>(reinterpret_cast<const FNiagaraBool*>(Data)->GetValue());
+    }
+    if (BaseDef.IsEnum())
+    {
+        const int32 EnumValue = *reinterpret_cast<const int32*>(Data);
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetNumberField(TEXT("value"), EnumValue);
+        if (UEnum* Enum = BaseDef.GetEnum())
+        {
+            Obj->SetStringField(TEXT("name"), Enum->GetNameStringByValue(EnumValue));
+        }
+        return MakeShared<FJsonValueObject>(Obj);
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetVec2Def())
+    {
+        return FloatObj({TEXT("x"), TEXT("y")});
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetVec3Def() || BaseDef == FNiagaraTypeDefinition::GetPositionDef())
+    {
+        return FloatObj({TEXT("x"), TEXT("y"), TEXT("z")});
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetVec4Def() || BaseDef == FNiagaraTypeDefinition::GetQuatDef())
+    {
+        return FloatObj({TEXT("x"), TEXT("y"), TEXT("z"), TEXT("w")});
+    }
+    if (BaseDef == FNiagaraTypeDefinition::GetColorDef())
+    {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetNumberField(TEXT("r"), Floats[0]);
+        Obj->SetNumberField(TEXT("g"), Floats[1]);
+        Obj->SetNumberField(TEXT("b"), Floats[2]);
+        Obj->SetNumberField(TEXT("a"), Floats[3]);
+        return MakeShared<FJsonValueObject>(Obj);
+    }
+    // Unknown struct type: report the raw bytes so nothing is dropped silently.
+    TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+    Obj->SetStringField(TEXT("typeName"), TypeDef.GetName());
+    Obj->SetStringField(TEXT("bytesHex"), BytesToHex(Data, TypeDef.GetSize()));
+    return MakeShared<FJsonValueObject>(Obj);
+}
+
+// Splits "Constants.[Emitter.]Module.Input" for one emitter's view. Names scoped
+// to a DIFFERENT emitter (system scripts hold every emitter's emitter-stage
+// values) return false, as do non-Constants names. OutHadEmitterPrefix reports
+// whether the name carried this emitter's scope segment.
+static bool ParseRapidIterationConstantName(const FString& FullName, const FString& EmitterName,
+    const TSet<FString>& AllEmitterNamesLower, FString& OutModule, FString& OutInput, bool& OutHadEmitterPrefix)
+{
+    static const FString ConstantsPrefix = TEXT("Constants.");
+    OutHadEmitterPrefix = false;
+    if (!FullName.StartsWith(ConstantsPrefix))
+    {
+        return false;
+    }
+    TArray<FString> Parts;
+    FullName.RightChop(ConstantsPrefix.Len()).ParseIntoArray(Parts, TEXT("."), true);
+    int32 ModuleIdx = 0;
+    if (Parts.Num() > 0 && AllEmitterNamesLower.Contains(Parts[0].ToLower()))
+    {
+        if (!Parts[0].Equals(EmitterName, ESearchCase::IgnoreCase))
+        {
+            return false;
+        }
+        ModuleIdx = 1;
+        OutHadEmitterPrefix = true;
+    }
+    if (Parts.Num() < ModuleIdx + 2)
+    {
+        return false;
+    }
+    OutModule = Parts[ModuleIdx];
+    TArray<FString> InputParts(Parts.GetData() + ModuleIdx + 1, Parts.Num() - ModuleIdx - 1);
+    OutInput = FString::Join(InputParts, TEXT("."));
+    return true;
+}
+
+// Every script whose store can hold values for this system/emitter pair.
+// Emitter scripts first so their copies win the dedup over the merged copies
+// in the system spawn/update scripts.
+static void GatherNiagaraScriptsForRapidIteration(UNiagaraSystem* System,
+    MCP_NIAGARA_EMITTER_DATA_TYPE* EmData, TArray<UNiagaraScript*>& OutScripts)
+{
+    if (EmData)
+    {
+        EmData->GetScripts(OutScripts, false);
+    }
+    if (System)
+    {
+        OutScripts.Add(System->GetSystemSpawnScript());
+        OutScripts.Add(System->GetSystemUpdateScript());
+    }
+    OutScripts.RemoveAll([](UNiagaraScript* Script) { return Script == nullptr; });
+}
+
+// Full rapid-iteration dump for one emitter (or the standalone-emitter asset
+// when System is null). Also fills a lowercased module-name → inputs map so the
+// module-stack entries can carry their values. bRequireEmitterPrefix keeps
+// system-scoped names (no emitter segment) out of per-emitter dumps when the
+// system scripts are in the gather set.
+static TArray<TSharedPtr<FJsonValue>> CollectNiagaraRapidIterationValues(
+    UNiagaraSystem* System, MCP_NIAGARA_EMITTER_DATA_TYPE* EmData,
+    const FString& EmitterName, const TSet<FString>& AllEmitterNamesLower,
+    bool bRequireEmitterPrefix,
+    TMap<FString, TArray<TSharedPtr<FJsonValue>>>* OutInputsByModule)
+{
+    TArray<TSharedPtr<FJsonValue>> Entries;
+    TArray<UNiagaraScript*> Scripts;
+    GatherNiagaraScriptsForRapidIteration(System, EmData, Scripts);
+    TSet<FString> SeenNames;
+    for (UNiagaraScript* Script : Scripts)
+    {
+        for (const FNiagaraVariableWithOffset& Var : Script->RapidIterationParameters.ReadParameterVariables())
+        {
+            const FString FullName = Var.GetName().ToString();
+            FString ModuleName, InputName;
+            bool bHadEmitterPrefix = false;
+            if (!ParseRapidIterationConstantName(FullName, EmitterName, AllEmitterNamesLower, ModuleName, InputName, bHadEmitterPrefix)
+                || (bRequireEmitterPrefix && !bHadEmitterPrefix)
+                || SeenNames.Contains(FullName))
+            {
+                continue;
+            }
+            SeenNames.Add(FullName);
+            const FNiagaraTypeDefinition& TypeDef = Var.GetType();
+            TSharedPtr<FJsonValue> ValueJson;
+            if (!TypeDef.IsDataInterface() && !TypeDef.IsUObject() && Var.Offset != INDEX_NONE)
+            {
+                ValueJson = NiagaraRapidIterationValueToJson(TypeDef,
+                    Script->RapidIterationParameters.GetParameterData(Var.Offset, TypeDef));
+            }
+            TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+            Entry->SetStringField(TEXT("name"), FullName);
+            Entry->SetStringField(TEXT("module"), ModuleName);
+            Entry->SetStringField(TEXT("input"), InputName);
+            Entry->SetStringField(TEXT("type"), TypeDef.GetName());
+            Entry->SetStringField(TEXT("script"), StaticEnum<ENiagaraScriptUsage>()->GetNameStringByValue(static_cast<int64>(Script->GetUsage())));
+            if (ValueJson.IsValid())
+            {
+                Entry->SetField(TEXT("value"), ValueJson);
+            }
+            if (TypeDef.IsStatic())
+            {
+                Entry->SetBoolField(TEXT("isStaticSwitch"), true);
+            }
+            Entries.Add(MakeShared<FJsonValueObject>(Entry));
+            if (OutInputsByModule)
+            {
+                TSharedPtr<FJsonObject> InputObj = MakeShared<FJsonObject>();
+                InputObj->SetStringField(TEXT("name"), InputName);
+                InputObj->SetStringField(TEXT("type"), TypeDef.GetName());
+                if (ValueJson.IsValid())
+                {
+                    InputObj->SetField(TEXT("value"), ValueJson);
+                }
+                OutInputsByModule->FindOrAdd(ModuleName.ToLower()).Add(MakeShared<FJsonValueObject>(InputObj));
+            }
+        }
+    }
+    return Entries;
+}
+
+// Attaches per-module "inputs" arrays (from CollectNiagaraRapidIterationValues)
+// onto the module-stack entries returned by CollectNiagaraModuleStack.
+static void AttachModuleInputs(TArray<TSharedPtr<FJsonValue>>& Modules,
+    const TMap<FString, TArray<TSharedPtr<FJsonValue>>>& InputsByModule)
+{
+    for (const TSharedPtr<FJsonValue>& ModuleVal : Modules)
+    {
+        TSharedPtr<FJsonObject> ModuleObj = ModuleVal->AsObject();
+        FString ModuleName;
+        if (!ModuleObj.IsValid() || !ModuleObj->TryGetStringField(TEXT("name"), ModuleName))
+        {
+            continue;
+        }
+        if (const TArray<TSharedPtr<FJsonValue>>* Inputs = InputsByModule.Find(ModuleName.ToLower()))
+        {
+            ModuleObj->SetArrayField(TEXT("inputs"), *Inputs);
+        }
+    }
+}
+
+// Lowercased handle + unique names of every emitter in the system: the emitter-
+// scope tokens that can appear after "Constants." in rapid-iteration names.
+static TSet<FString> CollectEmitterNamesLower(UNiagaraSystem* System)
+{
+    TSet<FString> Names;
+    if (!System)
+    {
+        return Names;
+    }
+    for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+    {
+        Names.Add(Handle.GetName().ToString().ToLower());
+        #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+        UNiagaraEmitter* Em = Handle.GetInstance().Emitter;
+        #else
+        UNiagaraEmitter* Em = Handle.GetInstance();
+        #endif
+        if (Em)
+        {
+            Names.Add(Em->GetUniqueEmitterName().ToLower());
+        }
+    }
+    return Names;
+}
 #endif
 
 #if WITH_EDITOR
@@ -3115,13 +3359,15 @@ bool McpHandlers::Effect::HandleNiagaraGetNiagaraInfo(UMcpAutomationBridgeSubsys
         InfoObj->SetStringField(TEXT("assetType"), TEXT("System"));
         InfoObj->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
 
+        const TSet<FString> EmitterNamesLower = CollectEmitterNamesLower(System);
+
         TArray<TSharedPtr<FJsonValue>> EmittersArray;
         for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
         {
             TSharedPtr<FJsonObject> EmitterObj = McpHandlerUtils::CreateResultObject();
             EmitterObj->SetStringField(TEXT("name"), Handle.GetName().ToString());
             EmitterObj->SetBoolField(TEXT("enabled"), Handle.GetIsEnabled());
-            
+
             #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
             UNiagaraEmitter* Em = Handle.GetInstance().Emitter;
             #else
@@ -3133,13 +3379,26 @@ bool McpHandlers::Effect::HandleNiagaraGetNiagaraInfo(UMcpAutomationBridgeSubsys
                 if (EmData)
                 {
                     EmitterObj->SetStringField(TEXT("simulationTarget"), EmData->SimTarget == ENiagaraSimTarget::GPUComputeSim ? TEXT("GPU") : TEXT("CPU"));
-                    EmitterObj->SetArrayField(TEXT("modules"), CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource)));
+                    TMap<FString, TArray<TSharedPtr<FJsonValue>>> InputsByModule;
+                    TArray<TSharedPtr<FJsonValue>> RapidIterationEntries = CollectNiagaraRapidIterationValues(
+                        System, EmData, Handle.GetName().ToString(), EmitterNamesLower,
+                        /*bRequireEmitterPrefix=*/true, &InputsByModule);
+                    TArray<TSharedPtr<FJsonValue>> Modules = CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource));
+                    AttachModuleInputs(Modules, InputsByModule);
+                    EmitterObj->SetArrayField(TEXT("modules"), Modules);
+                    EmitterObj->SetArrayField(TEXT("rapidIterationParameters"), RapidIterationEntries);
                 }
             }
 
             EmittersArray.Add(MakeShared<FJsonValueObject>(EmitterObj));
         }
         InfoObj->SetArrayField(TEXT("emitters"), EmittersArray);
+
+        // System-stage module values (SystemSpawn/SystemUpdate stacks): the
+        // system scripts' non-emitter-scoped rapid-iteration parameters.
+        InfoObj->SetArrayField(TEXT("systemRapidIterationParameters"),
+            CollectNiagaraRapidIterationValues(System, nullptr, FString(), EmitterNamesLower,
+                /*bRequireEmitterPrefix=*/false, nullptr));
 
         // User parameters
         FNiagaraUserRedirectionParameterStore& UserStore = System->GetExposedParameters();
@@ -3179,12 +3438,22 @@ bool McpHandlers::Effect::HandleNiagaraGetNiagaraInfo(UMcpAutomationBridgeSubsys
     {
         InfoObj->SetStringField(TEXT("assetType"), TEXT("Emitter"));
         InfoObj->SetStringField(TEXT("name"), Emitter->GetName());
-        
+
         MCP_NIAGARA_EMITTER_DATA_TYPE* EmData = MCP_GET_LATEST_EMITTER_DATA(Emitter);
         if (EmData)
         {
             InfoObj->SetStringField(TEXT("simulationTarget"), EmData->SimTarget == ENiagaraSimTarget::GPUComputeSim ? TEXT("GPU") : TEXT("CPU"));
-            InfoObj->SetArrayField(TEXT("modules"), CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource)));
+            const FString UniqueName = Emitter->GetUniqueEmitterName();
+            TSet<FString> EmitterNamesLower;
+            EmitterNamesLower.Add(UniqueName.ToLower());
+            TMap<FString, TArray<TSharedPtr<FJsonValue>>> InputsByModule;
+            TArray<TSharedPtr<FJsonValue>> RapidIterationEntries = CollectNiagaraRapidIterationValues(
+                nullptr, EmData, UniqueName, EmitterNamesLower,
+                /*bRequireEmitterPrefix=*/false, &InputsByModule);
+            TArray<TSharedPtr<FJsonValue>> Modules = CollectNiagaraModuleStack(Cast<UNiagaraScriptSource>(EmData->GraphSource));
+            AttachModuleInputs(Modules, InputsByModule);
+            InfoObj->SetArrayField(TEXT("modules"), Modules);
+            InfoObj->SetArrayField(TEXT("rapidIterationParameters"), RapidIterationEntries);
         }
     }
 
@@ -3268,6 +3537,370 @@ bool McpHandlers::Effect::HandleNiagaraValidateNiagaraSystem(UMcpAutomationBridg
     Result->SetObjectField(TEXT("validationResult"), ValidationResult);
     Result->SetStringField(TEXT("message"), bIsValid ? TEXT("System is valid.") : TEXT("System has validation errors."));
     S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Validation complete."), Result);
+    return true;
+#else
+    S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));
+    return true;
+#endif
+}
+
+bool McpHandlers::Effect::HandleNiagaraSetModuleInput(UMcpAutomationBridgeSubsystem& S,
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if WITH_EDITOR
+    MCP_NIAGARA_AUTHORING_PREAMBLE();
+
+    const FString TargetPath = AssetPath.IsEmpty() ? SystemPath : AssetPath;
+    if (TargetPath.IsEmpty())
+    {
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'assetPath' or 'systemPath'."), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+    const FString ModuleName = GetJsonStringField(Payload, TEXT("moduleName"));
+    const FString InputName = GetJsonStringField(Payload, TEXT("inputName"));
+    // No identifier-charset validation here: these only MATCH against existing
+    // store names (stock module inputs legitimately contain spaces).
+    if (ModuleName.IsEmpty() || InputName.IsEmpty())
+    {
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Missing 'moduleName' or 'inputName'."), TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
+
+    if (!UEditorAssetLibrary::DoesAssetExist(TargetPath))
+    {
+        S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Niagara asset not found: %s"), *TargetPath), TEXT("ASSET_NOT_FOUND"));
+        return true;
+    }
+    UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *TargetPath);
+    UNiagaraEmitter* StandaloneEmitter = System ? nullptr : LoadObject<UNiagaraEmitter>(nullptr, *TargetPath);
+    if (!System && !StandaloneEmitter)
+    {
+        S.SendAutomationError(RequestingSocket, RequestId, TEXT("Could not load Niagara asset."), TEXT("ASSET_NOT_FOUND"));
+        return true;
+    }
+
+    // (emitter scope, emitter data) contexts whose scripts are searched.
+    struct FSearchContext
+    {
+        FString EmitterName;
+        MCP_NIAGARA_EMITTER_DATA_TYPE* EmData = nullptr;
+    };
+    TArray<FSearchContext> Contexts;
+    TSet<FString> EmitterNamesLower;
+    if (System)
+    {
+        EmitterNamesLower = CollectEmitterNamesLower(System);
+        for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+        {
+            if (!EmitterName.IsEmpty() && !Handle.GetName().ToString().Equals(EmitterName, ESearchCase::IgnoreCase))
+            {
+                continue;
+            }
+            #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+            UNiagaraEmitter* Em = Handle.GetInstance().Emitter;
+            #else
+            UNiagaraEmitter* Em = Handle.GetInstance();
+            #endif
+            if (Em)
+            {
+                Contexts.Add({Handle.GetName().ToString(), MCP_GET_LATEST_EMITTER_DATA(Em)});
+            }
+        }
+        if (!EmitterName.IsEmpty() && Contexts.Num() == 0)
+        {
+            S.SendAutomationError(RequestingSocket, RequestId, FString::Printf(TEXT("Emitter '%s' not found."), *EmitterName), TEXT("EMITTER_NOT_FOUND"));
+            return true;
+        }
+        // System-stage modules (no emitter scope in the constant name).
+        Contexts.Add({FString(), nullptr});
+    }
+    else
+    {
+        const FString UniqueName = StandaloneEmitter->GetUniqueEmitterName();
+        EmitterNamesLower.Add(UniqueName.ToLower());
+        Contexts.Add({UniqueName, MCP_GET_LATEST_EMITTER_DATA(StandaloneEmitter)});
+    }
+
+    // One matched input may live in several stores (emitter script + merged
+    // system-script copy); all of them get the write so none goes stale.
+    struct FMatch
+    {
+        UNiagaraScript* Script = nullptr;
+        FNiagaraVariable Var;
+        FString EmitterScope;
+    };
+    TArray<FMatch> Matches;
+    TSet<FString> CandidateInputs;   // inputs seen on the requested module, for the miss message
+    TSet<FString> CandidateModules;  // all module names seen, for the miss message
+    for (const FSearchContext& Ctx : Contexts)
+    {
+        TArray<UNiagaraScript*> Scripts;
+        GatherNiagaraScriptsForRapidIteration(System, Ctx.EmData, Scripts);
+        for (UNiagaraScript* Script : Scripts)
+        {
+            for (const FNiagaraVariableWithOffset& Var : Script->RapidIterationParameters.ReadParameterVariables())
+            {
+                FString FoundModule, FoundInput;
+                bool bHadEmitterPrefix = false;
+                if (!ParseRapidIterationConstantName(Var.GetName().ToString(), Ctx.EmitterName, EmitterNamesLower, FoundModule, FoundInput, bHadEmitterPrefix))
+                {
+                    continue;
+                }
+                // A system-script gather runs per context; keep each name in
+                // the scope it belongs to so contexts don't double-match.
+                if (System && Ctx.EmitterName.IsEmpty() != !bHadEmitterPrefix)
+                {
+                    continue;
+                }
+                CandidateModules.Add(FoundModule);
+                if (!FoundModule.Equals(ModuleName, ESearchCase::IgnoreCase))
+                {
+                    continue;
+                }
+                CandidateInputs.Add(FoundInput);
+                if (!FoundInput.Equals(InputName, ESearchCase::IgnoreCase))
+                {
+                    continue;
+                }
+                Matches.Add({Script, FNiagaraVariable(Var.GetType(), Var.GetName()), Ctx.EmitterName});
+            }
+        }
+    }
+
+    if (Matches.Num() == 0)
+    {
+        const bool bModuleSeen = CandidateInputs.Num() > 0;
+        const FString Available = FString::Join(bModuleSeen ? CandidateInputs.Array() : CandidateModules.Array(), TEXT(", "));
+        S.SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("No directly-set rapid-iteration value for module '%s' input '%s'. %s: %s. (Inputs overridden to dynamic inputs or linked parameters have no directly-set value.)"),
+                *ModuleName, *InputName,
+                bModuleSeen ? TEXT("Available inputs on that module") : TEXT("Modules with directly-set values"),
+                Available.IsEmpty() ? TEXT("<none>") : *Available),
+            TEXT("PARAM_NOT_FOUND"));
+        return true;
+    }
+
+    // Same full constant name in several emitters (no emitterName given) is
+    // ambiguous; the same name in several SCRIPTS is the mirrored-copy case.
+    TSet<FString> MatchedScopes;
+    for (const FMatch& M : Matches)
+    {
+        MatchedScopes.Add(M.EmitterScope);
+    }
+    if (MatchedScopes.Num() > 1)
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Input '%s' of module '%s' exists in multiple scopes (%s). Pass 'emitterName' to pick one."),
+                *InputName, *ModuleName, *FString::Join(MatchedScopes.Array(), TEXT(", "))),
+            TEXT("AMBIGUOUS_TARGET"));
+        return true;
+    }
+
+    const FNiagaraTypeDefinition TypeDef = Matches[0].Var.GetType();
+    const FNiagaraTypeDefinition BaseDef = TypeDef.RemoveStaticDef();
+    TArray<uint8> Bytes;
+    Bytes.SetNumZeroed(TypeDef.GetSize());
+
+    auto TypeError = [&](const TCHAR* Expected)
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Input '%s' has type '%s' — send %s."), *InputName, *TypeDef.GetName(), Expected),
+            TEXT("VALUE_TYPE_MISMATCH"));
+    };
+    auto GetVectorComponents = [&](int32 Count, float* Out) -> bool
+    {
+        const TSharedPtr<FJsonObject>* Obj = nullptr;
+        if (!Payload->TryGetObjectField(TEXT("vectorValue"), Obj) || !Obj || !Obj->IsValid())
+        {
+            return false;
+        }
+        static const TCHAR* Axes[4] = {TEXT("x"), TEXT("y"), TEXT("z"), TEXT("w")};
+        for (int32 Index = 0; Index < Count; ++Index)
+        {
+            double Component = 0.0;
+            if (!(*Obj)->TryGetNumberField(Axes[Index], Component))
+            {
+                return false;
+            }
+            Out[Index] = static_cast<float>(Component);
+        }
+        return true;
+    };
+
+    double NumValue = 0.0;
+    if (BaseDef == FNiagaraTypeDefinition::GetFloatDef())
+    {
+        if (!Payload->TryGetNumberField(TEXT("floatValue"), NumValue) && !Payload->TryGetNumberField(TEXT("intValue"), NumValue))
+        {
+            TypeError(TEXT("'floatValue'"));
+            return true;
+        }
+        *reinterpret_cast<float*>(Bytes.GetData()) = static_cast<float>(NumValue);
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetIntDef())
+    {
+        if (!Payload->TryGetNumberField(TEXT("intValue"), NumValue))
+        {
+            TypeError(TEXT("'intValue'"));
+            return true;
+        }
+        *reinterpret_cast<int32*>(Bytes.GetData()) = static_cast<int32>(NumValue);
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetBoolDef())
+    {
+        bool bValue = false;
+        if (!Payload->TryGetBoolField(TEXT("boolValue"), bValue))
+        {
+            TypeError(TEXT("'boolValue'"));
+            return true;
+        }
+        reinterpret_cast<FNiagaraBool*>(Bytes.GetData())->SetValue(bValue);
+    }
+    else if (BaseDef.IsEnum())
+    {
+        UEnum* Enum = BaseDef.GetEnum();
+        FString EnumName;
+        if (Payload->TryGetNumberField(TEXT("intValue"), NumValue))
+        {
+            *reinterpret_cast<int32*>(Bytes.GetData()) = static_cast<int32>(NumValue);
+        }
+        else if (Enum && Payload->TryGetStringField(TEXT("stringValue"), EnumName))
+        {
+            const int64 EnumValue = Enum->GetValueByNameString(EnumName);
+            if (EnumValue == INDEX_NONE)
+            {
+                TArray<FString> ValidNames;
+                for (int32 Index = 0; Index < Enum->NumEnums() - 1; ++Index)
+                {
+                    ValidNames.Add(Enum->GetNameStringByIndex(Index));
+                }
+                S.SendAutomationError(RequestingSocket, RequestId,
+                    FString::Printf(TEXT("'%s' is not a value of enum '%s'. Valid: %s"), *EnumName, *Enum->GetName(), *FString::Join(ValidNames, TEXT(", "))),
+                    TEXT("VALUE_TYPE_MISMATCH"));
+                return true;
+            }
+            *reinterpret_cast<int32*>(Bytes.GetData()) = static_cast<int32>(EnumValue);
+        }
+        else
+        {
+            TypeError(TEXT("'intValue' or 'stringValue' (enum value name)"));
+            return true;
+        }
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetVec2Def())
+    {
+        if (!GetVectorComponents(2, reinterpret_cast<float*>(Bytes.GetData()))) { TypeError(TEXT("'vectorValue' {x,y}")); return true; }
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetVec3Def() || BaseDef == FNiagaraTypeDefinition::GetPositionDef())
+    {
+        if (!GetVectorComponents(3, reinterpret_cast<float*>(Bytes.GetData()))) { TypeError(TEXT("'vectorValue' {x,y,z}")); return true; }
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetVec4Def() || BaseDef == FNiagaraTypeDefinition::GetQuatDef())
+    {
+        if (!GetVectorComponents(4, reinterpret_cast<float*>(Bytes.GetData()))) { TypeError(TEXT("'vectorValue' {x,y,z,w}")); return true; }
+    }
+    else if (BaseDef == FNiagaraTypeDefinition::GetColorDef())
+    {
+        const TSharedPtr<FJsonObject>* Obj = nullptr;
+        if (!Payload->TryGetObjectField(TEXT("colorValue"), Obj) || !Obj || !Obj->IsValid())
+        {
+            TypeError(TEXT("'colorValue' {r,g,b,a}"));
+            return true;
+        }
+        FLinearColor Color = GetColorFromJsonNiagara(*Obj);
+        FMemory::Memcpy(Bytes.GetData(), &Color, sizeof(FLinearColor));
+    }
+    else
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("Input '%s' has unsupported type '%s' (data interfaces, UObjects, and custom structs cannot be set here)."), *InputName, *TypeDef.GetName()),
+            TEXT("UNSUPPORTED_TYPE"));
+        return true;
+    }
+
+    int32 Applied = 0;
+    TArray<FString> Failed;
+    for (const FMatch& M : Matches)
+    {
+        M.Script->Modify();
+        if (M.Script->RapidIterationParameters.SetParameterData(Bytes.GetData(), M.Var))
+        {
+            Applied++;
+        }
+        else
+        {
+            Failed.Add(M.Script->GetPathName());
+        }
+    }
+    if (Failed.Num() > 0)
+    {
+        // Fail-in-place: report what landed and what didn't; no rollback.
+        TSharedPtr<FJsonObject> Details = McpHandlerUtils::CreateResultObject();
+        Details->SetNumberField(TEXT("applied"), Applied);
+        Details->SetStringField(TEXT("failedScripts"), FString::Join(Failed, TEXT(", ")));
+        S.SendAutomationResponse(RequestingSocket, RequestId, false,
+            FString::Printf(TEXT("SetParameterData failed on %d of %d stores."), Failed.Num(), Matches.Num()),
+            Details, TEXT("SET_FAILED"));
+        return true;
+    }
+
+    // The system scripts keep merged copies of emitter-scoped values; the
+    // multi-store write covers same-named copies, this covers aliased ones.
+    const FString MatchedScope = Matches[0].EmitterScope;
+    if (System && !MatchedScope.IsEmpty())
+    {
+        for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+        {
+            if (Handle.GetName().ToString().Equals(MatchedScope, ESearchCase::IgnoreCase))
+            {
+                System->RefreshSystemParametersFromEmitter(Handle);
+                break;
+            }
+        }
+    }
+
+    // Static switches bake at compile time; a plain store write alone would
+    // leave stale compiled code behind.
+    const bool bStaticInput = TypeDef.IsStatic();
+    if (bStaticInput)
+    {
+        if (System)
+        {
+            System->RequestCompile(false);
+        }
+        else
+        {
+#if MCP_HAS_NIAGARA_VERSIONING_APIS
+            UNiagaraSystem::RequestCompileForEmitter(FVersionedNiagaraEmitter(StandaloneEmitter, MCP_GET_EMITTER_VERSION_GUID(StandaloneEmitter)));
+#else
+            UNiagaraSystem::RequestCompileForEmitter(StandaloneEmitter);
+#endif
+        }
+    }
+
+    UObject* AssetToSave = System ? static_cast<UObject*>(System) : StandaloneEmitter;
+    if (bSave)
+    {
+        McpSafeAssetSave(AssetToSave);
+    }
+
+    // Receipt: re-read from the store, not an echo of the request.
+    const uint8* ReadBack = Matches[0].Script->RapidIterationParameters.GetParameterData(Matches[0].Var);
+    McpHandlerUtils::AddVerification(Result, AssetToSave);
+    Result->SetStringField(TEXT("parameterName"), Matches[0].Var.GetName().ToString());
+    Result->SetStringField(TEXT("type"), TypeDef.GetName());
+    Result->SetNumberField(TEXT("storesUpdated"), Applied);
+    if (bStaticInput)
+    {
+        Result->SetBoolField(TEXT("staticRecompileRequested"), true);
+    }
+    if (TSharedPtr<FJsonValue> ValueJson = NiagaraRapidIterationValueToJson(TypeDef, ReadBack))
+    {
+        Result->SetField(TEXT("value"), ValueJson);
+    }
+    Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Set module input '%s.%s'."), *ModuleName, *InputName));
+    S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Module input set."), Result);
     return true;
 #else
     S.SendAutomationError(RequestingSocket, RequestId, TEXT("Editor only."), TEXT("EDITOR_ONLY"));

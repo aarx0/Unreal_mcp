@@ -793,6 +793,28 @@ static void S_ValidateNiagaraSystem(FMcpSchemaBuilder& B)
 	 .Required({TEXT("systemPath")});
 }
 
+static void S_SetModuleInput(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("name"), TEXT("Name identifier."))
+	 .String(TEXT("path"), TEXT("Directory path for asset creation."))
+	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
+	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset.Asset)."))
+	 .String(TEXT("systemPath"), TEXT("Niagara system asset path."))
+	 .String(TEXT("emitterPath"), TEXT("Niagara emitter asset path."))
+	 .String(TEXT("emitterName"), TEXT("Emitter name in a Niagara system."))
+	 .Bool(TEXT("save"), TEXT("Whether to save modified assets."))
+	 .String(TEXT("moduleName"), TEXT("set_module_input: module (function call) name in the stack, e.g. 'GravityForce' — get_niagara_info lists them."))
+	 .String(TEXT("inputName"), TEXT("set_module_input: module input to set, e.g. 'Color' or 'Lifetime Min' — get_niagara_info's per-module 'inputs' lists the directly-set ones."))
+	 .Number(TEXT("floatValue"), TEXT("set_module_input: value for float inputs."))
+	 .Integer(TEXT("intValue"), TEXT("set_module_input: value for int/enum inputs."))
+	 .Bool(TEXT("boolValue"), TEXT("set_module_input: value for bool inputs."))
+	 .Object(TEXT("vectorValue"), TEXT("set_module_input: {x,y[,z[,w]]} for Vec2/Vec3/Position/Vec4/Quaternion inputs."))
+	 .Object(TEXT("colorValue"), TEXT("set_module_input: {r,g,b,a} for LinearColor inputs."))
+	 .String(TEXT("stringValue"), TEXT("set_module_input: enum value name for enum inputs (alternative to intValue)."))
+	 .RequiredAnyOf({TEXT("assetPath"), TEXT("systemPath")})
+	 .Required({TEXT("moduleName"), TEXT("inputName")});
+}
+
 // ─── Classes ─────────────────────────────────────────────────────────────────
 // RequiresEditor is baked into every row (all three implementation TUs are
 // editor-gated). Mutating on the 52 writers; the readers are get_niagara_info,
@@ -940,6 +962,7 @@ MCP_ME_NA_CALL(EnableGpuSimulation, "enable_gpu_simulation", McpHandlers::Effect
 MCP_ME_NA_CALL(AddSimulationStage, "add_simulation_stage", McpHandlers::Effect::HandleNiagaraAddSimulationStage, EMcpCallFlags::Mutating)
 MCP_ME_NA_CALL(GetNiagaraInfo, "get_niagara_info", McpHandlers::Effect::HandleNiagaraGetNiagaraInfo, EMcpCallFlags::None)
 MCP_ME_NA_CALL(ValidateNiagaraSystem, "validate_niagara_system", McpHandlers::Effect::HandleNiagaraValidateNiagaraSystem, EMcpCallFlags::None)
+MCP_ME_NA_CALL(SetModuleInput, "set_module_input", McpHandlers::Effect::HandleNiagaraSetModuleInput, EMcpCallFlags::Mutating)
 
 #undef MCP_ME_CALL
 #undef MCP_ME_NA_CALL
@@ -1006,4 +1029,5 @@ void McpRegisterManageEffectCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_AddSimulationStage>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_GetNiagaraInfo>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_ValidateNiagaraSystem>());
+	Registry.RegisterCall(MakeUnique<FMcpCall_ManageEffect_SetModuleInput>());
 }

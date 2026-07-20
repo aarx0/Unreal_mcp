@@ -5708,6 +5708,13 @@
           "description": "add_node: name for a CustomEvent node (nodeType=CustomEvent).",
           "type": "string"
         },
+        "nodes": {
+          "description": "arrange_graph: node GUIDs to lay out as one rigid block — anchored at the scope's current top-left, slid down until it clears unmoved nodes; every node outside the list stays put. Omit to arrange the whole graph.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "nodeType": {
           "description": "create_node: node type — CallFunction, VariableGet/VariableSet, Event, CustomEvent, Cast/CastTo<Class>, InputAxisEvent, a shorthand function (PrintString, Delay, ...), a flow alias (Branch, Sequence, ForLoop, ...), or any K2Node class name.",
           "type": "string"
@@ -6027,6 +6034,10 @@
         "speed": {
           "description": "set_animation_speed: playback speed multiplier.",
           "type": "number"
+        },
+        "splitSharedGetters": {
+          "description": "arrange_graph: before layout, split a VariableGet/Self node whose output feeds several consumers into one copy per consumer (default true; pure reads, semantics-safe — the human idiom). Scoped arranges only split links between in-scope nodes. Response reports gettersSplit + splitNodes.",
+          "type": "boolean"
         },
         "stateMachine": {
           "description": "get_transition_rule_graph: state machine graph name to search; all state machines searched when omitted.",
@@ -6793,7 +6804,8 @@
             "enable_gpu_simulation",
             "add_simulation_stage",
             "get_niagara_info",
-            "validate_niagara_system"
+            "validate_niagara_system",
+            "set_module_input"
           ],
           "type": "string"
         },
@@ -6826,7 +6838,7 @@
           "type": "boolean"
         },
         "boolValue": {
-          "description": "Value for a Bool Niagara parameter.",
+          "description": "set_module_input: value for bool inputs.",
           "type": "boolean"
         },
         "boxSize": {
@@ -6864,21 +6876,7 @@
           "type": "string"
         },
         "colorValue": {
-          "description": "Value when parameterType=Color (r, g, b, a, 0..1).",
-          "properties": {
-            "a": {
-              "type": "number"
-            },
-            "b": {
-              "type": "number"
-            },
-            "g": {
-              "type": "number"
-            },
-            "r": {
-              "type": "number"
-            }
-          },
+          "description": "set_module_input: {r,g,b,a} for LinearColor inputs.",
           "type": "object"
         },
         "deltaTime": {
@@ -6981,7 +6979,7 @@
           "type": "boolean"
         },
         "floatValue": {
-          "description": "Value for a Float/Int Niagara parameter.",
+          "description": "set_module_input: value for float inputs.",
           "type": "number"
         },
         "forceStrength": {
@@ -7000,9 +6998,17 @@
           "description": "particle: capsule shape half-height.",
           "type": "number"
         },
+        "inputName": {
+          "description": "set_module_input: module input to set, e.g. 'Color' or 'Lifetime Min' — get_niagara_info's per-module 'inputs' lists the directly-set ones.",
+          "type": "string"
+        },
         "intensity": {
           "description": "create_dynamic_light: light intensity applied to the light component (default 0, so omitting it yields an invisible light).",
           "type": "number"
+        },
+        "intValue": {
+          "description": "set_module_input: value for int/enum inputs.",
+          "type": "integer"
         },
         "killCondition": {
           "description": "add_kill_particles_module: kill condition (default Age; echoed only -- the module added is always KillParticles).",
@@ -7058,6 +7064,10 @@
         },
         "meshPath": {
           "description": "Mesh asset path.",
+          "type": "string"
+        },
+        "moduleName": {
+          "description": "set_module_input: module (function call) name in the stack, e.g. 'GravityForce' — get_niagara_info lists them.",
           "type": "string"
         },
         "modulePath": {
@@ -7199,6 +7209,10 @@
           "description": "Simulation step count.",
           "type": "integer"
         },
+        "stringValue": {
+          "description": "set_module_input: enum value name for enum inputs (alternative to intValue).",
+          "type": "string"
+        },
         "systemName": {
           "description": "Niagara actor/system label.",
           "type": "string"
@@ -7224,18 +7238,7 @@
           "type": "number"
         },
         "vectorValue": {
-          "description": "Value for a Vector Niagara parameter (x, y, z).",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "z": {
-              "type": "number"
-            }
-          },
+          "description": "set_module_input: {x,y[,z[,w]]} for Vec2/Vec3/Position/Vec4/Quaternion inputs.",
           "type": "object"
         },
         "velocityMode": {

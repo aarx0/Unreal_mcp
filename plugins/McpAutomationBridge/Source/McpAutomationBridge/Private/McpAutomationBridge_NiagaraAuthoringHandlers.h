@@ -81,6 +81,8 @@ bool HandleNiagaraAddSimulationStage(UMcpAutomationBridgeSubsystem& S, const FSt
                                  const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 bool HandleNiagaraGetNiagaraInfo(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                                  const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
+bool HandleNiagaraSetModuleInput(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+                                 const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 bool HandleNiagaraValidateNiagaraSystem(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
                                  const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 
