@@ -53,7 +53,6 @@ bool HandleMaterialGetNodeChain(UMcpAutomationBridgeSubsystem& S, const FString 
 bool HandleMaterialGetConnectedSubgraph(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
 bool HandleMaterialAddMaterialNode(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
 bool HandleMaterialRemoveMaterialNode(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
-bool HandleMaterialSetMaterialParameter(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
 bool HandleMaterialGetMaterialNodeDetails(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
 bool HandleMaterialSetTwoSided(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);
 bool HandleMaterialArrangeGraph(UMcpAutomationBridgeSubsystem& S, const FString &RequestId, const TSharedPtr<FJsonObject> &Payload, FMcpResponseHandle Socket);

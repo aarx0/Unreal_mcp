@@ -158,9 +158,10 @@ static void S_SetAssetProperty(FMcpSchemaBuilder& B)
 
 static void S_GetSourceControlState(FMcpSchemaBuilder& B)
 {
+	// Singular only: the handler reads just assetPath. An assetPaths array used
+	// to pass validation here and then always fail in the handler.
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
-	 .RequiredAnyOf({TEXT("assetPath"), TEXT("assetPaths")});
+	 .Required({TEXT("assetPath")});
 }
 
 static void S_AnalyzeGraph(FMcpSchemaBuilder& B)
@@ -951,14 +952,6 @@ static void S_RebuildMaterial(FMcpSchemaBuilder& B)
 	 .Required({TEXT("assetPath")});
 }
 
-static void S_SetMaterialParameter(FMcpSchemaBuilder& B)
-{
-	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("parameterName"), TEXT("Name of the parameter."))
-	 .String(TEXT("parameterType"), TEXT("set_material_parameter: unused — the action always fails with AMBIGUOUS_ACTION; call set_scalar_parameter_value/set_vector_parameter_value/set_texture_parameter_value instead."))
-	 .Required({TEXT("assetPath"), TEXT("parameterName")});
-}
-
 static void S_GetMaterialNodeDetails(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
@@ -1384,7 +1377,6 @@ MCP_MA_CALL(GetConnectedSubgraph, "get_connected_subgraph", McpHandlers::Asset::
 MCP_MA_CALL(ArrangeGraph, "arrange_graph", McpHandlers::Asset::HandleMaterialArrangeGraph, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(AddMaterialNode, "add_material_node", McpHandlers::Asset::HandleMaterialAddMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(RebuildMaterial, "rebuild_material", McpHandlers::Asset::HandleMaterialCompileMaterial, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
-MCP_MA_CALL(SetMaterialParameter, "set_material_parameter", McpHandlers::Asset::HandleMaterialSetMaterialParameter, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(GetMaterialNodeDetails, "get_material_node_details", McpHandlers::Asset::HandleMaterialGetMaterialNodeDetails, EMcpCallFlags::RequiresEditor)
 MCP_MA_CALL(RemoveMaterialNode, "remove_material_node", McpHandlers::Asset::HandleMaterialRemoveMaterialNode, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
 MCP_MA_CALL(SetTwoSided, "set_two_sided", McpHandlers::Asset::HandleMaterialSetTwoSided, EMcpCallFlags::RequiresEditor | EMcpCallFlags::Mutating)
@@ -1516,7 +1508,6 @@ void McpRegisterManageAssetCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_ArrangeGraph>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_AddMaterialNode>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_RebuildMaterial>());
-	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_SetMaterialParameter>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_GetMaterialNodeDetails>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_RemoveMaterialNode>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAsset_SetTwoSided>());

@@ -1567,9 +1567,6 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysConfigureVehicle(
       ErrorCode = TEXT("ACTOR_NOT_FOUND");
       Resp->SetStringField(TEXT("error"), Message);
     } else {
-      FString VehicleType = TEXT("WheeledVehicle4W");
-      Payload->TryGetStringField(TEXT("vehicleType"), VehicleType);
-
       // An empty request must not create the movement component below.
       const bool bAnyFieldRequested = Payload->HasField(TEXT("wheels")) ||
                                       Payload->HasField(TEXT("engine")) ||
@@ -1982,7 +1979,6 @@ bool McpHandlers::AnimationPhysics::HandleAnimPhysConfigureVehicle(
         }
 
         Resp->SetStringField(TEXT("actorName"), ActorName);
-        Resp->SetStringField(TEXT("vehicleType"), VehicleType);
         Resp->SetBoolField(TEXT("createdMovementComponent"), bCreatedComponent);
         Resp->SetNumberField(TEXT("configuredWheelCount"), ConfiguredWheels);
 

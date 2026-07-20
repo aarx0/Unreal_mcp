@@ -2429,7 +2429,6 @@ static TSharedPtr<FJsonObject> AnimAuthoringSetInterpolationSettings(const TShar
 {
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString AssetPath = NormalizeAnimPath(GetJsonStringField(Params, TEXT("assetPath"), TEXT("")));
-        FString InterpolationType = GetJsonStringField(Params, TEXT("interpolationType"), TEXT("Lerp"));
         float TargetWeightSpeed = static_cast<float>(GetJsonNumberField(Params, TEXT("targetWeightInterpolationSpeed"), 5.0));
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -2573,7 +2572,6 @@ static TSharedPtr<FJsonObject> AnimAuthoringCreateAnimBlueprint(const TSharedPtr
     if (Path.IsEmpty()) { Path = GetJsonStringField(Params, TEXT("path"), TEXT("/Game/Blueprints")); }
     Path = NormalizeAnimPath(Path);
     FString SkeletonPath = GetJsonStringField(Params, TEXT("skeletonPath"), TEXT(""));
-    FString ParentClass = GetJsonStringField(Params, TEXT("parentClass"), TEXT("AnimInstance"));
     bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
 
     if (Name.IsEmpty())

@@ -85,7 +85,10 @@ inline const TArray<FString>& MaterialAuthoring()
 		TEXT("update_custom_expression"), TEXT("get_node_chain"),
 		TEXT("get_connected_subgraph"), TEXT("arrange_graph"),
 		TEXT("add_material_node"),
-		TEXT("rebuild_material"), TEXT("set_material_parameter"),
+		// set_material_parameter retired 2026-07-19: it was a tombstone that
+		// could only return AMBIGUOUS_ACTION (use set_scalar/vector/
+		// texture_parameter_value).
+		TEXT("rebuild_material"),
 		TEXT("get_material_node_details"), TEXT("remove_material_node"),
 		TEXT("set_two_sided")
 	};

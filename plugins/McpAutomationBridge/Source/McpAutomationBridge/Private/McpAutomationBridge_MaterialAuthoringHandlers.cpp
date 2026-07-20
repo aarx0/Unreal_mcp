@@ -4949,43 +4949,6 @@ bool McpHandlers::Asset::HandleMaterialRemoveMaterialNode(
 #endif
 }
 
-bool McpHandlers::Asset::HandleMaterialSetMaterialParameter(
-    UMcpAutomationBridgeSubsystem& S,
-    const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
-    FMcpResponseHandle Socket) {
-#if WITH_EDITOR
-    FString AssetPath, ParameterName, ParameterType;
-    if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty()) {
-      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'assetPath'."), TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-    if (!Payload->TryGetStringField(TEXT("parameterName"), ParameterName) || ParameterName.IsEmpty()) {
-      S.SendAutomationError(Socket, RequestId, TEXT("Missing 'parameterName'."), TEXT("INVALID_ARGUMENT"));
-      return true;
-    }
-    Payload->TryGetStringField(TEXT("parameterType"), ParameterType);
-
-    // SECURITY: Validate assetPath before use (accepts both Materials and Material Functions)
-    FString ValidatedAssetPath = SanitizeProjectRelativePath(AssetPath);
-    if (ValidatedAssetPath.IsEmpty()) {
-      S.SendAutomationError(Socket, RequestId,
-                          FString::Printf(TEXT("Invalid assetPath '%s': contains traversal sequences or invalid root"), *AssetPath),
-                          TEXT("INVALID_PATH"));
-      return true;
-    }
-    AssetPath = ValidatedAssetPath;
-
-    S.SendAutomationError(Socket, RequestId,
-                        TEXT("set_material_parameter is ambiguous. Use set_scalar_parameter_value, set_vector_parameter_value, or set_texture_parameter_value with a material instance path."),
-                        TEXT("AMBIGUOUS_ACTION"));
-    return true;
-#else
-  S.SendAutomationError(Socket, RequestId, TEXT("Editor only."),
-                      TEXT("EDITOR_ONLY"));
-  return true;
-#endif
-}
-
 bool McpHandlers::Asset::HandleMaterialGetMaterialNodeDetails(
     UMcpAutomationBridgeSubsystem& S,
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,

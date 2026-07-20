@@ -100,7 +100,6 @@ static void S_ConfigureVehicle(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("vehicleName"), TEXT("Legacy alias of actorName for configure_vehicle."))
-	 .String(TEXT("vehicleType"), TEXT("configure_vehicle: type label echoed in the response (default WheeledVehicle4W); the movement component is always WheeledVehicleMovementComponent4W."))
 	 .ArrayOfObjects(TEXT("wheels"), TEXT("configure_vehicle: per-wheel configs ({boneName, offset, radius, width, friction})."))
 	 .Object(TEXT("engine"), TEXT("configure_vehicle: engine settings (maxRPM, maxTorque, gears)."))
 	 .Object(TEXT("transmission"), TEXT("configure_vehicle: transmission settings (finalDrive/finalDriveRatio, gearRatios array)."))
@@ -447,7 +446,6 @@ static void S_SetAxisSettings(FMcpSchemaBuilder& B)
 static void S_SetInterpolationSettings(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Existing asset to modify (e.g. the montage for add_montage_section)."))
-	 .String(TEXT("interpolationType"), TEXT("set_interpolation_settings: currently ignored; only targetWeightInterpolationSpeed is applied."))
 	 .Number(TEXT("targetWeightInterpolationSpeed"), TEXT("set_interpolation_settings: blend weight interpolation speed per second (default 5)."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .Required({TEXT("assetPath")});
@@ -480,7 +478,6 @@ static void S_CreateAnimBlueprint(FMcpSchemaBuilder& B)
 	 .String(TEXT("savePath"), TEXT("Path to save the asset."))
 	 .Bool(TEXT("save"), TEXT("Persist the created/modified asset to disk (default true; most authoring actions)."))
 	 .String(TEXT("path"), TEXT("Legacy alias of savePath (create_procedural_animation, create_pose_library, create_montage, create_blend_space_1d/2d, create_aim_offset, create_animation_blueprint, create_control_rig, create_ik_rig, create_ik_retargeter) or of skeletonPath (create_skeleton)."))
-	 .String(TEXT("parentClass"), TEXT("create_animation_blueprint: currently ignored; the AnimBlueprint is always parented to AnimInstance."))
 	 .Required({TEXT("name")});
 }
 
