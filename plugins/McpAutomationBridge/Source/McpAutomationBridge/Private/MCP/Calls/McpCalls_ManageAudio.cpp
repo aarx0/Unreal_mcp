@@ -86,7 +86,7 @@ static void S_PlaySoundAtLocation(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("volume"), TEXT("Volume multiplier (default 1.0)."))
 	 .Number(TEXT("pitch"), TEXT("Audio pitch multiplier (default 1.0)."))
-	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it)."))
+	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0)."))
 	 .String(TEXT("attenuationPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("concurrencyPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Required({TEXT("soundPath")});
@@ -97,7 +97,7 @@ static void S_PlaySound2D(FMcpSchemaBuilder& B)
 	B.String(TEXT("soundPath"), TEXT("Sound asset path."))
 	 .Number(TEXT("volume"), TEXT("Volume multiplier (default 1.0)."))
 	 .Number(TEXT("pitch"), TEXT("Audio pitch multiplier (default 1.0)."))
-	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it)."))
+	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0)."))
 	 .Required({TEXT("soundPath")});
 }
 
@@ -116,7 +116,6 @@ static void S_CreateAmbientSound(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Number(TEXT("volume"), TEXT("Volume multiplier (default 1.0)."))
 	 .Number(TEXT("pitch"), TEXT("Audio pitch multiplier (default 1.0)."))
-	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it)."))
 	 .String(TEXT("attenuationPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("concurrencyPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Required({TEXT("soundPath")});
@@ -131,7 +130,6 @@ static void S_SpawnSoundAtLocation(FMcpSchemaBuilder& B)
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("pitch")).Number(TEXT("yaw")).Number(TEXT("roll")); })
 	 .Number(TEXT("volume"), TEXT("Volume multiplier (default 1.0)."))
 	 .Number(TEXT("pitch"), TEXT("Audio pitch multiplier (default 1.0)."))
-	 .Number(TEXT("startTime"), TEXT("Playback start offset in seconds (default 0; create_ambient_sound/spawn_sound_at_location accept but ignore it)."))
 	 .Required({TEXT("soundPath")});
 }
 
@@ -160,7 +158,7 @@ static void S_SetSoundMixClassOverride(FMcpSchemaBuilder& B)
 	 .String(TEXT("soundClass"), TEXT("Alias of soundClassName (set_sound_mix_class_override/clear_sound_mix_class_override)."))
 	 .Number(TEXT("volume"), TEXT("Volume multiplier (default 1.0)."))
 	 .Number(TEXT("pitch"), TEXT("Audio pitch multiplier (default 1.0)."))
-	 .Number(TEXT("fadeInTime"), TEXT("set_sound_mix_class_override: fade-in seconds for the override (default 1.0); add_mix_modifier accepts but ignores it."))
+	 .Number(TEXT("fadeInTime"), TEXT("set_sound_mix_class_override: fade-in seconds for the override (default 1.0)."))
 	 .Bool(TEXT("applyToChildren"), TEXT("set_sound_mix_class_override/add_mix_modifier: apply the override to child sound classes."))
 	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")})
 	 .RequiredAnyOf({TEXT("soundClassName"), TEXT("soundClass")});
@@ -173,7 +171,7 @@ static void S_ClearSoundMixClassOverride(FMcpSchemaBuilder& B)
 	 .String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("soundClassName"), TEXT("SoundClass asset path or bare asset name."))
 	 .String(TEXT("soundClass"), TEXT("Alias of soundClassName (set_sound_mix_class_override/clear_sound_mix_class_override)."))
-	 .Number(TEXT("fadeOutTime"), TEXT("clear_sound_mix_class_override: fade-out seconds for the override (default 1.0); add_mix_modifier accepts but ignores it."))
+	 .Number(TEXT("fadeOutTime"), TEXT("clear_sound_mix_class_override: fade-out seconds for the override (default 1.0)."))
 	 .RequiredAnyOf({TEXT("mixName"), TEXT("mix"), TEXT("name")})
 	 .RequiredAnyOf({TEXT("soundClassName"), TEXT("soundClass")});
 }
@@ -415,8 +413,6 @@ static void S_AddMixModifier(FMcpSchemaBuilder& B)
 	 .String(TEXT("soundClassPath"), TEXT("Sound class path."))
 	 .Number(TEXT("volumeAdjuster"), TEXT("Sound mix volume adjuster."))
 	 .Number(TEXT("pitchAdjuster"), TEXT("add_mix_modifier: pitch multiplier."))
-	 .Number(TEXT("fadeInTime"), TEXT("set_sound_mix_class_override: fade-in seconds for the override (default 1.0); add_mix_modifier accepts but ignores it."))
-	 .Number(TEXT("fadeOutTime"), TEXT("clear_sound_mix_class_override: fade-out seconds for the override (default 1.0); add_mix_modifier accepts but ignores it."))
 	 .Bool(TEXT("applyToChildren"), TEXT("set_sound_mix_class_override/add_mix_modifier: apply the override to child sound classes."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation. Default true."))
 	 .Required({TEXT("assetPath"), TEXT("soundClassPath")});

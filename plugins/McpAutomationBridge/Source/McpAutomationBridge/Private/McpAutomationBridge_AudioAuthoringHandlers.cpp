@@ -1395,8 +1395,6 @@ static TSharedPtr<FJsonObject> AudioAuthoringAddMixModifier(const TSharedPtr<FJs
         FString SoundClassPath = GetJsonStringField(Params, TEXT("soundClassPath"), TEXT(""));
         float VolumeAdjust = static_cast<float>(GetJsonNumberField(Params, TEXT("volumeAdjuster"), 1.0));
         float PitchAdjust = static_cast<float>(GetJsonNumberField(Params, TEXT("pitchAdjuster"), 1.0));
-        float FadeInTime = static_cast<float>(GetJsonNumberField(Params, TEXT("fadeInTime"), 0.0));
-        float FadeOutTime = static_cast<float>(GetJsonNumberField(Params, TEXT("fadeOutTime"), 0.0));
         bool bApplyToChildren = GetJsonBoolField(Params, TEXT("applyToChildren"), true);
         bool bSave = GetJsonBoolField(Params, TEXT("save"), true);
         
@@ -1417,9 +1415,7 @@ static TSharedPtr<FJsonObject> AudioAuthoringAddMixModifier(const TSharedPtr<FJs
         Adjuster.VolumeAdjuster = VolumeAdjust;
         Adjuster.PitchAdjuster = PitchAdjust;
         Adjuster.bApplyToChildren = bApplyToChildren;
-        // Note: FadeInTime and FadeOutTime are properties of USoundMix, not FSoundClassAdjuster in UE 5.7+
-        // Use Mix->FadeInTime and Mix->FadeOutTime if you need to control mix fade timing
-        
+
 	Mix->SoundClassEffects.Add(Adjuster);
 
 	SaveAudioAsset(Mix, bSave);

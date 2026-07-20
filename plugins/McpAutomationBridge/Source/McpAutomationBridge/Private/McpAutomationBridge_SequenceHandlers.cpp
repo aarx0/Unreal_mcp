@@ -27,6 +27,7 @@
 #include "MovieSceneSection.h"
 #include "MovieSceneSequence.h"
 #include "MovieSceneTrack.h"
+#include "MovieSceneNameableTrack.h"
 #include "UObject/UObjectIterator.h"
 
 // UE 5.0 compatibility: GetTracks() was introduced in UE 5.1, use GetMasterTracks() in 5.0
@@ -426,18 +427,30 @@ bool McpHandlers::Sequence::HandleSequenceSetProperties(
       }
 
       if (bHasPlaybackStart || bHasPlaybackEnd || bHasLengthInFrames) {
+        // Inputs are display-rate frames; the playback range is stored at tick
+        // resolution. Convert like add_keyframe does — raw ints here landed
+        // ~800x short on a default 24000-tick/30fps sequence.
+        const FFrameRate TickResolution = MovieScene->GetTickResolution();
+        const FFrameRate DisplayRate = MovieScene->GetDisplayRate();
+        auto DisplayFramesToTicks = [&](double DisplayFrames) -> FFrameNumber {
+          return FFrameRate::TransformTime(
+                     FFrameTime(FFrameNumber(static_cast<int32>(DisplayFrames))),
+                     DisplayRate, TickResolution)
+              .FloorToFrame();
+        };
+
         TRange<FFrameNumber> ExistingRange = MovieScene->GetPlaybackRange();
         FFrameNumber StartFrame = ExistingRange.GetLowerBoundValue();
         FFrameNumber EndFrame = ExistingRange.GetUpperBoundValue();
 
         if (bHasPlaybackStart)
-          StartFrame = FFrameNumber(static_cast<int32>(PlaybackStartValue));
+          StartFrame = DisplayFramesToTicks(PlaybackStartValue);
         if (bHasPlaybackEnd)
-          EndFrame = FFrameNumber(static_cast<int32>(PlaybackEndValue));
+          EndFrame = DisplayFramesToTicks(PlaybackEndValue);
         else if (bHasLengthInFrames)
           EndFrame =
               StartFrame +
-              FMath::Max<int32>(0, static_cast<int32>(LengthInFramesValue));
+              DisplayFramesToTicks(FMath::Max(0.0, LengthInFramesValue));
 
         if (EndFrame < StartFrame)
           EndFrame = StartFrame;
@@ -455,13 +468,23 @@ bool McpHandlers::Sequence::HandleSequenceSetProperties(
       FrameRateObj->SetNumberField(TEXT("denominator"), FR.Denominator);
       Resp->SetObjectField(TEXT("frameRate"), FrameRateObj);
 
+      // Readback in the same display-rate frames the inputs use; raw tick
+      // values ride alongside for exactness.
+      const FFrameRate RespTickResolution = MovieScene->GetTickResolution();
       TRange<FFrameNumber> Range = MovieScene->GetPlaybackRange();
+      const FFrameNumber StartTicks = Range.GetLowerBoundValue();
+      const FFrameNumber EndTicks = Range.GetUpperBoundValue();
       const double Start =
-          static_cast<double>(Range.GetLowerBoundValue().Value);
-      const double End = static_cast<double>(Range.GetUpperBoundValue().Value);
+          FFrameRate::TransformTime(FFrameTime(StartTicks), RespTickResolution, FR)
+              .AsDecimal();
+      const double End =
+          FFrameRate::TransformTime(FFrameTime(EndTicks), RespTickResolution, FR)
+              .AsDecimal();
       Resp->SetNumberField(TEXT("playbackStart"), Start);
       Resp->SetNumberField(TEXT("playbackEnd"), End);
       Resp->SetNumberField(TEXT("duration"), End - Start);
+      Resp->SetNumberField(TEXT("playbackStartTicks"), StartTicks.Value);
+      Resp->SetNumberField(TEXT("playbackEndTicks"), EndTicks.Value);
       Resp->SetBoolField(TEXT("applied"), bModified);
 
       Subsystem->SendAutomationResponse(Socket, RequestIdArg, true,
@@ -1965,9 +1988,20 @@ bool McpHandlers::Sequence::HandleSequenceAddSection(
   // Create the section
   UMovieSceneSection *NewSection = Track->CreateNewSection();
   if (NewSection) {
-    FFrameRate TickResolution = MovieScene->GetTickResolution();
-    FFrameNumber Start((int32)FMath::RoundToInt(StartFrame));
-    FFrameNumber End((int32)FMath::RoundToInt(EndFrame));
+    // startFrame/endFrame are display-rate frames; section ranges are stored
+    // at tick resolution (raw ints here landed ~800x short).
+    const FFrameRate TickResolution = MovieScene->GetTickResolution();
+    const FFrameRate DisplayRate = MovieScene->GetDisplayRate();
+    const FFrameNumber Start =
+        FFrameRate::TransformTime(
+            FFrameTime(FFrameNumber((int32)FMath::RoundToInt(StartFrame))),
+            DisplayRate, TickResolution)
+            .FloorToFrame();
+    const FFrameNumber End =
+        FFrameRate::TransformTime(
+            FFrameTime(FFrameNumber((int32)FMath::RoundToInt(EndFrame))),
+            DisplayRate, TickResolution)
+            .FloorToFrame();
     NewSection->SetRange(TRange<FFrameNumber>(Start, End));
     Track->AddSection(*NewSection);
     MovieScene->Modify();
@@ -2565,14 +2599,22 @@ bool McpHandlers::Sequence::HandleSequenceAddTrack(
   }
 
   if (NewTrack) {
+#if WITH_EDITORONLY_DATA
+    // trackName sets the display name the sibling track actions match on
+    // (set_track_solo/locked/muted etc. look tracks up by it).
+    if (!TrackName.IsEmpty()) {
+      if (UMovieSceneNameableTrack *Nameable = Cast<UMovieSceneNameableTrack>(NewTrack)) {
+        Nameable->SetDisplayName(FText::FromString(TrackName));
+      }
+    }
+#endif
     Sequence->MarkPackageDirty();
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     Resp->SetBoolField(TEXT("success"), true);
     Resp->SetStringField(TEXT("sequencePath"), SeqPath);
     Resp->SetStringField(TEXT("trackType"), TrackType);
-    Resp->SetStringField(TEXT("trackName"),
-                         TrackName.IsEmpty() ? TrackType : TrackName);
+    Resp->SetStringField(TEXT("trackName"), NewTrack->GetDisplayName().ToString());
     if (!ActorName.IsEmpty()) {
       Resp->SetStringField(TEXT("actorName"), ActorName);
       Resp->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());

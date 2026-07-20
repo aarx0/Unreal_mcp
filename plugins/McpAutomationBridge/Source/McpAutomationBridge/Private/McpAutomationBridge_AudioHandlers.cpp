@@ -92,7 +92,7 @@
 //
 // create_ambient_sound / spawn_sound_at_location:
 //   Payload:  { "soundPath": string, "location"?: [x,y,z], "rotation"?: [p,y,r],
-//               "volume"?: number, "pitch"?: number, "startTime"?: number,
+//               "volume"?: number, "pitch"?: number,
 //               "attenuationPath"?: string, "concurrencyPath"?: string }
 //   Response: { "componentName": string }
 //
@@ -1139,7 +1139,7 @@ bool McpHandlers::Audio::HandleAudioPlaySoundAttached(UMcpAutomationBridgeSubsys
 // Spawns a persistent ambient sound component at a world location.
 //
 // Payload:  { "soundPath": string, "location"?: [x,y,z], "volume"?: number,
-//             "pitch"?: number, "startTime"?: number,
+//             "pitch"?: number,
 //             "attenuationPath"?: string, "concurrencyPath"?: string }
 // Response: { "componentName": string }
 // -------------------------------------------------------------------------
@@ -1170,8 +1170,6 @@ bool McpHandlers::Audio::HandleAudioCreateAmbientSound(UMcpAutomationBridgeSubsy
   Payload->TryGetNumberField(TEXT("volume"), Volume);
   double Pitch = 1.0;
   Payload->TryGetNumberField(TEXT("pitch"), Pitch);
-  double StartTime = 0.0;
-  Payload->TryGetNumberField(TEXT("startTime"), StartTime);
 
   USoundAttenuation *Attenuation = nullptr;
   FString AttenPath;
@@ -1251,7 +1249,7 @@ bool McpHandlers::Audio::HandleAudioCreateAmbientSound(UMcpAutomationBridgeSubsy
 // but with explicit action name and rotation support).
 //
 // Payload:  { "soundPath": string, "location"?: [x,y,z], "rotation"?: [p,y,r],
-//             "volume"?: number, "pitch"?: number, "startTime"?: number }
+//             "volume"?: number, "pitch"?: number }
 // Response: { "componentName": string, "componentPath": string }
 // -------------------------------------------------------------------------
 bool McpHandlers::Audio::HandleAudioSpawnSoundAtLocation(UMcpAutomationBridgeSubsystem& S,
@@ -1285,8 +1283,6 @@ bool McpHandlers::Audio::HandleAudioSpawnSoundAtLocation(UMcpAutomationBridgeSub
   Payload->TryGetNumberField(TEXT("volume"), Volume);
   double Pitch = 1.0;
   Payload->TryGetNumberField(TEXT("pitch"), Pitch);
-  double StartTime = 0.0;
-  Payload->TryGetNumberField(TEXT("startTime"), StartTime);
 
   if (!GEditor)
   {
@@ -1839,12 +1835,12 @@ bool McpHandlers::Audio::HandleAudioCreateAudioComponent(UMcpAutomationBridgeSub
   }
 
   if (AudioComp) {
-    FString VolumeStr;
-    if (Payload->TryGetStringField(TEXT("volume"), VolumeStr))
-      AudioComp->SetVolumeMultiplier(FCString::Atof(*VolumeStr));
-    FString PitchStr;
-    if (Payload->TryGetStringField(TEXT("pitch"), PitchStr))
-      AudioComp->SetPitchMultiplier(FCString::Atof(*PitchStr));
+    double Volume = 0.0;
+    if (Payload->TryGetNumberField(TEXT("volume"), Volume))
+      AudioComp->SetVolumeMultiplier(static_cast<float>(Volume));
+    double Pitch = 0.0;
+    if (Payload->TryGetNumberField(TEXT("pitch"), Pitch))
+      AudioComp->SetPitchMultiplier(static_cast<float>(Pitch));
     AudioComp->Activate(true);
 
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
