@@ -134,6 +134,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property to set."))
 	 .String(TEXT("propertyPath"), TEXT("Dotted path to a scalar leaf (alternative to propertyName)."))
+	 .Object(TEXT("properties"), TEXT("set_component_property: map of property name to raw JSON value, applied fail-in-place (alternative to a single propertyName + typed value field)."))
 	 // Discriminated value: populate exactly ONE typed field. Each field is both a
 	 // type tag and a real schema type, so it transmits correctly -- vectorValue
 	 // arrives as a real object, never a stringified blob. The server cross-checks
@@ -141,7 +142,7 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	 .Bool(TEXT("boolValue"), TEXT("Set a bool property."))
 	 .Integer(TEXT("intValue"), TEXT("Set an integer property."))
 	 .Number(TEXT("floatValue"), TEXT("Set a float/double property."))
-	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum property."))
+	 .String(TEXT("stringValue"), TEXT("Set a string / name / text / enum / object-path property."))
 	 .Object(TEXT("vectorValue"), TEXT("Set an FVector property (x, y, z)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("x")).Number(TEXT("y")).Number(TEXT("z")).Required({TEXT("x"), TEXT("y"), TEXT("z")}); })
 	 .Required({TEXT("actorName"), TEXT("componentName")});

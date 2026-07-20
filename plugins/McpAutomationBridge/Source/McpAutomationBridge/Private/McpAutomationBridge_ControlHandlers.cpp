@@ -1156,23 +1156,34 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
   if (PropertyName.IsEmpty())
     Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
-  if (PropertyName.IsEmpty()) {
+  const TSharedPtr<FJsonObject> *PropertiesMap = nullptr;
+  Payload->TryGetObjectField(TEXT("properties"), PropertiesMap);
+  const bool bMapMode = PropertiesMap && PropertiesMap->IsValid();
+  if (PropertyName.IsEmpty() && !bMapMode) {
     S.SendAutomationError(Socket, RequestId,
-                          TEXT("propertyName (or propertyPath) required"),
+                          TEXT("propertyName (or propertyPath), or a 'properties' map, required"),
                           TEXT("INVALID_ARGUMENT"));
     return true;
   }
+  if (!PropertyName.IsEmpty() && bMapMode) {
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("send either propertyName or a 'properties' map, not both"),
+                          TEXT("AMBIGUOUS_VALUE"));
+    return true;
+  }
 
-  // Discriminated value: exactly one typed field carries both the value and the
-  // caller's intended type. Each field is a real schema type, so it transmits
-  // correctly (no stringified blobs) — vectorValue arrives as a real object.
+  // Discriminated value (single-property mode): exactly one typed field carries
+  // both the value and the caller's intended type. Each field is a real schema
+  // type, so it transmits correctly (no stringified blobs) — vectorValue
+  // arrives as a real object. Map mode carries raw JSON values instead; the
+  // strict importer type-checks those.
   struct FTypedValue {
     const TCHAR *Field;
     const TCHAR *Kind;
     TSharedPtr<FJsonValue> Json;
   };
   TArray<FTypedValue> Present;
-  {
+  if (!bMapMode) {
     bool B = false;
     double N = 0.0;
     FString Str;
@@ -1187,24 +1198,23 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
       Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(Str)});
     if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())
       Present.Add({TEXT("vectorValue"), TEXT("vector"), MakeShared<FJsonValueObject>(*Obj)});
-  }
 
-  if (Present.Num() == 0) {
-    S.SendAutomationError(Socket, RequestId,
-                          TEXT("set exactly one typed value field: boolValue, intValue, " "floatValue, stringValue, or vectorValue"),
-                          TEXT("NO_CHANGES_REQUESTED"));
-    return true;
+    if (Present.Num() == 0) {
+      S.SendAutomationError(Socket, RequestId,
+                            TEXT("set exactly one typed value field: boolValue, intValue, " "floatValue, stringValue, or vectorValue"),
+                            TEXT("NO_CHANGES_REQUESTED"));
+      return true;
+    }
+    if (Present.Num() > 1) {
+      TArray<FString> Names;
+      for (const FTypedValue &V : Present)
+        Names.Add(V.Field);
+      S.SendAutomationError(Socket, RequestId,
+                            *FString::Printf(TEXT("set exactly one typed value field, got %d: %s"), Present.Num(), *FString::Join(Names, TEXT(", "))),
+                            TEXT("AMBIGUOUS_VALUE"));
+      return true;
+    }
   }
-  if (Present.Num() > 1) {
-    TArray<FString> Names;
-    for (const FTypedValue &V : Present)
-      Names.Add(V.Field);
-    S.SendAutomationError(Socket, RequestId,
-                          *FString::Printf(TEXT("set exactly one typed value field, got %d: %s"), Present.Num(), *FString::Join(Names, TEXT(", "))),
-                          TEXT("AMBIGUOUS_VALUE"));
-    return true;
-  }
-  const FTypedValue &Value = Present[0];
 
   AActor *Found = S.FindActorByName(TargetName);
   if (!Found) {
@@ -1222,6 +1232,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
 
   // Cross-check helper: the caller's intended type (which typed field they set)
   // must match a property's real reflected type. A mismatch fails loud.
+  // "string" includes object references set by asset path — parity with
+  // inspect set_property, whose docs both actions share.
   auto MatchesKind = [](FProperty *P, const FString &Kind) -> bool {
     if (Kind == TEXT("bool"))
       return CastField<FBoolProperty>(P) != nullptr;
@@ -1234,7 +1246,7 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
     if (Kind == TEXT("string"))
       return CastField<FStrProperty>(P) || CastField<FNameProperty>(P) ||
              CastField<FTextProperty>(P) || CastField<FEnumProperty>(P) ||
-             CastField<FByteProperty>(P);
+             CastField<FByteProperty>(P) || CastField<FObjectPropertyBase>(P);
     if (Kind == TEXT("vector")) {
       FStructProperty *SP = CastField<FStructProperty>(P);
       return SP && SP->Struct == TBaseStructure<FVector>::Get();
@@ -1242,71 +1254,93 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
     return false;
   };
 
-  const FString ValueKind(Value.Kind);
-  TargetComponent->Modify();
-  bool bApplied = false;
-
-  // Special-cased setters handled BEFORE generic reflection: SimulatePhysics
-  // lives inside BodyInstance (no direct FProperty), and Mobility needs component
-  // re-registration -- both must go through their real setters.
-  if (PropertyName.Equals(TEXT("SimulatePhysics"), ESearchCase::IgnoreCase) ||
-      PropertyName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase)) {
-    UPrimitiveComponent *Prim = Cast<UPrimitiveComponent>(TargetComponent);
-    if (!Prim || ValueKind != TEXT("bool")) {
-      S.SendAutomationError(Socket, RequestId,
-                            TEXT("SimulatePhysics expects boolValue on a primitive component"),
-                            TEXT("VALUE_TYPE_MISMATCH"));
-      return true;
+  // One property: special-cased setters (SimulatePhysics lives inside
+  // BodyInstance with no direct FProperty; Mobility needs component
+  // re-registration) then generic reflection. Empty return = success.
+  auto ApplyOne = [&](const FString &InName, const TSharedPtr<FJsonValue> &InJson) -> FString {
+    if (InName.Equals(TEXT("SimulatePhysics"), ESearchCase::IgnoreCase) ||
+        InName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase)) {
+      UPrimitiveComponent *Prim = Cast<UPrimitiveComponent>(TargetComponent);
+      bool bSim = false;
+      if (!Prim || !InJson->TryGetBool(bSim))
+        return TEXT("SimulatePhysics expects a bool value on a primitive component");
+      Prim->SetSimulatePhysics(bSim);
+      return FString();
     }
-    bool bSim = false;
-    Value.Json->TryGetBool(bSim);
-    Prim->SetSimulatePhysics(bSim);
-    bApplied = true;
-  } else if (PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase)) {
-    USceneComponent *SC = Cast<USceneComponent>(TargetComponent);
-    if (!SC || ValueKind != TEXT("string")) {
-      S.SendAutomationError(Socket, RequestId,
-                            TEXT("Mobility expects stringValue (Static, Stationary, or Movable) on " "a scene component"),
-                            TEXT("VALUE_TYPE_MISMATCH"));
-      return true;
+    if (InName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase)) {
+      USceneComponent *SC = Cast<USceneComponent>(TargetComponent);
+      FString MobStr;
+      if (!SC || !InJson->TryGetString(MobStr))
+        return TEXT("Mobility expects a string value (Static, Stationary, or Movable) on a scene component");
+      const int64 MobVal =
+          StaticEnum<EComponentMobility::Type>()->GetValueByNameString(MobStr);
+      if (MobVal == INDEX_NONE)
+        return FString::Printf(TEXT("Mobility: '%s' is not valid (Static, Stationary, Movable)"), *MobStr);
+      SC->SetMobility((EComponentMobility::Type)MobVal);
+      return FString();
     }
-    const int64 MobVal =
-        StaticEnum<EComponentMobility::Type>()->GetValueByNameString(
-            Value.Json->AsString());
-    if (MobVal == INDEX_NONE) {
-      S.SendAutomationError(Socket, RequestId,
-                            *FString::Printf(TEXT("Mobility: '%s' is not valid (Static, Stationary, " "Movable)"), *Value.Json->AsString()),
-                            TEXT("VALUE_TYPE_MISMATCH"));
-      return true;
-    }
-    SC->SetMobility((EComponentMobility::Type)MobVal);
-    bApplied = true;
-  }
-
-  // Generic reflection path for everything else.
-  if (!bApplied) {
-    FProperty *Property =
-        TargetComponent->GetClass()->FindPropertyByName(*PropertyName);
-    if (!Property) {
-      S.SendAutomationError(Socket, RequestId,
-                            *FString::Printf(TEXT("Property not found: %s"), *PropertyName),
-                            TEXT("PROPERTY_NOT_FOUND"));
-      return true;
-    }
-    if (!MatchesKind(Property, ValueKind)) {
-      S.SendAutomationError(Socket, RequestId,
-                            *FString::Printf(TEXT("%s: you sent %sValue but the property type is '%s'"), *PropertyName, Value.Kind, *Property->GetCPPType()),
-                            TEXT("VALUE_TYPE_MISMATCH"));
-      return true;
-    }
+    FProperty *Property = TargetComponent->GetClass()->FindPropertyByName(*InName);
+    if (!Property)
+      return FString::Printf(TEXT("Property not found: %s"), *InName);
     FString ApplyError;
-    if (!ApplyJsonValueToProperty(TargetComponent, Property, Value.Json,
-                                  ApplyError)) {
+    if (!ApplyJsonValueToProperty(TargetComponent, Property, InJson, ApplyError))
+      return ApplyError;
+    return FString();
+  };
+
+  TargetComponent->Modify();
+
+  TArray<TSharedPtr<FJsonValue>> AppliedArray;
+  TArray<TSharedPtr<FJsonValue>> FailedArray;
+  if (bMapMode) {
+    // Fail-in-place: each entry lands or reports; no rollback.
+    for (const auto &Pair : (*PropertiesMap)->Values) {
+      const FString EntryError = ApplyOne(Pair.Key, Pair.Value);
+      if (EntryError.IsEmpty()) {
+        AppliedArray.Add(MakeShared<FJsonValueString>(Pair.Key));
+      } else {
+        TSharedPtr<FJsonObject> FailObj = MakeShared<FJsonObject>();
+        FailObj->SetStringField(TEXT("name"), Pair.Key);
+        FailObj->SetStringField(TEXT("error"), EntryError);
+        FailedArray.Add(MakeShared<FJsonValueObject>(FailObj));
+      }
+    }
+    if (AppliedArray.Num() + FailedArray.Num() == 0) {
+      S.SendAutomationError(Socket, RequestId, TEXT("'properties' map is empty"),
+                            TEXT("NO_CHANGES_REQUESTED"));
+      return true;
+    }
+  } else {
+    const FTypedValue &Value = Present[0];
+    const FString ValueKind(Value.Kind);
+    const bool bSpecialCased =
+        PropertyName.Equals(TEXT("SimulatePhysics"), ESearchCase::IgnoreCase) ||
+        PropertyName.Equals(TEXT("bSimulatePhysics"), ESearchCase::IgnoreCase) ||
+        PropertyName.Equals(TEXT("Mobility"), ESearchCase::IgnoreCase);
+    if (!bSpecialCased) {
+      FProperty *Property =
+          TargetComponent->GetClass()->FindPropertyByName(*PropertyName);
+      if (!Property) {
+        S.SendAutomationError(Socket, RequestId,
+                              *FString::Printf(TEXT("Property not found: %s"), *PropertyName),
+                              TEXT("PROPERTY_NOT_FOUND"));
+        return true;
+      }
+      if (!MatchesKind(Property, ValueKind)) {
+        S.SendAutomationError(Socket, RequestId,
+                              *FString::Printf(TEXT("%s: you sent %sValue but the property type is '%s'"), *PropertyName, Value.Kind, *Property->GetCPPType()),
+                              TEXT("VALUE_TYPE_MISMATCH"));
+        return true;
+      }
+    }
+    const FString ApplyError = ApplyOne(PropertyName, Value.Json);
+    if (!ApplyError.IsEmpty()) {
       S.SendAutomationError(Socket, RequestId,
                             *FString::Printf(TEXT("Failed to set %s: %s"), *PropertyName, *ApplyError),
                             TEXT("PROPERTY_WRITE_FAILED"));
       return true;
     }
+    AppliedArray.Add(MakeShared<FJsonValueString>(PropertyName));
   }
 
   if (USceneComponent *SceneComponent =
@@ -1317,13 +1351,22 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   TargetComponent->MarkPackageDirty();
 
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
-  TArray<TSharedPtr<FJsonValue>> PropsArray;
-  PropsArray.Add(MakeShared<FJsonValueString>(PropertyName));
-  Data->SetArrayField(TEXT("appliedProperties"), PropsArray);
+  Data->SetArrayField(TEXT("appliedProperties"), AppliedArray);
+  if (FailedArray.Num() > 0)
+    Data->SetArrayField(TEXT("failedProperties"), FailedArray);
   McpHandlerUtils::AddVerification(Data, Found);
 
+  if (FailedArray.Num() > 0) {
+    S.SendAutomationResponse(Socket, RequestId, false,
+                             FString::Printf(TEXT("Applied %d of %d properties"), AppliedArray.Num(), AppliedArray.Num() + FailedArray.Num()),
+                             Data, TEXT("PARTIAL_FAILURE"));
+    return true;
+  }
   S.SendAutomationResponse(Socket, RequestId, true,
-                         TEXT("Component property updated"), Data);
+                         AppliedArray.Num() == 1
+                             ? TEXT("Component property updated")
+                             : *FString::Printf(TEXT("Component properties updated (%d)"), AppliedArray.Num()),
+                         Data);
   return true;
 #else
   return false;
@@ -1996,6 +2039,21 @@ bool McpHandlers::ControlActor::HandleControlActorSetBlueprintVariables(
     S.SendAutomationError(Socket, RequestId,
                           *FString::Printf(TEXT("%s: you sent %sValue but the variable type is '%s'"), *VariableName, *Value.Kind, *Property->GetCPPType()),
                           TEXT("VALUE_TYPE_MISMATCH"));
+    return true;
+  }
+
+  // A non-instance-editable variable written on an editor-world instance is a
+  // doomed write: it lands and reads back, but the next BP recompile's
+  // reinstancing only preserves EDITABLE instance deltas, so the value silently
+  // vanishes (the Details panel can't even offer this write — non-editable vars
+  // don't show on instances). PIE instances are exempt: transient by nature,
+  // written deliberately by live tests.
+  const UWorld* FoundWorld = Found->GetWorld();
+  const bool bEditorWorldInstance = FoundWorld && FoundWorld->WorldType == EWorldType::Editor;
+  if (bEditorWorldInstance && Property->HasAnyPropertyFlags(CPF_DisableEditOnInstance)) {
+    S.SendAutomationError(Socket, RequestId,
+                          *FString::Printf(TEXT("%s is not instance-editable (CPF_DisableEditOnInstance): the write would land but the next Blueprint recompile's reinstancing discards non-editable instance values. Either make it instance-editable first (manage_blueprint set_variable_metadata {instanceEditable:true}) or set the class default instead (manage_blueprint set_default)."), *VariableName),
+                          TEXT("NOT_INSTANCE_EDITABLE"));
     return true;
   }
 
