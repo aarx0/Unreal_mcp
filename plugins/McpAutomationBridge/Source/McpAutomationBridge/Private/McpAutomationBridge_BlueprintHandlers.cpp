@@ -5044,8 +5044,12 @@ bool McpHandlers::Blueprint::HandleBlueprintAddNode(
     FString NodeName;
     LocalPayload->TryGetStringField(TEXT("nodeName"), NodeName);
     float PosX = 0.0f, PosY = 0.0f;
-    LocalPayload->TryGetNumberField(TEXT("posX"), PosX);
-    LocalPayload->TryGetNumberField(TEXT("posY"), PosY);
+    if (!LocalPayload->TryGetNumberField(TEXT("posX"), PosX)) {
+      LocalPayload->TryGetNumberField(TEXT("x"), PosX);
+    }
+    if (!LocalPayload->TryGetNumberField(TEXT("posY"), PosY)) {
+      LocalPayload->TryGetNumberField(TEXT("y"), PosY);
+    }
 
     // Cast and variable-get/set nodes need node-specific setup (TargetType,
     // VariableReference) that only the create_node factories perform — the

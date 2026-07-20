@@ -200,7 +200,7 @@ static void S_FindByName(FMcpSchemaBuilder& B)
 
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT("Actor class name."))
+	B.String(TEXT("className"), TEXT("Actor class name (IsA matching); loaded short name or fully-qualified path. Unresolvable → CLASS_NOT_FOUND."))
 	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
 	 .String(TEXT("classPath"), TEXT("Actor class path (alias of className)."))
 	 .Integer(TEXT("limit"), TEXT("find_by_class: max actors returned (default 50, cap 200)."));

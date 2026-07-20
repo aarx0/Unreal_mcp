@@ -124,7 +124,7 @@ static void S_ListObjects(FMcpSchemaBuilder& B)
 
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("className"), TEXT("find_by_class: case-insensitive exact class name or class-path substring to match actors against (no IsA/inheritance matching)."))
+	B.String(TEXT("className"), TEXT("find_by_class: case-insensitive exact class name or class-path substring to match actors against (no IsA/inheritance matching). Zero matches with a name that resolves to no loaded class → CLASS_NOT_FOUND."))
 	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
 	 .String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Integer(TEXT("limit"), TEXT("find_by_class: max actors returned (default 50, cap 200)."));

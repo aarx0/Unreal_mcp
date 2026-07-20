@@ -2468,6 +2468,23 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
     }
   }
 
+  // "No such class" and "class exists, zero instances" are different answers;
+  // swallowing the resolution failure into an empty success made every typo /
+  // unloaded class read as a legitimately empty level (Totem hunt, 2026-07-18).
+  UClass* ClassToFind = ResolveClassByName(ClassName);
+  if (!ClassToFind) {
+    S.SendAutomationError(
+        Socket, RequestId,
+        FString::Printf(
+            TEXT("Class '%s' not found. Tried asset paths, full object paths, "
+                 "/Script/Engine + /Script/UMG short-name guesses, and every "
+                 "loaded class by short name — pass a loaded short name or a "
+                 "fully-qualified /Script/Module.Class path."),
+            *ClassName),
+        TEXT("CLASS_NOT_FOUND"));
+    return true;
+  }
+
   TSharedPtr<FJsonObject> Data = McpHandlerUtils::CreateResultObject();
   TArray<TSharedPtr<FJsonValue>> ActorsArray;
   int32 Matched = 0;
@@ -2476,32 +2493,18 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   bool bIsPieWorld = false;
   UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
   if (World) {
-    UClass* ClassToFind = nullptr;
-
-    // CRITICAL FIX: Use ResolveClassByName for proper engine class resolution
-    // This handles: full paths, short names like "StaticMeshActor", and loads classes if needed
-    // Without this, FindObject only finds already-loaded classes, missing engine classes like
-    // AStaticMeshActor, APawn, etc. that haven't been accessed yet
-    ClassToFind = ResolveClassByName(ClassName);
-
-    if (ClassToFind) {
-      for (TActorIterator<AActor> It(World, ClassToFind); It; ++It) {
-        if (AActor* Actor = *It) {
-          ++Matched;
-          if (ActorsArray.Num() >= Limit) {
-            bTruncated = true;
-            continue;
-          }
-          TSharedPtr<FJsonObject> ActorObj = McpHandlerUtils::CreateResultObject();
-          ActorObj->SetStringField(TEXT("name"), Actor->GetActorLabel());
-          ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
-          ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
+    for (TActorIterator<AActor> It(World, ClassToFind); It; ++It) {
+      if (AActor* Actor = *It) {
+        ++Matched;
+        if (ActorsArray.Num() >= Limit) {
+          bTruncated = true;
+          continue;
         }
+        TSharedPtr<FJsonObject> ActorObj = McpHandlerUtils::CreateResultObject();
+        ActorObj->SetStringField(TEXT("name"), Actor->GetActorLabel());
+        ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
+        ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
       }
-    } else {
-      // Class not found - return empty result (this is valid for searches)
-      UE_LOG(LogMcpAutomationBridgeSubsystem, Warning,
-             TEXT("HandleControlActorFindByClass: Class '%s' not found"), *ClassName);
     }
   }
 
@@ -2509,6 +2512,9 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   Data->SetNumberField(TEXT("count"), ActorsArray.Num());
   Data->SetNumberField(TEXT("matched"), Matched);
   Data->SetBoolField(TEXT("truncated"), bTruncated);
+  // A short name can resolve to an unexpected class (name collisions across
+  // modules); the receipt lets matched:0 be judged against what was searched.
+  Data->SetStringField(TEXT("resolvedClass"), ClassToFind->GetPathName());
   // Derived from the SAME resolution as World so the flag and worldName can
   // never disagree. worldPackage exposes the UEDPIE_<instance>_ prefix and
   // hasBegunPlay flags the brief post-OpenLevel window — together they make
@@ -3388,7 +3394,22 @@ bool McpHandlers::ControlEditor::HandleControlEditorScreenshot(
   // Build the full path - save to project's Saved/Screenshots folder
   const FString ScreenshotDir = FPaths::ProjectSavedDir() / TEXT("Screenshots");
   IFileManager::Get().MakeDirectory(*ScreenshotDir, true);
-  const FString FullPath = ScreenshotDir / Filename;
+  FString FullPath = ScreenshotDir / Filename;
+  // The default timestamp name has 1-second granularity and an explicit
+  // filename can repeat across a batch; either way the earlier frame was
+  // silently overwritten. Uniquify with a numeric suffix — the response's
+  // `path` reports the actual file written.
+  if (IFileManager::Get().FileExists(*FullPath)) {
+    const FString BaseName = FPaths::GetBaseFilename(Filename);
+    for (int32 Suffix = 2;; ++Suffix) {
+      const FString Candidate =
+          ScreenshotDir / FString::Printf(TEXT("%s_%d.png"), *BaseName, Suffix);
+      if (!IFileManager::Get().FileExists(*Candidate)) {
+        FullPath = Candidate;
+        break;
+      }
+    }
+  }
 
   // Get the active viewport
   FViewport* Viewport = GEditor->GetActiveViewport();

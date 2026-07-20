@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Small-fry pass: CLASS_NOT_FOUND, add_node x/y, screenshot collisions (2026-07-19)
+
+- **`find_by_class` distinguishes "no such class" from "zero instances"** (both
+  spellings). `control_actor find_by_class` errors `CLASS_NOT_FOUND` when the
+  name resolves to no loaded class instead of returning a legitimate-looking
+  empty success, and reports the `resolvedClass` it actually searched.
+  `inspect find_by_class` keeps its string-match semantics but disambiguates a
+  zero-match result the same way, and an empty `className` is now
+  `INVALID_ARGUMENT` rather than an empty success.
+- **`manage_blueprint add_node` honors `x`/`y`** on the in-place path as
+  aliases of `posX`/`posY` (they already worked on the delegated create_node
+  forms); previously they were declared-but-dead and nodes landed at (0,0).
+- **`control_editor screenshot` never silently overwrites.** Same-second
+  timestamp collisions (1-second filename granularity) and repeated explicit
+  filenames now get a `_2`/`_3`... suffix; the response `path` reports the
+  actual file written.
+
 ### Bug burn-down: doomed writes, batch component writes, stale classes, units (2026-07-19)
 
 - **`set_blueprint_variables` refuses doomed writes.** A non-instance-editable

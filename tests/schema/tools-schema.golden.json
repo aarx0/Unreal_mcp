@@ -1753,7 +1753,7 @@
           "type": "string"
         },
         "className": {
-          "description": "Actor class name.",
+          "description": "Actor class name (IsA matching); loaded short name or fully-qualified path. Unresolvable → CLASS_NOT_FOUND.",
           "type": "string"
         },
         "classPath": {

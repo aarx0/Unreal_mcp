@@ -420,8 +420,8 @@ static void S_AddNode(FMcpSchemaBuilder& B)
 	 .String(TEXT("memberName"), TEXT("add_node: member spec for the delegated create_node forms — the function to call (CallFunction, with optional memberClass) or the variable name (VariableGet/VariableSet)."))
 	 .Bool(TEXT("autoConnect"), TEXT("add_node: auto-wire the new node's exec-in to an open event chain (default false)."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Number(TEXT("x"), TEXT("Graph node X coordinate (alias of posX on the delegated create_node forms)."))
-	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (alias of posY on the delegated create_node forms)."))
+	 .Number(TEXT("x"), TEXT("Graph node X coordinate (alias of posX; posX wins when both are sent)."))
+	 .Number(TEXT("y"), TEXT("Graph node Y coordinate (alias of posY; posY wins when both are sent)."))
 	 .Required({TEXT("nodeType")});
 }
 

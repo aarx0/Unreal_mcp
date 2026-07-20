@@ -2037,6 +2037,13 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     {
         Payload->TryGetStringField(TEXT("classPath"), ClassName);
     }
+    if (ClassName.IsEmpty())
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+                              TEXT("className (or class/classPath) is required"),
+                              TEXT("INVALID_ARGUMENT"));
+        return true;
+    }
     int32 Limit = 50;
     {
         double LimitNum = 0.0;
@@ -2051,7 +2058,7 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     bool bIsPieWorld = false;
     UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
 
-    if (World && !ClassName.IsEmpty())
+    if (World)
     {
         for (TActorIterator<AActor> It(World); It; ++It)
         {
@@ -2072,6 +2079,23 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
                 ObjectsArray.Add(MakeShared<FJsonValueObject>(Obj));
             }
         }
+    }
+    // The string-match loop can't tell "class exists, zero instances" from
+    // "no such class" — an unresolvable name used to come back as a
+    // legitimate-looking empty success (Totem hunt, 2026-07-18). Disambiguate
+    // before reporting empty.
+    if (Matched == 0 && !ResolveClassByName(ClassName))
+    {
+        S.SendAutomationError(
+            RequestingSocket, RequestId,
+            FString::Printf(
+                TEXT("No actor's class matched '%s' and it does not resolve to "
+                     "any loaded class. Pass a loaded short name, a "
+                     "fully-qualified /Script/Module.Class path, or a class-path "
+                     "substring."),
+                *ClassName),
+            TEXT("CLASS_NOT_FOUND"));
+        return true;
     }
     Resp->SetArrayField(TEXT("objects"), ObjectsArray);
     Resp->SetNumberField(TEXT("count"), ObjectsArray.Num());
