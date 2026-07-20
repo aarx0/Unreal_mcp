@@ -1175,7 +1175,7 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
   {
     bool B = false;
     double N = 0.0;
-    FString S;
+    FString Str;
     const TSharedPtr<FJsonObject> *Obj = nullptr;
     if (Payload->TryGetBoolField(TEXT("boolValue"), B))
       Present.Add({TEXT("boolValue"), TEXT("bool"), MakeShared<FJsonValueBoolean>(B)});
@@ -1183,8 +1183,8 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
       Present.Add({TEXT("intValue"), TEXT("int"), MakeShared<FJsonValueNumber>(N)});
     if (Payload->TryGetNumberField(TEXT("floatValue"), N))
       Present.Add({TEXT("floatValue"), TEXT("float"), MakeShared<FJsonValueNumber>(N)});
-    if (Payload->TryGetStringField(TEXT("stringValue"), S))
-      Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(S)});
+    if (Payload->TryGetStringField(TEXT("stringValue"), Str))
+      Present.Add({TEXT("stringValue"), TEXT("string"), MakeShared<FJsonValueString>(Str)});
     if (Payload->TryGetObjectField(TEXT("vectorValue"), Obj) && Obj && Obj->IsValid())
       Present.Add({TEXT("vectorValue"), TEXT("vector"), MakeShared<FJsonValueObject>(*Obj)});
   }
@@ -4659,6 +4659,10 @@ bool McpHandlers::ControlEditor::HandleControlEditorOpenLevel(
     }
   }
   
+  // The response is sent from the ticker below, after the load; without this
+  // mark the post-dispatch check fails the still-pending request with
+  // HANDLER_NO_RESPONSE even though the level opens fine.
+  S.MarkRequestDeferred(RequestId);
   TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(&S);
   FTSTicker::GetCoreTicker().AddTicker(
       FTickerDelegate::CreateLambda([WeakThis, Socket, RequestId, LevelPath,

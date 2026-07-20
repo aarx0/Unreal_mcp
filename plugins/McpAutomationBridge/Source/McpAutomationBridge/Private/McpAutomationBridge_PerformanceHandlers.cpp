@@ -630,6 +630,9 @@ bool McpHandlers::SystemControl::HandlePerfRunBenchmark(UMcpAutomationBridgeSubs
         true,
         ResponseOrigin);
 
+    // Final response arrives from the ticker after BenchmarkDuration; declare
+    // the deferral or the post-dispatch check fails the request immediately.
+    S.MarkRequestDeferred(RequestId);
     TWeakObjectPtr<UMcpAutomationBridgeSubsystem> WeakThis(&S);
     FTSTicker::GetCoreTicker().AddTicker(
         FTickerDelegate::CreateLambda(
