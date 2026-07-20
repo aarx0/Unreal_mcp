@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Niagara module input values: readback + `set_module_input` (2026-07-19)
+
+- **`manage_effect get_niagara_info` now returns module VALUES, not just
+  structure.** Directly-set module inputs (rapid-iteration parameters — the
+  values the stack UI edits without recompiling) were invisible over the
+  bridge: "what is the color set to" was unanswerable. Each module entry now
+  carries an `inputs` array (name/type/value), each emitter a full
+  `rapidIterationParameters` dump (constant name, parsed module/input, type,
+  value, owning script), and the system a `systemRapidIterationParameters`
+  array for the SystemSpawn/SystemUpdate stacks. Values decode
+  float/int/bool/enum/Vec2-4/Position/Quat/LinearColor; unknown structs dump
+  `bytesHex` rather than dropping silently; data-interface/UObject inputs
+  report type-only; static-switch inputs are flagged `isStaticSwitch`.
+- **New `manage_effect set_module_input`** (`moduleName` + `inputName` + one
+  typed value field: `floatValue`/`intValue`/`boolValue`/`vectorValue`/
+  `colorValue`/`stringValue`-for-enums). Matches existing rapid-iteration
+  constants across all scripts instead of constructing names, writes every
+  mirrored store copy (`storesUpdated` in the receipt), syncs merged copies
+  via `RefreshSystemParametersFromEmitter`, requests a recompile when the
+  input is a static switch, and receipts with a re-read from the store. A
+  miss fails with the available inputs/modules listed. Out of scope by
+  design: inputs overridden to dynamic inputs or linked parameters (they
+  leave the store; overriding them needs NiagaraEditor view models).
+- Verified live on `NS_LavaBombTrail`: full readback plus a
+  `GravityForce.Gravity` −980 → −500 → −980 round trip with independent
+  re-reads.
+
+### Undeclared deferred responses failed as HANDLER_NO_RESPONSE (2026-07-19)
+
+- `control_editor open_level` reported
+  `HANDLER_NO_RESPONSE` to the client even though the level opened: the
+  handler defers the load + response to a next-tick ticker (so the map
+  transition happens outside the request stack) but never called
+  `MarkRequestDeferred`, so the post-dispatch still-parked check failed the
+  request instantly and the ticker's real response later hit a completed
+  request. Declared the deferral; the response still arrives after the load
+  with the true result. Same fix in `system_control run_benchmark` (responds
+  after the benchmark duration); import was the only deferral site that had
+  it right.
+
+### Warning hygiene (2026-07-19)
+
+- Renamed the five C4457 `S` locals shadowing the `UMcpAutomationBridgeSubsystem& S`
+  handler parameter (Skeleton/Control/Property/Effect handlers) and f-suffixed
+  the `WeldOptions.Tolerance` double literal in GeometryHandlers. The bridge
+  deliberately stays on `/fp:fast` without `/we4305` — engine headers it
+  includes (GeometryScripting, ChaosVehicles) have their own C4305 hits.
+
 ### Template writes now sweep loaded instances (2026-07-18)
 
 - **CDO/archetype property writes propagate to loaded instances, with a
