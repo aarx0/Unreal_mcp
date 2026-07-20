@@ -42,8 +42,15 @@ as they land.
 > override, so the write should either fail loud (NOT_INSTANCE_EDITABLE) or warn in the
 > response that the value won't survive a compile.
 
-> **[ ] Found 2026-07-18 (totem PIE verification, live repro): `find_by_class` returns empty
-> SUCCESS when the class name doesn't resolve.** `inspect find_by_class className:"Totem"`
+> **[x] Found 2026-07-18 (totem PIE verification, live repro): `find_by_class` returns empty
+> SUCCESS when the class name doesn't resolve.** FIXED 2026-07-19: both spellings now answer
+> CLASS_NOT_FOUND instead of empty success. `control_actor find_by_class` errors when
+> ResolveClassByName fails (its loaded-class scan already covers game-module short names —
+> the old handler just swallowed the failure with "valid for searches"); response gains a
+> `resolvedClass` receipt. `inspect find_by_class` keeps its string-match semantics but on
+> zero matches now checks resolution to split "class exists, zero instances" (success) from
+> "no such class" (CLASS_NOT_FOUND); empty className now INVALID_ARGUMENT instead of empty
+> success. Original report: `inspect find_by_class className:"Totem"`
 > answered "Found 0 actors" (success) while the log showed `Failed to find object 'Class
 > /Script/Engine.Totem'` — the short name was resolved against /Script/Engine only, and the
 > resolution failure was swallowed into a legitimate-looking empty result. A missing class and
@@ -60,6 +67,11 @@ as they land.
 > (translate each comment with the centroid of the nodes inside its old bounds, or leave
 > comments unmoved). Scoped arrange (`nodes:[...]`) already sidesteps it: out-of-scope
 > comments are obstacles and never move.
+> **PINNED for discussion (Aaron, 2026-07-19):** his hot take — full arrange on a graph
+> with comment boxes should ERROR OUT rather than scatter (refuse, point at scoped
+> arrange); scoped arrange on the nodes inside one comment may be fine since out-of-scope
+> comments don't move. Open question: whether container-translation is worth building vs.
+> just refusing. Don't implement either way without settling this with him.
 
 > **[x] Found 2026-07-18 (totem-dummy widget wiring, live repro): scoped `arrange_graph` is
 > unreachable from a typed MCP client — `nodes` is in the decl but not the published schema.**
@@ -113,16 +125,15 @@ as they land.
 > load (or re-route after world switch); today every cross-map open_level reads as a failure
 > that actually worked.
 
-> **[ ] Dogfood finds 2026-07-08 (inspect read actions, direct-HTTP):**
-> - **`inspect get_editor_settings` fake-success stub** — returns `{success:true, message:"Editor
->   settings retrieved"}` with NO data (EnvironmentHandlers.cpp:1590; the non-editor build is an
->   honest `MCP_INSPECT_HANDLER_STUB` returning false). A silent lie. Recommend: fail loud
->   (NOT_IMPLEMENTED, matching the non-editor path) OR implement real editor prefs; don't fake success.
-> - **`inspect list_objects` takes no params** — rejects `className`/`limit` ("takes no params besides
->   'action'"). So it can't filter or bound its output. Either it's unbounded (dump-everything) or
->   underpowered; give it `className`/`pathContains`/`limit` like `find_objects`, or document why not.
-> - **`inspect find_by_class` rejects `limit`** (reads only className/classPath) while `find_objects`
->   accepts `limit`. Minor inconsistency — add `limit` to find_by_class for parity, or note the split.
+> **[x] Dogfood finds 2026-07-08 (inspect read actions, direct-HTTP):** ALL THREE turned out
+> to be already fixed by later waves (found closed during the 2026-07-19 small-fry pass,
+> re-verified live then):
+> - **`inspect get_editor_settings` fake-success stub** — now an honest NOT_IMPLEMENTED error
+>   ("editor preferences are not exposed yet"), matching the non-editor stub.
+> - **`inspect list_objects` takes no params** — now has `className` (IsA, with CLASS_NOT_FOUND
+>   on unresolvable) + `pathContains` + `limit` (default 50, cap 200) with matched/truncated
+>   counts.
+> - **`inspect find_by_class` rejects `limit`** — now accepts `limit` (default 50, cap 200).
 > (Other read actions verified working: get_world_settings, get_viewport_info, get_scene_stats,
 > get_selected_actors, get_memory_stats, get_performance_stats.)
 
@@ -1525,23 +1536,27 @@ fails VALUE_TYPE_MISMATCH ("you sent stringValue but the property type is 'TObje
 its docs even advertise "object-reference-by-path". One kind policy for the twins: teach the component setter the
 object-by-path stringValue form.
 
-### [ ] 2026-07-14b — `manage_blueprint add_node` declares `x`/`y` but ignores them (wants `posX`/`posY`)
-`add_node {nodeType:'K2Node_CallFunction', functionName:'KismetSystemLibrary.ExecuteConsoleCommand', x:1150, y:-16}`
-succeeded but placed the node at (0,0) — response echoed `posX:0, posY:0`; re-sending with `posX`/`posY` positioned
-correctly. Both pairs are in acceptedParams, so `x`/`y` are declared-but-dead here (same class as the 2026-07-02
-param-reconciliation findings). Also note the terse failure mode from the same session: a bare
-`functionName:'ExecuteConsoleCommand'` (no class prefix) fails with `{"error":"ExecuteConsoleCommand"}` — no hint
-that the dotted `Class.Function` form is required. Fix: honor x/y as aliases (or drop them from the decl) and make
-the function-resolution error say what it tried.
+### [x] 2026-07-14b — `manage_blueprint add_node` declares `x`/`y` but ignores them (wants `posX`/`posY`)
+FIXED 2026-07-19: the in-place add_node path now falls back to `x`/`y` when `posX`/`posY`
+are absent (they already worked on the delegated create_node forms); decl descriptions
+updated to plain "alias of posX/posY". The terse `{"error":"ExecuteConsoleCommand"}`
+failure mode was already fixed in an earlier wave — FUNCTION_NOT_FOUND now says what forms
+were tried (class hierarchy, Class::Function / Class.Function / /Script/Module.Class.Function).
+Original report: `add_node {..., x:1150, y:-16}` succeeded but placed the node at (0,0);
+re-sending with `posX`/`posY` positioned correctly.
 
-### [ ] 2026-07-14 — `control_editor screenshot` filename has 1-second granularity; same-second calls silently overwrite
-Found while verifying the wall-attack telegraph. Two `screenshot` calls in one batch both wrote
-`Screenshot_20260714_100740.png` — the second overwrote the first (both results reported
-success with the same `path`, different `bytes`), so the earlier frame was silently lost.
-Repro: two `{action:'screenshot'}` calls within the same wall-clock second. Fix: add a
-monotonic counter or millisecond suffix when the target filename already exists.
+### [x] 2026-07-14 — `control_editor screenshot` filename has 1-second granularity; same-second calls silently overwrite
+FIXED 2026-07-19: when the target file already exists the handler appends `_2`, `_3`, ...
+(first free suffix) instead of overwriting — applies to the default timestamp name AND an
+explicit repeated `filename`; the response `path` reports the actual file written.
+Original report: two `screenshot` calls in one batch both wrote
+`Screenshot_20260714_100740.png` — the second silently overwrote the first.
 
-### [ ] 2026-07-07 — Two shadowed `set_default` / `set_scs_property` duplicates in HandleBlueprintAction (dead code)
+### [x] 2026-07-07 — Two shadowed `set_default` / `set_scs_property` duplicates in HandleBlueprintAction (dead code)
+CLOSED 2026-07-19: already deleted by the 2026-07-09 obviated-code cleanup wave (its entry
+explicitly lists "the duplicate set_default handler" and the 4 shadowed SCS branches).
+Re-verified by grep: BlueprintHandlers.cpp now has a single blueprint_set_default block and
+zero set_scs_property blocks. Original report below for the record.
 Found during the typed-params migration. `manage_blueprint` dispatch routes both actions to
 `HandleBlueprintAction`, which matches each at its FIRST `if (CleanAction.Equals(...))` and
 returns — so the second copy is unreachable:
