@@ -2545,6 +2545,41 @@ bool McpHandlers::Blueprint::HandleBlueprintGraphArrangeGraph(
 
   const bool bScoped = Scope.Num() > 0;
 
+  // The layout core has no comment-container handling: a comment box has no
+  // pin topology, so a full arrange piles it into column 0, away from the
+  // nodes it annotates. Refuse rather than scatter (Aaron, 2026-07-19) —
+  // scoped arrange stays available because out-of-scope comments never move.
+  {
+    TArray<FString> CommentTitles;
+    for (UEdGraphNode* Node : TargetGraph->Nodes) {
+      UEdGraphNode_Comment* Comment = Cast<UEdGraphNode_Comment>(Node);
+      if (!Comment) { continue; }
+      if (bScoped && !Scope.Contains(Comment)) { continue; }
+      if (CommentTitles.Num() < 3) {
+        CommentTitles.Add(Comment->NodeComment.TrimStartAndEnd());
+      }
+    }
+    if (CommentTitles.Num() > 0) {
+      const FString Advice =
+          bScoped ? TEXT("Remove the comment's GUID from nodes and scope the "
+                         "contained nodes instead.")
+                  : TEXT("Use arrange_graph with nodes:[...] scoped to nodes "
+                         "outside the comments, or arrange in-editor.");
+      S.SendAutomationError(
+          RequestingSocket, RequestId,
+          FString::Printf(
+              TEXT("%s: graph '%s' contains comment box(es) (\"%s\") and "
+                   "auto-layout would scatter them away from the nodes they "
+                   "annotate. %s"),
+              bScoped ? TEXT("nodes:[...] includes a comment box")
+                      : TEXT("Full arrange refused"),
+              *TargetGraph->GetName(),
+              *FString::Join(CommentTitles, TEXT("\", \"")), *Advice),
+          TEXT("COMMENT_BOXES_PRESENT"));
+      return true;
+    }
+  }
+
   // One transaction for split + layout: Ctrl+Z reverts the whole arrange.
   const FScopedTransaction Transaction(FText::FromString(TEXT("Arrange Graph")));
   Blueprint->Modify();

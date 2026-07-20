@@ -5696,7 +5696,7 @@
           "type": "string"
         },
         "nodes": {
-          "description": "arrange_graph: node GUIDs to lay out as one rigid block — anchored at the scope's current top-left, slid down until it clears unmoved nodes; every node outside the list stays put. Omit to arrange the whole graph.",
+          "description": "arrange_graph: node GUIDs to lay out as one rigid block — anchored at the scope's current top-left, slid down until it clears unmoved nodes; every node outside the list stays put. Omit to arrange the whole graph. Graphs containing comment boxes refuse full arrange (COMMENT_BOXES_PRESENT — layout would scatter the comments); scope around them with nodes:[...].",
           "items": {
             "type": "string"
           },

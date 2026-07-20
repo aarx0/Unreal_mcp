@@ -59,19 +59,18 @@ as they land.
 > /Script/RhyaTowerOfWishes.Totem; full path worked). Workaround: always pass the full
 > /Script/Module.Class path.
 
-> **[ ] Found 2026-07-18 (overlap-report/scoped-arrange work, code read): full `arrange_graph`
-> scatters comment boxes.** `ArrangeBlueprintGraph` iterates every `Graph->Nodes` entry; a
+> **[x] Found 2026-07-18 (overlap-report/scoped-arrange work, code read): full `arrange_graph`
+> scatters comment boxes.** RESOLVED 2026-07-19 per Aaron's ruling ("error for now and see
+> if that's good enough"): full arrange on a graph with any comment box now refuses with
+> COMMENT_BOXES_PRESENT (names up to 3 comment titles, points at scoped arrange /
+> in-editor); a scoped arrange whose `nodes` list includes a comment GUID refuses the same
+> way (same scatter in miniature). Scoped arrange around comments stays available —
+> out-of-scope comments are obstacles and never move. Container-translation (move each
+> comment with the centroid of its contained nodes) deliberately NOT built; revisit only
+> if the refusal proves annoying in practice.
+> Original analysis: `ArrangeBlueprintGraph` iterates every `Graph->Nodes` entry; a
 > comment box has no pin topology, so the core sees an isolated node and piles it into
-> column 0 — it neither follows the nodes it annotates nor keeps its place. Repro: full
-> arrange on any graph with a comment box. Proper fix is treating comments as containers
-> (translate each comment with the centroid of the nodes inside its old bounds, or leave
-> comments unmoved). Scoped arrange (`nodes:[...]`) already sidesteps it: out-of-scope
-> comments are obstacles and never move.
-> **PINNED for discussion (Aaron, 2026-07-19):** his hot take — full arrange on a graph
-> with comment boxes should ERROR OUT rather than scatter (refuse, point at scoped
-> arrange); scoped arrange on the nodes inside one comment may be fine since out-of-scope
-> comments don't move. Open question: whether container-translation is worth building vs.
-> just refusing. Don't implement either way without settling this with him.
+> column 0 — it neither follows the nodes it annotates nor keeps its place.
 
 > **[x] Found 2026-07-18 (totem-dummy widget wiring, live repro): scoped `arrange_graph` is
 > unreachable from a typed MCP client — `nodes` is in the decl but not the published schema.**

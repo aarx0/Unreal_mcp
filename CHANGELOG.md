@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamp collisions (1-second filename granularity) and repeated explicit
   filenames now get a `_2`/`_3`... suffix; the response `path` reports the
   actual file written.
+- **`arrange_graph` refuses to scatter comment boxes.** Full-graph arrange on
+  a graph containing comment boxes now errors `COMMENT_BOXES_PRESENT` (the
+  layout core has no comment-container handling — comments piled into column
+  0, away from the nodes they annotate); a scoped arrange whose `nodes` list
+  includes a comment GUID is refused the same way. Scoped arrange around
+  comments still works: out-of-scope comments never move.
 
 ### Bug burn-down: doomed writes, batch component writes, stale classes, units (2026-07-19)
 
