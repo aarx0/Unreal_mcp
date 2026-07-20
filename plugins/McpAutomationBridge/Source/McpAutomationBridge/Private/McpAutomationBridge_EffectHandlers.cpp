@@ -1285,8 +1285,8 @@ bool McpHandlers::Effect::HandleEffectCleanup(UMcpAutomationBridgeSubsystem& S,
       Removed.Add(Label);
   }
   TArray<TSharedPtr<FJsonValue>> Arr;
-  for (const FString &S : Removed)
-    Arr.Add(MakeShared<FJsonValueString>(S));
+  for (const FString &Name : Removed)
+    Arr.Add(MakeShared<FJsonValueString>(Name));
   TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
   Resp->SetArrayField(TEXT("removedActors"), Arr);
   Resp->SetNumberField(TEXT("removed"), Removed.Num());

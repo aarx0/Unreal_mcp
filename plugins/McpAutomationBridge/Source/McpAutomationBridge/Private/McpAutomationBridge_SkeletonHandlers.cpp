@@ -647,11 +647,11 @@ bool McpHandlers::AnimationPhysics::HandleConfigureSocket(
 
     // Find the socket
     USkeletalMeshSocket* Socket = nullptr;
-    for (USkeletalMeshSocket* S : Skeleton->Sockets)
+    for (USkeletalMeshSocket* Candidate : Skeleton->Sockets)
     {
-        if (S && S->SocketName == FName(*SocketName))
+        if (Candidate && Candidate->SocketName == FName(*SocketName))
         {
-            Socket = S;
+            Socket = Candidate;
             break;
         }
     }

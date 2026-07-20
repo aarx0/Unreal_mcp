@@ -3098,7 +3098,7 @@ static bool HandleMirror(UMcpAutomationBridgeSubsystem* Self, const FString& Req
     if (bWeld)
     {
         FGeometryScriptWeldEdgesOptions WeldOptions;
-        WeldOptions.Tolerance = 0.001;
+        WeldOptions.Tolerance = 0.001f;
         UGeometryScriptLibrary_MeshRepairFunctions::WeldMeshEdges(Mesh, WeldOptions, nullptr);
     }
 

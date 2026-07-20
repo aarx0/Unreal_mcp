@@ -997,10 +997,10 @@ bool McpHandlers::Inspect::HandleInspectCdoAction(
     {
         for (const auto& Val : *CompNamesArr)
         {
-            FString S;
-            if (Val->TryGetString(S))
+            FString Str;
+            if (Val->TryGetString(Str))
             {
-                ComponentNamesFilter.Add(S.TrimStartAndEnd());
+                ComponentNamesFilter.Add(Str.TrimStartAndEnd());
             }
         }
     }
@@ -1020,10 +1020,10 @@ bool McpHandlers::Inspect::HandleInspectCdoAction(
     {
         for (const auto& Val : *PropNamesArr)
         {
-            FString S;
-            if (Val->TryGetString(S))
+            FString Str;
+            if (Val->TryGetString(Str))
             {
-                PropertyNameFilter.Add(FName(*S));
+                PropertyNameFilter.Add(FName(*Str));
             }
         }
     }
@@ -1456,8 +1456,8 @@ bool McpHandlers::Inspect::HandleDiffAssetAction(
             for (const FBPInterfaceDescription& I : OldBP->ImplementedInterfaces) { if (I.Interface) { OldSet.Add(I.Interface->GetName()); } }
             for (const FBPInterfaceDescription& I : NewBP->ImplementedInterfaces) { if (I.Interface) { NewSet.Add(I.Interface->GetName()); } }
             TArray<TSharedPtr<FJsonValue>> Added, Removed;
-            for (const FString& S : NewSet) { if (!OldSet.Contains(S)) { Added.Add(MakeShared<FJsonValueString>(S)); if (McpNameLooksGAS(S)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("interface +") + S)); } } }
-            for (const FString& S : OldSet) { if (!NewSet.Contains(S)) { Removed.Add(MakeShared<FJsonValueString>(S)); } }
+            for (const FString& Name : NewSet) { if (!OldSet.Contains(Name)) { Added.Add(MakeShared<FJsonValueString>(Name)); if (McpNameLooksGAS(Name)) { GasSignals.Add(MakeShared<FJsonValueString>(TEXT("interface +") + Name)); } } }
+            for (const FString& Name : OldSet) { if (!NewSet.Contains(Name)) { Removed.Add(MakeShared<FJsonValueString>(Name)); } }
             TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
             O->SetArrayField(TEXT("added"), Added);
             O->SetArrayField(TEXT("removed"), Removed);
