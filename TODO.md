@@ -1488,6 +1488,20 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-19 — `manage_blueprint get_default` returns an empty envelope (no value, no error) on SCS component properties
+Repro (volcano session): `get_default {blueprintPath:'/Game/Blueprints/Attacks/BP_LavaBomb', propertyName:'StaticMesh.StaticMesh'}`
+(also `StaticMesh.LDMaxDrawDistance`) → response is just `{propertyName, blueprintPath}` — no `value`, no `propertyType`,
+no error. The same call shape works against a NATIVE default subobject (`LobComponent.FlightTime` on BP_Volcano, C++
+CreateDefaultSubobject), so the failing leg is SCS component templates (BP_LavaBomb's StaticMesh is an SCS node).
+Fail-loud violation: resolve the SCS template or return PROPERTY_NOT_FOUND — the silent envelope reads as "unset".
+
+### [ ] 2026-07-19 — benign [SourceControl] chatter inflates successful calls to ENGINE_ERROR
+Repro: `manage_blueprint create` into a brand-new Content folder → asset created + saved fine, but the editor git
+plugin logs `[SourceControl] warning: could not open directory 'Content/Blueprints/Environment/'` and the engine-error
+watchdog wraps the response in `success:false / ENGINE_ERROR` quoting it. Also seen: a storm of
+`SourceControl fatal: Invalid path '/Memory'` during PIE (transient packages). Source-control chatter isn't a call
+failure; filter or downgrade the SourceControl category in the error-capture window.
+
 ### [x] 2026-07-19 — `control_editor open_level` returns HANDLER_NO_RESPONSE on success
 FIXED same day. Root cause was not the transport: the handler defers the load + response to a
 next-tick ticker but never called `MarkRequestDeferred`, so the post-dispatch
