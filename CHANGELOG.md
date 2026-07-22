@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Alias cull + fail-loud fixes + BT readback (2026-07-21)
+
+- **~33 journal-evidenced dead aliases deleted** (never sent in 10 days of
+  traffic — `docs/journal-analysis-2026-07-21.md`): control_actor's snake_case
+  tier + `class`/`actorClass`, manage_blueprint's snake_case tier +
+  `candidates` + the graph-action `assetPath` + `targetFunction`, inspect's
+  `class`/`propertyPath`, control_editor's `inputAction`/`inputType`,
+  manage_asset's data-table/LOD/texture alias pile, system_control's
+  `arguments`/`packageName`/`test`. Schema and handler reads removed together;
+  dead spellings now reject INVALID_PARAMS listing the surviving params.
+- **Two journal-evidenced ergonomic gaps closed**: `get_actor_bounds` accepts
+  `name` (the tool's own schema teaches that spelling); the `location` reject
+  on create_node/add_node now steers to arrange_graph instead of dead-ending.
+- **Bare `possess` = repossess after eject** (the editor's toolbar toggle) —
+  every no-arg possess in the journal was exactly that intent; `actorName`
+  still targets a specific pawn.
+- **`get_default` reads SCS component properties.** SCS templates aren't
+  reachable through the CDO (the generated object property is null until
+  construction), so `Component.Property` reads failed as PROPERTY_NOT_FOUND;
+  the SCS component template (including inherited SCS) is now resolved
+  directly.
+- **SourceControl chatter no longer fails calls.** The per-request
+  ENGINE_ERROR watchdog skips the SourceControl log category — the git
+  plugin's bookkeeping grumbles (fresh-folder scans, /Memory packages in PIE)
+  flipped real successes to failures.
+- **`manage_ai get_info` can reconstruct a behavior tree.** New `btNodes`
+  recursive dump: kind/path/parentPath/childIndex/depth per
+  composite/task/decorator/service (execution order = BT semantics), graph
+  GUID crosslink, ALL FBlackboardKeySelector properties per node (tasks
+  included), CPF_Edit config bag (FValueOrBBKey as {DefaultValue, Key}), plus
+  a `treePretty` indented render.
+
 ### Small-fry pass: CLASS_NOT_FOUND, add_node x/y, screenshot collisions (2026-07-19)
 
 - **`find_by_class` distinguishes "no such class" from "zero instances"** (both

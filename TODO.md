@@ -8,8 +8,16 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
-> **[ ] 2026-07-21 — journal-evidenced alias kills + 2 ergonomic gaps (AWAITING AARON'S GO;
-> full analysis in `docs/journal-analysis-2026-07-21.md`).** 10 days of journal (1,463 calls,
+> **[x] 2026-07-21 — journal-evidenced alias kills + 2 ergonomic gaps.** DONE same night
+> (Aaron's go): ~33 dead aliases deleted schema+handler together across the six exercised
+> tools (the 3 extras — control_actor/build_environment stragglers on shared handlers —
+> caught by param-reconciliation); `get_actor_bounds` accepts `name`; `create_node`/
+> `add_node` `location` rejects now steer to arrange_graph; bonus from the possess
+> triage: bare `possess` = repossess-after-eject (the editor toolbar toggle — all 3
+> journal failures were exactly that call shape). rename_variable/rename_widget `oldName`
+> and search_assets `recursivePaths` were NOT killed (primary/behavior params the alias
+> grep over-matched). All rejections + both gaps live-verified; golden re-pinned
+> (−148 lines). Original entry: 10 days of journal (1,463 calls,
 > 11.7% fail): of ~130 declared alias params only 9 were ever sent. Proposal: (1) delete the
 > ~30 never-sent aliases in the six exercised tools (control_actor snake_case tier + class/
 > actorClass; manage_blueprint snake_case tier + candidates + graph-action assetPath +
@@ -1503,7 +1511,19 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] 2026-07-21 — `manage_ai get_info` BT readback can't reconstruct the tree (volcano BT authoring session)
+### [x] 2026-07-21 — `manage_ai get_info` BT readback can't reconstruct the tree (volcano BT authoring session)
+FIXED same night, all three gaps: get_info now emits `btNodes` — one entry per
+composite/task/decorator/service from a recursive runtime-tree walk with `kind`, `path`
+("0.0.1"-style execution paths), `parentPath`, `childIndex` (selector priority / sequence
+order), `depth`, `nodeId` (graph GUID crosslink via NodeInstance, the id the authoring
+actions speak), `blackboardKeys` (ALL FBlackboardKeySelector properties by property name,
+tasks included), and `properties` (CPF_Edit config bag via the canonical reflection
+export; FValueOrBBKey renders as {DefaultValue, Key}) — plus a `treePretty` indented
+render. Legacy arrays kept. Live-verified against BT_Volcano: full spine
+(Selector → Erupt Sequence → PickLobTarget/LavaVolley/Wait + fallback Wait), all 3
+VolcanoSense selectors, BombCount=3, decorator FlowAbortMode=Both, Wait
+WaitTime={DefaultValue:8, Key:None}. Runtime flavor (active node path on a PIE agent)
+deliberately NOT built — revisit once the static shape proves itself. Original report:
 Used live to verify a hand-authored behavior tree; three gaps made it a partial witness:
 (a) HIERARCHY/ORDER MISSING for the main spine — only aux nodes (decorators/services) carry `parentNodeId`;
 composites and tasks float parentless and childless, so composite child ORDER (the actual semantics of a BT —
@@ -1521,14 +1541,27 @@ would replace the gameplay debugger for remote verification. CORRECTION (same da
 resolves the key on the BlackboardData asset and returns key METADATA with no value; there is no way to address a
 running agent's UBlackboardComponent (wants an actorName/controller param). Runtime BB reads are a real gap.
 
-### [ ] 2026-07-19 — `manage_blueprint get_default` returns an empty envelope (no value, no error) on SCS component properties
+### [x] 2026-07-19 — `manage_blueprint get_default` returns an empty envelope (no value, no error) on SCS component properties
+FIXED 2026-07-21: the real failure was that SCS component templates are unreachable through
+the CDO (the generated object property is null until construction runs), so the
+"Component.Property" hop found nothing and the read failed as PROPERTY_NOT_FOUND with a
+bare-looking result payload. get_default now resolves the SCS component TEMPLATE directly
+(walking parent BPGCs so inherited SCS components resolve too). Live-verified on the exact
+repro: `StaticMesh.StaticMesh` → `/Engine/BasicShapes/Sphere.Sphere` (Object),
+`StaticMesh.LDMaxDrawDistance` → 0 (Float). Original report:
 Repro (volcano session): `get_default {blueprintPath:'/Game/Blueprints/Attacks/BP_LavaBomb', propertyName:'StaticMesh.StaticMesh'}`
 (also `StaticMesh.LDMaxDrawDistance`) → response is just `{propertyName, blueprintPath}` — no `value`, no `propertyType`,
 no error. The same call shape works against a NATIVE default subobject (`LobComponent.FlightTime` on BP_Volcano, C++
 CreateDefaultSubobject), so the failing leg is SCS component templates (BP_LavaBomb's StaticMesh is an SCS node).
 Fail-loud violation: resolve the SCS template or return PROPERTY_NOT_FOUND — the silent envelope reads as "unset".
 
-### [ ] 2026-07-19 — benign [SourceControl] chatter inflates successful calls to ENGINE_ERROR
+### [x] 2026-07-19 — benign [SourceControl] chatter inflates successful calls to ENGINE_ERROR
+FIXED 2026-07-21: the per-request error-capture device now skips the SourceControl log
+category outright (git plugin bookkeeping is never evidence about the in-flight call).
+Live-verified on the exact repro: `manage_blueprint create` into a brand-new Content
+folder → clean success, no ENGINE_ERROR wrap. NOTE for journal analysis: pre-fix
+ENGINE_ERROR counts (19 generic + some of connect_pins' 17) are partly this pollution —
+re-baseline after a week. Original report:
 Repro: `manage_blueprint create` into a brand-new Content folder → asset created + saved fine, but the editor git
 plugin logs `[SourceControl] warning: could not open directory 'Content/Blueprints/Environment/'` and the engine-error
 watchdog wraps the response in `success:false / ENGINE_ERROR` quoting it. Also seen: a storm of
@@ -2605,7 +2638,12 @@ for the whole exchange works. Per the MCP streamable-HTTP spec the session shoul
 connections via the header alone; the pull-architecture rewrite likely tied session state to the
 live socket. Worth confirming if any headless/cron client ever opens per-call connections.
 
-### [ ] Raw `execute_python` IMC / BP-default authoring traps (found 2026-06-13, Option C IA_Block)
+### [x] Raw `execute_python` IMC / BP-default authoring traps (found 2026-06-13, Option C IA_Block)
+CLOSED 2026-07-21 — superseded by the native actions, both receipts verified by code read:
+the Enhanced-Input handlers `Modify()` the IMC/IA before every mapping mutation (with the
+DefaultKeyMappings dirty-tracking noted inline, InputHandlers ~L500), and
+`blueprint_set_default` compiles before writing the CDO. The python-path traps below stand
+as documentation of why execute_python authoring is discouraged. Original entry:
 Two silent persistence traps hit authoring input via **raw `execute_python`** instead of the
 dedicated Enhanced-Input / `manage_blueprint set_default` actions (lesson — prefer the real bridge
 action; these almost certainly handle both):
