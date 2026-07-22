@@ -1075,17 +1075,6 @@ UBlueprint *UMcpAutomationBridgeSubsystem::ResolveBlueprintOrError(
           return !Norm.TrimStartAndEnd().IsEmpty() ? Norm : Candidate; \
       } \
     } \
-    if (LocalPayload->TryGetArrayField(TEXT("candidates"), CandidateArray) && \
-        CandidateArray && CandidateArray->Num() > 0) { \
-      for (const TSharedPtr<FJsonValue> &V : *CandidateArray) { \
-        if (!V.IsValid() || V->Type != EJson::String) continue; \
-        FString Candidate = V->AsString(); \
-        if (Candidate.TrimStartAndEnd().IsEmpty()) continue; \
-        FString Norm; \
-        if (FindBlueprintNormalizedPath(Candidate, Norm)) \
-          return !Norm.TrimStartAndEnd().IsEmpty() ? Norm : Candidate; \
-      } \
-    } \
     return FString(); \
   };
 
@@ -1137,36 +1126,18 @@ bool McpHandlers::Blueprint::HandleBlueprintAddScsComponent(
 #if WITH_EDITOR
   MCP_BPSCS_SAFEGETSTR();
     FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
+    Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
     FString CompClass;
-    Payload->TryGetStringField(TEXT("component_class"), CompClass);
-    if (CompClass.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentClass"), CompClass);
-    }
+    Payload->TryGetStringField(TEXT("componentClass"), CompClass);
     FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
+    Payload->TryGetStringField(TEXT("componentName"), CompName);
     FString ParentName;
-    Payload->TryGetStringField(TEXT("parent_component"), ParentName);
-    if (ParentName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("parentComponent"), ParentName);
-    }
+    Payload->TryGetStringField(TEXT("parentComponent"), ParentName);
     // Feature #1, #2: Extract mesh and material paths for assignment
     FString MeshPath;
-    Payload->TryGetStringField(TEXT("mesh_path"), MeshPath);
-    if (MeshPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("meshPath"), MeshPath);
-    }
+    Payload->TryGetStringField(TEXT("meshPath"), MeshPath);
     FString MaterialPath;
-    Payload->TryGetStringField(TEXT("material_path"), MaterialPath);
-    if (MaterialPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("materialPath"), MaterialPath);
-    }
+    Payload->TryGetStringField(TEXT("materialPath"), MaterialPath);
     TSharedPtr<FJsonObject> Result = FSCSHandlers::AddSCSComponent(
         BPPath, CompClass, CompName, ParentName, MeshPath, MaterialPath);
     S.SendAutomationResponse(RequestingSocket, RequestId,
@@ -1189,15 +1160,9 @@ bool McpHandlers::Blueprint::HandleBlueprintRemoveScsComponent(
 #if WITH_EDITOR
   MCP_BPSCS_SAFEGETSTR();
     FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
+    Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
     FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
+    Payload->TryGetStringField(TEXT("componentName"), CompName);
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::RemoveSCSComponent(BPPath, CompName);
     S.SendAutomationResponse(RequestingSocket, RequestId,
@@ -1220,20 +1185,11 @@ bool McpHandlers::Blueprint::HandleBlueprintReparentScsComponent(
 #if WITH_EDITOR
   MCP_BPSCS_SAFEGETSTR();
     FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
+    Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
     FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
+    Payload->TryGetStringField(TEXT("componentName"), CompName);
     FString NewParent;
-    Payload->TryGetStringField(TEXT("new_parent"), NewParent);
-    if (NewParent.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("newParent"), NewParent);
-    }
+    Payload->TryGetStringField(TEXT("newParent"), NewParent);
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::ReparentSCSComponent(BPPath, CompName, NewParent);
     S.SendAutomationResponse(RequestingSocket, RequestId,
@@ -1256,15 +1212,9 @@ bool McpHandlers::Blueprint::HandleBlueprintSetScsTransform(
 #if WITH_EDITOR
   MCP_BPSCS_SAFEGETSTR();
     FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
+    Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
     FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
+    Payload->TryGetStringField(TEXT("componentName"), CompName);
     TSharedPtr<FJsonObject> Result =
         FSCSHandlers::SetSCSComponentTransform(BPPath, CompName, Payload);
     S.SendAutomationResponse(RequestingSocket, RequestId,
@@ -1287,20 +1237,11 @@ bool McpHandlers::Blueprint::HandleBlueprintSetScsProperty(
 #if WITH_EDITOR
   MCP_BPSCS_SAFEGETSTR();
     FString BPPath;
-    Payload->TryGetStringField(TEXT("blueprint_path"), BPPath);
-    if (BPPath.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
-    }
+    Payload->TryGetStringField(TEXT("blueprintPath"), BPPath);
     FString CompName;
-    Payload->TryGetStringField(TEXT("component_name"), CompName);
-    if (CompName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("componentName"), CompName);
-    }
+    Payload->TryGetStringField(TEXT("componentName"), CompName);
     FString PropName;
-    Payload->TryGetStringField(TEXT("property_name"), PropName);
-    if (PropName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("propertyName"), PropName);
-    }
+    Payload->TryGetStringField(TEXT("propertyName"), PropName);
     McpPropertyReflection::FMcpTypedValue TypedValue;
     FString ValueParseDetail;
     switch (McpPropertyReflection::ReadDiscriminatedValue(Payload, TypedValue,
@@ -4633,6 +4574,33 @@ bool McpHandlers::Blueprint::HandleBlueprintGetDefault(
                                                       FName(*NestedProp));
             if (TargetProperty) {
               CDO = CompObj;
+            }
+          }
+        }
+        // SCS components aren't reachable through the CDO: their generated
+        // object property is null until construction runs, so the hop above
+        // finds nothing and a legitimate read failed as PROPERTY_NOT_FOUND
+        // (BP_LavaBomb StaticMesh.StaticMesh, 2026-07-19). Resolve the SCS
+        // component TEMPLATE directly — walking the parent chain so inherited
+        // SCS components resolve too.
+        if (!TargetProperty) {
+          for (UClass *C = GeneratedClass; C && !TargetProperty;
+               C = C->GetSuperClass()) {
+            UBlueprintGeneratedClass *BPGC = Cast<UBlueprintGeneratedClass>(C);
+            if (!BPGC || !BPGC->SimpleConstructionScript) {
+              continue;
+            }
+            for (USCS_Node *Node :
+                 BPGC->SimpleConstructionScript->GetAllNodes()) {
+              if (Node && Node->ComponentTemplate &&
+                  Node->GetVariableName() == FName(*ComponentName)) {
+                TargetProperty = FindFProperty<FProperty>(
+                    Node->ComponentTemplate->GetClass(), FName(*NestedProp));
+                if (TargetProperty) {
+                  CDO = Node->ComponentTemplate;
+                }
+                break;
+              }
             }
           }
         }

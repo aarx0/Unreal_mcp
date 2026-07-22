@@ -2411,8 +2411,7 @@ static TSharedPtr<FJsonObject> TextureCombineTextures(const TSharedPtr<FJsonObje
     TSharedPtr<FJsonObject> Response = McpHandlerUtils::CreateResultObject();
         FString BaseTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("baseTexture"), TEXT("")));
         // Support both overlayTexture (C++ naming) and blendTexture (TS handler naming)
-                FString OverlayTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("overlayTexture"), 
-                    GetJsonStringField(Params, TEXT("blendTexture"), TEXT(""))));
+                FString OverlayTexturePath = NormalizeTexturePath(GetJsonStringField(Params, TEXT("overlayTexture"), TEXT("")));
         FString BlendMode = GetJsonStringField(Params, TEXT("blendMode"), TEXT("Normal"));
         float Opacity = static_cast<float>(GetJsonNumberField(Params, TEXT("opacity"), 1.0));
         FString Name = GetJsonStringField(Params, TEXT("name"), TEXT("Combined"));

@@ -215,16 +215,12 @@ bool McpHandlers::ControlActor::HandleControlActorSpawn(
     const FString &RequestId, const TSharedPtr<FJsonObject> &Payload,
     FMcpResponseHandle Socket) {
 #if WITH_EDITOR
-  // The tool schema advertises three aliases for the class (classPath,
-  // className, actorClass); coalesce them so all three actually work
-  // (mirrors HandleControlActorFindByClass). classPath wins when several
-  // are sent since it is the most explicit form.
+  // classPath wins when both class spellings are sent since it is the most
+  // explicit form (mirrors HandleControlActorFindByClass).
   FString ClassPath;
   Payload->TryGetStringField(TEXT("classPath"), ClassPath);
   if (ClassPath.IsEmpty())
     Payload->TryGetStringField(TEXT("className"), ClassPath);
-  if (ClassPath.IsEmpty())
-    Payload->TryGetStringField(TEXT("actorClass"), ClassPath);
   // The schema also declares 'name'; accept it as an alias of actorName.
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
@@ -1154,8 +1150,6 @@ bool McpHandlers::ControlActor::HandleControlActorSetComponentProperties(
 
   FString PropertyName;
   Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
-  if (PropertyName.IsEmpty())
-    Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
   const TSharedPtr<FJsonObject> *PropertiesMap = nullptr;
   Payload->TryGetObjectField(TEXT("properties"), PropertiesMap);
   const bool bMapMode = PropertiesMap && PropertiesMap->IsValid();
@@ -2221,6 +2215,11 @@ bool McpHandlers::ControlActor::HandleControlActorGetBoundingBox(
   FString TargetName;
   Payload->TryGetStringField(TEXT("actorName"), TargetName);
   if (TargetName.IsEmpty()) {
+    // Journal-evidenced: the tool's own find_by_name/spawn schema teaches
+    // clients that control_actor speaks `name`, so it keeps arriving here.
+    Payload->TryGetStringField(TEXT("name"), TargetName);
+  }
+  if (TargetName.IsEmpty()) {
     S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
                           TEXT("INVALID_ARGUMENT"));
     return true;
@@ -2422,15 +2421,12 @@ bool McpHandlers::ControlActor::HandleControlActorFindByClass(
   FString ClassName;
   Payload->TryGetStringField(TEXT("className"), ClassName);
   if (ClassName.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("class"), ClassName);
-  }
-  if (ClassName.IsEmpty()) {
     Payload->TryGetStringField(TEXT("classPath"), ClassName);
   }
 
   if (ClassName.IsEmpty()) {
     S.SendAutomationError(Socket, RequestId,
-                          TEXT("className or class is required"),
+                          TEXT("className or classPath is required"),
                           TEXT("INVALID_ARGUMENT"));
     return true;
   }
@@ -2542,16 +2538,10 @@ bool McpHandlers::ControlActor::HandleControlActorRemoveComponent(
 #if WITH_EDITOR
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
-  if (ActorName.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("actor_name"), ActorName);
-  }
-  
+
   FString ComponentName;
   Payload->TryGetStringField(TEXT("componentName"), ComponentName);
-  if (ComponentName.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("component_name"), ComponentName);
-  }
-  
+
   if (ActorName.IsEmpty()) {
     S.SendAutomationError(Socket, RequestId, TEXT("actorName is required"), TEXT("MISSING_PARAM"));
     return true;
@@ -2604,10 +2594,7 @@ bool McpHandlers::ControlActor::HandleControlActorGetComponentProperty(
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
   Payload->TryGetStringField(TEXT("componentName"), ComponentName);
   Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
-  if (PropertyName.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
-  }
-  
+
   if (ActorName.IsEmpty() || ComponentName.IsEmpty() || PropertyName.IsEmpty()) {
     S.SendAutomationError(Socket, RequestId, TEXT("actorName, componentName, and propertyName are required"), TEXT("MISSING_PARAM"));
     return true;
@@ -2667,25 +2654,18 @@ bool McpHandlers::ControlActor::HandleControlActorSetCollision(
   FString ActorName;
   Payload->TryGetStringField(TEXT("actorName"), ActorName);
   if (ActorName.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("actor_name"), ActorName);
-  }
-  if (ActorName.IsEmpty()) {
     S.SendAutomationError(Socket, RequestId, TEXT("actorName is required"), TEXT("MISSING_PARAM"));
     return true;
   }
 
   // collisionEnabled must be explicitly requested — never silently apply the default.
-  const bool bHasCollision = Payload->HasField(TEXT("collisionEnabled")) ||
-                             Payload->HasField(TEXT("collision_enabled"));
-  if (!bHasCollision) {
+  if (!Payload->HasField(TEXT("collisionEnabled"))) {
     S.SendAutomationError(Socket, RequestId, TEXT("collisionEnabled is required"),
                         TEXT("NO_CHANGES_REQUESTED"));
     return true;
   }
   const bool bCollisionEnabled =
-      Payload->HasField(TEXT("collisionEnabled"))
-          ? GetJsonBoolField(Payload, TEXT("collisionEnabled"), true)
-          : GetJsonBoolField(Payload, TEXT("collision_enabled"), true);
+      GetJsonBoolField(Payload, TEXT("collisionEnabled"), true);
 
   AActor* Actor = S.FindActorByName(ActorName);
   if (!Actor) {
@@ -2958,9 +2938,25 @@ bool McpHandlers::ControlEditor::HandleControlEditorPossess(
   if (ActorName.IsEmpty())
     Payload->TryGetStringField(TEXT("objectPath"), ActorName);
 
+  if (!GEditor) {
+    S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
+                          TEXT("EDITOR_NOT_AVAILABLE"));
+    return true;
+  }
+  if (!GEditor->PlayWorld) {
+    S.SendAutomationError(Socket, RequestId,
+                          TEXT("Cannot possess while not in PIE"),
+                          TEXT("NOT_IN_PIE"));
+    return true;
+  }
+
+  // Bare possess = the editor's Eject/Possess toolbar toggle: re-attach the
+  // ejected player controller to its pawn. Callers kept invoking it that way
+  // (journal: every no-arg possess predated this and failed INVALID_ARGUMENT).
   if (ActorName.IsEmpty()) {
-    S.SendAutomationError(Socket, RequestId, TEXT("actorName required"),
-                          TEXT("INVALID_ARGUMENT"));
+    GEditor->Exec(GEditor->PlayWorld, TEXT("POSSESS"));
+    S.SendAutomationResponse(Socket, RequestId, true,
+                             TEXT("Repossessed the player pawn"), nullptr);
     return true;
   }
 
@@ -2972,25 +2968,12 @@ bool McpHandlers::ControlEditor::HandleControlEditorPossess(
     return true;
   }
 
-  if (GEditor) {
-    GEditor->SelectNone(true, true, false);
-    GEditor->SelectActor(Found, true, true, true);
-    // 'POSSESS' command works on selected actor in PIE
-    if (GEditor->PlayWorld) {
-      GEditor->Exec(GEditor->PlayWorld, TEXT("POSSESS"));
-      S.SendAutomationResponse(Socket, RequestId, true, TEXT("Possessed actor"),
-                             nullptr);
-    } else {
-      // If not in PIE, we can't possess
-      S.SendAutomationError(Socket, RequestId,
-                            TEXT("Cannot possess actor while not in PIE"),
-                            TEXT("NOT_IN_PIE"));
-    }
-    return true;
-  }
-
-  S.SendAutomationError(Socket, RequestId, TEXT("Editor not available"),
-                        TEXT("EDITOR_NOT_AVAILABLE"));
+  GEditor->SelectNone(true, true, false);
+  GEditor->SelectActor(Found, true, true, true);
+  // 'POSSESS' command works on selected actor in PIE
+  GEditor->Exec(GEditor->PlayWorld, TEXT("POSSESS"));
+  S.SendAutomationResponse(Socket, RequestId, true, TEXT("Possessed actor"),
+                           nullptr);
   return true;
 #else
   return false;
@@ -3959,21 +3942,12 @@ bool McpHandlers::ControlEditor::HandleControlEditorSimulateInput(
     return true;
   }
 
-  // Accept multiple field names for flexibility
-  // - 'type': C++ native field (key_down, key_up, mouse_click, mouse_move, analog)
-  // - 'inputType': Alternative name
-  // - 'inputAction': Action-based naming (pressed, released, click, move)
   // CRITICAL: Do NOT read from 'action' field - that's the routing action (e.g., "simulate_input")
-  // and will always be present in the payload. Only use type/inputType/inputAction for input type.
+  // and will always be present in the payload. Only 'type' names the input type
+  // (key_down, key_up, mouse_click, mouse_move, analog; pressed/released/click/move accepted).
   FString InputType;
   Payload->TryGetStringField(TEXT("type"), InputType);
-  if (InputType.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("inputType"), InputType);
-  }
-  if (InputType.IsEmpty()) {
-    Payload->TryGetStringField(TEXT("inputAction"), InputType);
-  }
-  
+
   // Map action values to C++ expected type values
   InputType = InputType.ToLower();
   if (InputType == TEXT("pressed") || InputType == TEXT("down")) {

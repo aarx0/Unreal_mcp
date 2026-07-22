@@ -426,9 +426,7 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 	 .Array(TEXT("assets"),
 		TEXT("generate_lods: alias of assetPaths."))
 	 .Integer(TEXT("lodCount"),
-		TEXT("generate_lods: number of LODs to generate (alias: numLODs)."))
-	 .Integer(TEXT("numLODs"),
-		TEXT("generate_lods: alias of lodCount (default 4, clamped 1-50)."))
+		TEXT("generate_lods: number of LODs to generate (default 4, clamped 1-50)."))
 	 .Object(TEXT("reductionSettings"),
 		TEXT("generate_lods: per-LOD FMeshReductionSettings overrides "
 			"(percentTriangles, percentVertices, maxDeviation, pixelError, "

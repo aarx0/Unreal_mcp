@@ -63,8 +63,7 @@ static void S_RunUbt(FMcpSchemaBuilder& B)
 	B.String(TEXT("target"), TEXT("run_ubt: build target (e.g. MyProjectEditor). Non-blocking: returns a buildId immediately; poll get_build_status."))
 	 .String(TEXT("platform"), TEXT("run_ubt: build platform — Win64|Mac|Linux|LinuxArm64|Android|IOS|TVOS|HoloLens|VisionOS (default: host platform)."))
 	 .String(TEXT("configuration"), TEXT("run_ubt: build configuration — Debug|DebugGame|Development|Test|Shipping (default Development)."))
-	 .String(TEXT("additionalArgs"), TEXT("run_ubt: extra UBT command-line arguments (alias: arguments)."))
-	 .String(TEXT("arguments"), TEXT("run_ubt: alias of additionalArgs, read when additionalArgs is absent."))
+	 .String(TEXT("additionalArgs"), TEXT("run_ubt: extra UBT command-line arguments."))
 	 .Bool(TEXT("noUBA"), TEXT("run_ubt: pass -NoUBA (default true — UBA-built binaries break later Live Coding patches). Set false for faster UBA builds when no LC patching will follow."))
 	 .Required({TEXT("target")});
 }
@@ -84,7 +83,6 @@ static void S_RunTests(FMcpSchemaBuilder& B)
 	B.String(TEXT("suite"), TEXT("run_tests: \"ui-nav\" runs the checked-in CommonUI focus/nav spec suite (tests/ui-nav) via the external pwsh runner, fire-and-poll like run_ubt; omit for engine automation tests. Needs pwsh on PATH and an idle editor."))
 	 .String(TEXT("spec"), TEXT("run_tests suite:\"ui-nav\": single spec to run, by name or filename (e.g. \"pause_menu\"); omit to run every spec in tests/ui-nav."))
 	 .String(TEXT("filter"), TEXT("Substring filter over automation test display name / full path / test name (run_tests, list_tests)."))
-	 .String(TEXT("test"), TEXT("Exact/partial test name to run (run_tests; alias for filter)."))
 	 .Integer(TEXT("maxTests"), TEXT("Max tests to queue for run_tests (1-500, default 50)."));
 }
 
@@ -247,8 +245,7 @@ static void S_ConfigureWorldPartition(FMcpSchemaBuilder& B)
 static void S_MergeActors(FMcpSchemaBuilder& B)
 {
 	B.Array(TEXT("actors"), TEXT("merge_actors: actor names/labels/paths to merge (at least 2)."))
-	 .String(TEXT("packageName"), TEXT("merge_actors: destination package path for the merged static mesh (alias: outputPath)."))
-	 .String(TEXT("outputPath"), TEXT("generate_test_stub: .cpp path to write (default: the bridge plugin's GeneratedTests dir)."))
+	 .String(TEXT("outputPath"), TEXT("merge_actors: destination package path for the merged static mesh (default: /Game/MCPTest/MergedActors/SM_Merged_<guid>)."))
 	 .Bool(TEXT("replaceSourceActors"), TEXT("merge_actors: destroy the source actors once the merge succeeds (default false)."))
 	 .Required({TEXT("actors")});
 }

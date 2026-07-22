@@ -3206,8 +3206,7 @@ bool McpHandlers::Asset::HandleCreateDataTable(
   // Row struct: a UScriptStruct deriving from FTableRowBase. Accept either a full
   // object path (/Script/Module.StructName or /Game/.../UserStruct) or a bare name.
   FString RowStructStr;
-  if (!Payload->TryGetStringField(TEXT("rowStruct"), RowStructStr))
-    Payload->TryGetStringField(TEXT("rowStructPath"), RowStructStr);
+  Payload->TryGetStringField(TEXT("rowStruct"), RowStructStr);
   // Newly created assets persist by default; pass save:false for in-memory only.
   bool bSave = true;
   Payload->TryGetBoolField(TEXT("save"), bSave);
@@ -3309,15 +3308,13 @@ bool McpHandlers::Asset::HandleCreateDataTable(
 
 #if WITH_EDITOR
 namespace {
-// Resolve the DataTable named by the payload (assetPath / dataTablePath / path /
-// tablePath). Returns the table, or nullptr with OutError set (caller sends the
-// response). Validates that a RowStruct is assigned (row ops are meaningless without).
+// Resolve the DataTable named by the payload (assetPath / path). Returns the
+// table, or nullptr with OutError set (caller sends the response). Validates
+// that a RowStruct is assigned (row ops are meaningless without).
 UDataTable *McpLoadDataTableArg(const TSharedPtr<FJsonObject> &Payload,
                                 FString &OutError) {
   FString Path;
   if (!Payload->TryGetStringField(TEXT("assetPath"), Path) &&
-      !Payload->TryGetStringField(TEXT("dataTablePath"), Path) &&
-      !Payload->TryGetStringField(TEXT("tablePath"), Path) &&
       !Payload->TryGetStringField(TEXT("path"), Path)) {
     OutError = TEXT("assetPath (the DataTable) is required");
     return nullptr;
@@ -3401,10 +3398,7 @@ bool McpHandlers::Asset::HandleDataTableRowOp(
   // ---- import: replace all rows from a CSV or JSON string ----
   if (bImport) {
     FString Source;
-    if (!Payload->TryGetStringField(TEXT("sourceText"), Source) &&
-        !Payload->TryGetStringField(TEXT("csv"), Source) &&
-        !Payload->TryGetStringField(TEXT("json"), Source) &&
-        !Payload->TryGetStringField(TEXT("content"), Source)) {
+    if (!Payload->TryGetStringField(TEXT("sourceText"), Source)) {
       S.SendAutomationResponse(Socket, RequestId, false,
                              TEXT("sourceText (CSV or JSON) is required"),
                              nullptr, TEXT("INVALID_ARGUMENT"));
@@ -4098,14 +4092,10 @@ bool McpHandlers::Asset::HandleGenerateLODs(
   Payload->TryGetStringField(TEXT("assetPath"), SingleAssetPath);
   
   const TArray<TSharedPtr<FJsonValue>> *AssetPathsArray = nullptr;
-  if (!Payload->TryGetArrayField(TEXT("assetPaths"), AssetPathsArray)) {
-    Payload->TryGetArrayField(TEXT("assets"), AssetPathsArray);
-  }
+  Payload->TryGetArrayField(TEXT("assetPaths"), AssetPathsArray);
 
-  // Support both lodCount and numLODs
   int32 NumLODs = 4;
   Payload->TryGetNumberField(TEXT("lodCount"), NumLODs);
-  Payload->TryGetNumberField(TEXT("numLODs"), NumLODs);
   NumLODs = FMath::Clamp(NumLODs, 1, 50);
 
   // FMeshReductionSettings overrides applied to every generated LOD; percent

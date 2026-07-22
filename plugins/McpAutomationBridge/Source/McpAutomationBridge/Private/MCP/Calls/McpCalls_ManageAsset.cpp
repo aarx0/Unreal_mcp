@@ -244,17 +244,13 @@ static void S_CreateDataTable(FMcpSchemaBuilder& B)
 	B.String(TEXT("name"), TEXT("Name identifier."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .String(TEXT("rowStruct"), TEXT("create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name."))
-	 .String(TEXT("rowStructPath"), TEXT("create_data_table: alias for rowStruct."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
-	 .Required({TEXT("name"), TEXT("path")})
-	 .RequiredAnyOf({TEXT("rowStruct"), TEXT("rowStructPath")});
+	 .Required({TEXT("name"), TEXT("path"), TEXT("rowStruct")});
 }
 
 static void S_AddDataTableRow(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
-	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
@@ -265,8 +261,6 @@ static void S_AddDataTableRow(FMcpSchemaBuilder& B)
 static void S_EditDataTableRow(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
-	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
@@ -277,8 +271,6 @@ static void S_EditDataTableRow(FMcpSchemaBuilder& B)
 static void S_RemoveDataTableRow(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
-	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("rowName"), TEXT("DataTable row CRUD: the row's key (FName)."))
@@ -288,8 +280,6 @@ static void S_RemoveDataTableRow(FMcpSchemaBuilder& B)
 static void S_GetDataTableRows(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
-	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."));
 }
@@ -297,14 +287,9 @@ static void S_GetDataTableRows(FMcpSchemaBuilder& B)
 static void S_ImportDataTable(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
-	 .String(TEXT("dataTablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
-	 .String(TEXT("tablePath"), TEXT("DataTable row CRUD: alias for assetPath (the DataTable)."))
 	 .String(TEXT("path"), TEXT("Path to a directory."))
 	 .Bool(TEXT("save"), TEXT("Save the asset(s) after the operation."))
 	 .String(TEXT("sourceText"), TEXT("import_data_table: the CSV or JSON text to import (replaces all rows)."))
-	 .String(TEXT("csv"), TEXT("import_data_table: alias for sourceText (CSV)."))
-	 .String(TEXT("json"), TEXT("import_data_table: alias for sourceText (JSON)."))
-	 .String(TEXT("content"), TEXT("import_data_table: alias for sourceText."))
 	 .String(TEXT("format"), TEXT("import_data_table: 'csv' or 'json' (inferred from sourceText if omitted); create_render_target: pixel format — RGBA8 (default)|RGBA16F|RGBA32F|R8|RG8|R16F|RG16F|R32F|RG32F|RGB10A2."));
 }
 
@@ -325,9 +310,7 @@ static void S_GenerateLods(FMcpSchemaBuilder& B)
 	B.String(TEXT("landscapePath"), TEXT("generate_lods: landscape asset path (alternative to assetPath/assetPaths)."))
 	 .String(TEXT("assetPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .Array(TEXT("assetPaths"), TEXT("Asset paths to operate on."))
-	 .Array(TEXT("assets"), TEXT("generate_lods: alias for assetPaths."))
 	 .Integer(TEXT("lodCount"), TEXT("generate_lods: number of LOD levels to build (default 4, clamped 1-50)."))
-	 .Integer(TEXT("numLODs"), TEXT("generate_lods: alias for lodCount."))
 	 .Object(TEXT("reductionSettings"), TEXT("generate_lods: FMeshReductionSettings overrides for every generated LOD (percentTriangles/percentVertices 0-1 replace the progressive defaults)."),
 		[](FMcpSchemaBuilder& S) { S.Number(TEXT("percentTriangles")).Number(TEXT("percentVertices")).Number(TEXT("maxDeviation")).Number(TEXT("pixelError")).Number(TEXT("weldingThreshold")).Number(TEXT("hardAngleThreshold")).Integer(TEXT("baseLODModel")).Bool(TEXT("recalculateNormals")); });
 }
@@ -1170,8 +1153,7 @@ static void S_ChannelExtract(FMcpSchemaBuilder& B)
 static void S_CombineTextures(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("baseTexture"), TEXT("combine_textures: base texture path."))
-	 .String(TEXT("overlayTexture"), TEXT("combine_textures: overlay texture path (alias blendTexture)."))
-	 .String(TEXT("blendTexture"), TEXT("combine_textures: alias for overlayTexture."))
+	 .String(TEXT("overlayTexture"), TEXT("combine_textures: overlay texture path ."))
 	 .String(TEXT("blendMode"), TEXT("create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add."))
 	 .Number(TEXT("opacity"), TEXT("combine_textures: overlay blend opacity 0-1 (default 1)."))
 	 .String(TEXT("name"), TEXT("Name identifier."))

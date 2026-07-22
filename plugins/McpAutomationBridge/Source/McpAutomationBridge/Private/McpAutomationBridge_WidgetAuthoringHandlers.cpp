@@ -3960,17 +3960,13 @@ bool McpHandlers::Blueprint::HandleWidgetAuthoringBindOnClicked(
         //   widgetPath     (required) - the widget Blueprint asset
         //   slotName       (required) - the child widget whose delegate to bind
         //   delegateName   (optional) - multicast delegate; default OnClicked / OnHovered
-        //   targetFunction (optional, alias functionName) - self UFUNCTION to call
+        //   functionName   (optional) - self UFUNCTION to call
         const bool bHoveredVariant = SubAction.Equals(TEXT("bind_on_hovered"), ESearchCase::IgnoreCase);
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"),
             bHoveredVariant ? TEXT("OnHovered") : TEXT("OnClicked"));
-        FString TargetFunction = GetJsonStringField(Payload, TEXT("targetFunction"));
-        if (TargetFunction.IsEmpty())
-        {
-            TargetFunction = GetJsonStringField(Payload, TEXT("functionName"));
-        }
+        FString TargetFunction = GetJsonStringField(Payload, TEXT("functionName"));
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {
@@ -4175,17 +4171,13 @@ bool McpHandlers::Blueprint::HandleWidgetAuthoringBindOnHovered(
         //   widgetPath     (required) - the widget Blueprint asset
         //   slotName       (required) - the child widget whose delegate to bind
         //   delegateName   (optional) - multicast delegate; default OnClicked / OnHovered
-        //   targetFunction (optional, alias functionName) - self UFUNCTION to call
+        //   functionName   (optional) - self UFUNCTION to call
         const bool bHoveredVariant = SubAction.Equals(TEXT("bind_on_hovered"), ESearchCase::IgnoreCase);
         FString WidgetPath = GetJsonStringField(Payload, TEXT("widgetPath"));
         FString SlotName = GetSlotName(Payload);
         FString DelegateName = GetJsonStringField(Payload, TEXT("delegateName"),
             bHoveredVariant ? TEXT("OnHovered") : TEXT("OnClicked"));
-        FString TargetFunction = GetJsonStringField(Payload, TEXT("targetFunction"));
-        if (TargetFunction.IsEmpty())
-        {
-            TargetFunction = GetJsonStringField(Payload, TEXT("functionName"));
-        }
+        FString TargetFunction = GetJsonStringField(Payload, TEXT("functionName"));
 
         if (WidgetPath.IsEmpty() || SlotName.IsEmpty())
         {

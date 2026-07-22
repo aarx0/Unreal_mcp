@@ -427,10 +427,7 @@ bool McpHandlers::SystemControl::HandlePerfMergeActors(UMcpAutomationBridgeSubsy
     }
 
     FString RequestedPackageName;
-    Payload->TryGetStringField(TEXT("packageName"), RequestedPackageName);
-    if (RequestedPackageName.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("outputPath"), RequestedPackageName);
-    }
+    Payload->TryGetStringField(TEXT("outputPath"), RequestedPackageName);
     if (RequestedPackageName.IsEmpty()) {
       RequestedPackageName = FString::Printf(TEXT("/Game/MCPTest/MergedActors/SM_Merged_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
     }

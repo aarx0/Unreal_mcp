@@ -346,12 +346,10 @@ bool McpHandlers::BuildEnvironment::HandleExecuteEditorFunction(
   if (FN == TEXT("DELETE_ACTOR") || FN == TEXT("DESTROY_ACTOR")) {
     // ... (existing delete logic) ...
     FString Target;
-    Payload->TryGetStringField(TEXT("actor_name"), Target);
-    if (Target.IsEmpty())
-      Payload->TryGetStringField(TEXT("actorName"), Target);
+    Payload->TryGetStringField(TEXT("actorName"), Target);
     if (Target.IsEmpty()) {
       S.SendAutomationError(RequestingSocket, RequestId,
-                          TEXT("actor_name required"),
+                          TEXT("actorName required"),
                           TEXT("INVALID_ARGUMENT"));
       return true;
     }
@@ -407,9 +405,7 @@ bool McpHandlers::BuildEnvironment::HandleExecuteEditorFunction(
 
   if (FN == TEXT("POSSESS")) {
     FString TargetName;
-    Payload->TryGetStringField(TEXT("actor_name"), TargetName);
-    if (TargetName.IsEmpty())
-      Payload->TryGetStringField(TEXT("actorName"), TargetName);
+    Payload->TryGetStringField(TEXT("actorName"), TargetName);
     if (TargetName.IsEmpty()) {
       S.SendAutomationError(RequestingSocket, RequestId,
                           TEXT("actorName required"), TEXT("INVALID_ARGUMENT"));

@@ -167,13 +167,8 @@ bool McpHandlers::Inspect::HandleSetObjectProperty(
   PropertyName.TrimStartAndEndInline();
   if (PropertyName.IsEmpty())
   {
-      Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
-      PropertyName.TrimStartAndEndInline();
-  }
-  if (PropertyName.IsEmpty())
-  {
       S.SendAutomationError(RequestingSocket, RequestId,
-          TEXT("propertyName or propertyPath is required."),
+          TEXT("propertyName is required."),
           TEXT("INVALID_PROPERTY"));
       return true;
   }
@@ -577,15 +572,10 @@ bool McpHandlers::Inspect::HandleGetObjectProperty(
   FString PropertyName;
   Payload->TryGetStringField(TEXT("propertyName"), PropertyName);
   PropertyName.TrimStartAndEndInline();
-  if (PropertyName.IsEmpty())
-  {
-      Payload->TryGetStringField(TEXT("propertyPath"), PropertyName);
-      PropertyName.TrimStartAndEndInline();
-  }
   if (PropertyName.IsEmpty()) {
     S.SendAutomationError(
         RequestingSocket, RequestId,
-        TEXT("get_object_property requires a non-empty propertyName or propertyPath."),
+        TEXT("get_object_property requires a non-empty propertyName."),
         TEXT("INVALID_PROPERTY"));
     return true;
   }
@@ -1006,15 +996,6 @@ bool McpHandlers::Inspect::HandleInspectCdoAction(
     }
 
     TArray<FName> PropertyNameFilter;
-    FString PropertyPathFilter;
-    if (Payload->TryGetStringField(TEXT("propertyPath"), PropertyPathFilter))
-    {
-        PropertyPathFilter.TrimStartAndEndInline();
-        if (!PropertyPathFilter.IsEmpty())
-        {
-            PropertyNameFilter.Add(FName(*PropertyPathFilter));
-        }
-    }
     const TArray<TSharedPtr<FJsonValue>>* PropNamesArr = nullptr;
     if (Payload->TryGetArrayField(TEXT("propertyNames"), PropNamesArr) && PropNamesArr)
     {

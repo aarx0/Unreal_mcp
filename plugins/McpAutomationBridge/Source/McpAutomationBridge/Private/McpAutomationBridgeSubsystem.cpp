@@ -110,6 +110,23 @@ public:
             return;
         }
 
+        // The editor's source-control (git) plugin grumbles about its own
+        // bookkeeping — scanning not-yet-created Content folders, transient
+        // /Memory packages during PIE — at Warning/Error severity. None of it
+        // is evidence about the in-flight call, but it flipped real successes
+        // to ENGINE_ERROR (manage_blueprint create into a brand-new folder,
+        // 2026-07-19). Never capture that category.
+        if (bIsErrorOrWarning)
+        {
+            static const FName SourceControlCategory(TEXT("SourceControl"));
+            static const FName LogSourceControlCategory(TEXT("LogSourceControl"));
+            if (Category == SourceControlCategory ||
+                Category == LogSourceControlCategory)
+            {
+                return;
+            }
+        }
+
         // Thread-safe access to shared capture
         FScopeLock Lock(&Subsystem->ErrorCaptureMutex);
         if (!Capture.bActive ||

@@ -1846,10 +1846,6 @@ bool McpHandlers::Inspect::HandleInspectRuntimeReport(
     {
         PropertyNames.Add(PropertyName);
     }
-    else if (Payload->TryGetStringField(TEXT("propertyPath"), PropertyName) && !PropertyName.IsEmpty())
-    {
-        PropertyNames.Add(PropertyName);
-    }
     const TArray<TSharedPtr<FJsonValue>> *PropertyNamesArray = nullptr;
     if (Payload->TryGetArrayField(TEXT("propertyNames"), PropertyNamesArray) && PropertyNamesArray)
     {
@@ -2029,10 +2025,6 @@ bool McpHandlers::Inspect::HandleInspectFindByClass(
     TSharedPtr<FJsonObject> Resp = McpHandlerUtils::CreateResultObject();
     FString ClassName;
     Payload->TryGetStringField(TEXT("className"), ClassName);
-    if (ClassName.IsEmpty())
-    {
-        Payload->TryGetStringField(TEXT("class"), ClassName);
-    }
     if (ClassName.IsEmpty())
     {
         Payload->TryGetStringField(TEXT("classPath"), ClassName);

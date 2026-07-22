@@ -1774,12 +1774,25 @@ void FMcpNativeTransport::HandleToolsCall(
 					Arguments->TryGetBoolField(TEXT("bypassParamCheck"), bBypass);
 					if (!bBypass)
 					{
+						// Steering, not a gap: callers repeatedly send `location` to the
+						// node-authoring actions trying to hand-place nodes (6 rejects in
+						// 10 journal days). Placement is arrange_graph's job.
+						const bool bLocationOnNodeAuthoring =
+							ForeignParams.Contains(TEXT("location")) &&
+							ToolName == TEXT("manage_blueprint") &&
+							(ActionValue == TEXT("create_node") || ActionValue == TEXT("add_node"));
+						const FString SteeringClause = bLocationOnNodeAuthoring
+							? TEXT(" Node placement is auto-managed: author the nodes, then run ")
+							  TEXT("arrange_graph (nodes:[...] for a scoped block); x/y exist only ")
+							  TEXT("as coarse pre-arrange hints.")
+							: FString();
 						const FString Message = FString::Printf(
 							TEXT("%s.%s does not read: %s. %s ")
 							TEXT("Remove or rename the unread param(s). If the handler source DOES read them, the ")
 							TEXT("action's declaration is wrong: retry with bypassParamCheck:true to proceed ")
-							TEXT("now, and report the miss (fork TODO.md) so its McpDecl_*.h entry gets fixed."),
-							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedClause);
+							TEXT("now, and report the miss (fork TODO.md) so its McpDecl_*.h entry gets fixed.%s"),
+							*ToolName, *ActionValue, *FString::Join(ForeignParams, TEXT(", ")), *AcceptedClause,
+							*SteeringClause);
 						JournalReject(ActionValue, TEXT("INVALID_PARAMS"),
 							TEXT("foreign_params"), ForeignParams);
 						UE_LOG(LogMcpNativeTransport, Warning,

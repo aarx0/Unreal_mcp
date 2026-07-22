@@ -348,9 +348,6 @@ bool McpHandlers::SystemControl::HandleSysRunUbt(UMcpAutomationBridgeSubsystem& 
     
     FString AdditionalArgs;
     Payload->TryGetStringField(TEXT("additionalArgs"), AdditionalArgs);
-    if (AdditionalArgs.IsEmpty()) {
-      Payload->TryGetStringField(TEXT("arguments"), AdditionalArgs);
-    }
 
     Target.TrimStartAndEndInline();
     Platform.TrimStartAndEndInline();
@@ -914,13 +911,6 @@ bool McpHandlers::SystemControl::HandleSysRunTests(UMcpAutomationBridgeSubsystem
 
     FString Filter;
     Payload->TryGetStringField(TEXT("filter"), Filter);
-    {
-      FString TestName;
-      Payload->TryGetStringField(TEXT("test"), TestName);
-      if (!TestName.IsEmpty() && Filter.IsEmpty()) {
-        Filter = TestName;
-      }
-    }
     Filter.TrimStartAndEndInline();
 
     int32 MaxTests = 50;

@@ -45,7 +45,7 @@ static void S_SaveAll(FMcpSchemaBuilder&) {}
 
 static void S_Possess(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("actorName"), TEXT("Name of the actor."))
+	B.String(TEXT("actorName"), TEXT("possess: pawn/actor to possess. Omit entirely to repossess the player pawn after eject (the editor's Eject/Possess toggle)."))
 	 .String(TEXT("objectPath"), TEXT("possess: object path of the pawn/actor to possess (alternative to actorName)."));
 }
 
@@ -159,11 +159,10 @@ static void S_StartRecording(FMcpSchemaBuilder& B)
 
 static void S_SimulateInput(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("type"), TEXT("Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. "
+	B.String(TEXT("type"), TEXT("Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog "
+		"(pressed/released/click/move also accepted). "
 		"analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in "
 		"PlayerInput until the next sample, so hold = inject once, release = inject 0."))
-	 .String(TEXT("inputType"), TEXT("Alias for type used by simulate_input."))
-	 .String(TEXT("inputAction"), TEXT("Alias for type used by simulate_input (action-style values pressed/released/click/move also accepted)."))
 	 .String(TEXT("key"), TEXT("simulate_input: FKey name — the key to press/release for key_down/key_up (e.g. SpaceBar, Gamepad_FaceButton_Bottom), or the 1D axis key for analog (Gamepad_LeftY, MouseX, ...)."))
 	 .Number(TEXT("x"), TEXT("Mouse X coordinate for simulate_input."))
 	 .Number(TEXT("y"), TEXT("Mouse Y coordinate for simulate_input."))

@@ -31,7 +31,6 @@ static void S_Spawn(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("classPath"), TEXT("Asset path (e.g., /Game/Path/Asset)."))
 	 .String(TEXT("className"), TEXT("Actor class name."))
-	 .String(TEXT("actorClass"), TEXT("Actor class alias or path."))
 	 .String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("name"), TEXT("find_by_name query; alias of actorName for spawn actions."))
 	 .Object(TEXT("location"), TEXT("3D location (x, y, z)."),
@@ -123,9 +122,7 @@ static void S_AddComponent(FMcpSchemaBuilder& B)
 static void S_RemoveComponent(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .String(TEXT("actor_name"), TEXT("snake_case alias of actorName."))
-	 .String(TEXT("componentName"), TEXT("Name of the component."))
-	 .String(TEXT("component_name"), TEXT("snake_case alias of componentName."));
+	 .String(TEXT("componentName"), TEXT("Name of the component."));
 }
 
 static void S_SetComponentProperty(FMcpSchemaBuilder& B)
@@ -133,7 +130,6 @@ static void S_SetComponentProperty(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property to set."))
-	 .String(TEXT("propertyPath"), TEXT("Dotted path to a scalar leaf (alternative to propertyName)."))
 	 .Object(TEXT("properties"), TEXT("set_component_property: map of property name to raw JSON value, applied fail-in-place (alternative to a single propertyName + typed value field)."))
 	 // Discriminated value: populate exactly ONE typed field. Each field is both a
 	 // type tag and a real schema type, so it transmits correctly -- vectorValue
@@ -153,7 +149,6 @@ static void S_GetComponentProperty(FMcpSchemaBuilder& B)
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
 	 .String(TEXT("componentName"), TEXT("Name of the component."))
 	 .String(TEXT("propertyName"), TEXT("Name of the property."))
-	 .String(TEXT("propertyPath"), TEXT("Dotted path to the property (alternative to propertyName)."))
 	 .Required({TEXT("actorName"), TEXT("componentName")});
 }
 
@@ -165,8 +160,12 @@ static void S_GetComponents(FMcpSchemaBuilder& B)
 
 static void S_GetActorBounds(FMcpSchemaBuilder& B)
 {
+	// `name` fallback is journal-evidenced: the tool's own schema teaches
+	// clients that control_actor speaks `name` (find_by_name/spawn), so bare
+	// `name` kept arriving here (3 rejects in 10 days).
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .Required({TEXT("actorName")});
+	 .String(TEXT("name"), TEXT("Alias of actorName."))
+	 .RequiredAnyOf({TEXT("actorName"), TEXT("name")});
 }
 
 static void S_AddTag(FMcpSchemaBuilder& B)
@@ -201,7 +200,6 @@ static void S_FindByName(FMcpSchemaBuilder& B)
 static void S_FindByClass(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("className"), TEXT("Actor class name (IsA matching); loaded short name or fully-qualified path. Unresolvable → CLASS_NOT_FOUND."))
-	 .String(TEXT("class"), TEXT("Actor class name (alias of className)."))
 	 .String(TEXT("classPath"), TEXT("Actor class path (alias of className)."))
 	 .Integer(TEXT("limit"), TEXT("find_by_class: max actors returned (default 50, cap 200)."));
 }
@@ -250,9 +248,7 @@ static void S_Detach(FMcpSchemaBuilder& B)
 static void S_SetActorCollision(FMcpSchemaBuilder& B)
 {
 	B.String(TEXT("actorName"), TEXT("Name of the actor."))
-	 .String(TEXT("actor_name"), TEXT("snake_case alias of actorName."))
-	 .Bool(TEXT("collisionEnabled"), TEXT("Whether actor collision is enabled."))
-	 .Bool(TEXT("collision_enabled"), TEXT("snake_case alias of collisionEnabled."));
+	 .Bool(TEXT("collisionEnabled"), TEXT("Whether actor collision is enabled."));
 }
 
 static void S_CallActorFunction(FMcpSchemaBuilder& B)

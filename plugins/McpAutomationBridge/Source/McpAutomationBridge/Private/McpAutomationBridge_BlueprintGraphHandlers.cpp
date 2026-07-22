@@ -865,17 +865,7 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
     return true; \
   } \
   { \
-    FString AssetPathParam; \
     FString BlueprintPathParam; \
-    if (Payload->TryGetStringField(TEXT("assetPath"), AssetPathParam) && !AssetPathParam.IsEmpty()) { \
-      FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPathParam); \
-      if (SanitizedAssetPath.IsEmpty()) { \
-        S.SendAutomationError(RequestingSocket, RequestId, \
-                            TEXT("Invalid assetPath: contains traversal sequences or invalid characters."), \
-                            TEXT("INVALID_PATH")); \
-        return true; \
-      } \
-    } \
     if (Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPathParam) && !BlueprintPathParam.IsEmpty()) { \
       FString SanitizedBlueprintPath = SanitizeProjectRelativePath(BlueprintPathParam); \
       if (SanitizedBlueprintPath.IsEmpty()) { \
@@ -890,14 +880,7 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
 #define MCP_BPGRAPH_PREAMBLE() \
   MCP_BPGRAPH_PREAMBLE_HEAD(); \
   FString AssetPath; \
-  if (!Payload->TryGetStringField(TEXT("assetPath"), AssetPath) || \
-      AssetPath.IsEmpty()) { \
-    FString BlueprintPath; \
-    Payload->TryGetStringField(TEXT("blueprintPath"), BlueprintPath); \
-    if (!BlueprintPath.IsEmpty()) { \
-      AssetPath = BlueprintPath; \
-    } \
-  } \
+  Payload->TryGetStringField(TEXT("blueprintPath"), AssetPath); \
   FString SanitizedAssetPath = SanitizeProjectRelativePath(AssetPath); \
   if (SanitizedAssetPath.IsEmpty()) { \
     S.SendAutomationError(RequestingSocket, RequestId, \
@@ -909,7 +892,7 @@ void AddOverlapReport(const TSharedPtr<FJsonObject>& Result, UEdGraph* Graph,
   if (AssetPath.IsEmpty()) { \
     S.SendAutomationError( \
         RequestingSocket, RequestId, \
-        TEXT("Missing 'assetPath' or 'blueprintPath' in payload."), \
+        TEXT("Missing 'blueprintPath' in payload."), \
         TEXT("INVALID_ARGUMENT")); \
     return true; \
   } \

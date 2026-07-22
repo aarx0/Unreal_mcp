@@ -1258,7 +1258,7 @@
           "type": "array"
         },
         "lodCount": {
-          "description": "generate_lods: number of LODs to generate (alias: numLODs).",
+          "description": "generate_lods: number of LODs to generate (default 4, clamped 1-50).",
           "type": "integer"
         },
         "material": {
@@ -1330,10 +1330,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "numLODs": {
-          "description": "generate_lods: alias of lodCount (default 4, clamped 1-50).",
-          "type": "integer"
         },
         "operation": {
           "description": "modify_heightmap: how to apply heightData/strength (default: set). 'add' is accepted as an alias of 'raise'.",
@@ -1710,14 +1706,6 @@
           ],
           "type": "string"
         },
-        "actor_name": {
-          "description": "snake_case alias of actorName.",
-          "type": "string"
-        },
-        "actorClass": {
-          "description": "Actor class alias or path.",
-          "type": "string"
-        },
         "actorName": {
           "description": "Name of the actor.",
           "type": "string"
@@ -1748,10 +1736,6 @@
           "description": "Name of the child actor (for attach/detach operations).",
           "type": "string"
         },
-        "class": {
-          "description": "Actor class name (alias of className).",
-          "type": "string"
-        },
         "className": {
           "description": "Actor class name (IsA matching); loaded short name or fully-qualified path. Unresolvable → CLASS_NOT_FOUND.",
           "type": "string"
@@ -1760,17 +1744,9 @@
           "description": "Actor class path (alias of className).",
           "type": "string"
         },
-        "collision_enabled": {
-          "description": "snake_case alias of collisionEnabled.",
-          "type": "boolean"
-        },
         "collisionEnabled": {
           "description": "Whether actor collision is enabled.",
           "type": "boolean"
-        },
-        "component_name": {
-          "description": "snake_case alias of componentName.",
-          "type": "string"
         },
         "componentName": {
           "description": "Name of the component.",
@@ -1875,10 +1851,6 @@
         },
         "propertyName": {
           "description": "Name of the property.",
-          "type": "string"
-        },
-        "propertyPath": {
-          "description": "Dotted path to the property (alternative to propertyName).",
           "type": "string"
         },
         "rotation": {
@@ -2051,14 +2023,6 @@
           "description": "Bookmark slot index (create_bookmark / jump_to_bookmark).",
           "type": "integer"
         },
-        "inputAction": {
-          "description": "Alias for type used by simulate_input (action-style values pressed/released/click/move also accepted).",
-          "type": "string"
-        },
-        "inputType": {
-          "description": "Alias for type used by simulate_input.",
-          "type": "string"
-        },
         "key": {
           "description": "simulate_nav: explicit FKey name to send instead of resolving direction/device (e.g. Gamepad_DPad_Up, Enter).",
           "type": "string"
@@ -2138,7 +2102,7 @@
           "type": "boolean"
         },
         "type": {
-          "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog. analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
+          "description": "Input event type for simulate_input: key_down, key_up, mouse_click, mouse_move, analog (pressed/released/click/move also accepted). analog injects a 1D axis value (key=Gamepad_LeftY/Gamepad_RightX/MouseX/... + value); the value persists in PlayerInput until the next sample, so hold = inject once, release = inject 0.",
           "type": "string"
         },
         "value": {
@@ -2244,10 +2208,6 @@
           "description": "Set a bool property.",
           "type": "boolean"
         },
-        "class": {
-          "description": "Actor class name (alias of className).",
-          "type": "string"
-        },
         "className": {
           "description": "inspect_class: class to inspect; loaded short name, /Script path, Blueprint asset path, or its _C class path.",
           "type": "string"
@@ -2286,7 +2246,7 @@
           "type": "array"
         },
         "detailed": {
-          "description": "inspect_cdo: dump full default properties for the CDO and each component (default false; propertyNames/propertyPath switch to targeted readback).",
+          "description": "inspect_cdo: dump full default properties for the CDO and each component (default false; propertyNames switches to targeted readback).",
           "type": "boolean"
         },
         "exactClass": {
@@ -2355,10 +2315,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "propertyPath": {
-          "description": "Alias of propertyName: a single property name, read when propertyName is absent.",
-          "type": "string"
         },
         "save": {
           "description": "set_property: persist the owning asset package to disk after the write (default true; defaults to false when markDirty is false). Level packages are never auto-saved — use control_editor save_all.",
@@ -3473,13 +3429,6 @@
           },
           "type": "array"
         },
-        "assets": {
-          "description": "generate_lods: alias for assetPaths.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "b": {
           "description": "set_node_value: blue/Z channel.",
           "type": "number"
@@ -3494,10 +3443,6 @@
         },
         "blendMode": {
           "description": "create_material/set_blend_mode: Opaque|Masked|Translucent|Additive|Modulate|AlphaComposite|AlphaHoldout. combine_textures: Normal|Multiply|Screen|Overlay|Add.",
-          "type": "string"
-        },
-        "blendTexture": {
-          "description": "combine_textures: alias for overlayTexture.",
           "type": "string"
         },
         "blueTexture": {
@@ -3573,21 +3518,9 @@
           "description": "set_node_value: ConstB default of an arithmetic node when input B is unconnected.",
           "type": "number"
         },
-        "content": {
-          "description": "import_data_table: alias for sourceText.",
-          "type": "string"
-        },
         "coordinateIndex": {
           "description": "add_texture_coordinate: UV channel index (default 0).",
           "type": "integer"
-        },
-        "csv": {
-          "description": "import_data_table: alias for sourceText (CSV).",
-          "type": "string"
-        },
-        "dataTablePath": {
-          "description": "DataTable row CRUD: alias for assetPath (the DataTable).",
-          "type": "string"
         },
         "depth": {
           "description": "list: recursion depth filter relative to the queried path. get_node_connections: BFS hop limit (default 1; -1 unlimited).",
@@ -3778,10 +3711,6 @@
           "description": "adjust_levels: input white point 0-1 (default 1).",
           "type": "number"
         },
-        "json": {
-          "description": "import_data_table: alias for sourceText (JSON).",
-          "type": "string"
-        },
         "lacunarity": {
           "description": "create_noise_texture: FBM frequency growth per octave (default 2).",
           "type": "number"
@@ -3899,10 +3828,6 @@
           "description": "add_landscape_layer: disable weight-blending for this layer (default false).",
           "type": "boolean"
         },
-        "numLODs": {
-          "description": "generate_lods: alias for lodCount.",
-          "type": "integer"
-        },
         "octaves": {
           "description": "create_noise_texture: FBM octave count (default 4).",
           "type": "integer"
@@ -3968,7 +3893,7 @@
           "type": "number"
         },
         "overlayTexture": {
-          "description": "combine_textures: overlay texture path (alias blendTexture).",
+          "description": "combine_textures: overlay texture path .",
           "type": "string"
         },
         "packagePaths": {
@@ -4141,10 +4066,6 @@
           "description": "create_data_table (required): row struct deriving from FTableRowBase — full path ('/Script/Module.Struct' or '/Game/.../UserStruct') or bare struct name.",
           "type": "string"
         },
-        "rowStructPath": {
-          "description": "create_data_table: alias for rowStruct.",
-          "type": "string"
-        },
         "sampleCount": {
           "description": "create_ao_from_mesh: vertex samples per pixel (default 64).",
           "type": "integer"
@@ -4267,10 +4188,6 @@
         },
         "suffix": {
           "description": "bulk_rename: text appended to each asset name.",
-          "type": "string"
-        },
-        "tablePath": {
-          "description": "DataTable row CRUD: alias for assetPath (the DataTable).",
           "type": "string"
         },
         "tag": {
@@ -5238,10 +5155,6 @@
           },
           "type": "array"
         },
-        "assetPath": {
-          "description": "Blueprint asset path for graph actions (create_node/connect_pins/etc.); alias of blueprintPath.",
-          "type": "string"
-        },
         "autoConnect": {
           "description": "add_node: auto-wire the new node's exec-in to an open event chain (default false).",
           "type": "boolean"
@@ -5249,10 +5162,6 @@
         "autoWrap": {
           "description": "add_text_block: enable auto text wrapping.",
           "type": "boolean"
-        },
-        "blueprint_path": {
-          "description": "snake_case alias of blueprintPath.",
-          "type": "string"
         },
         "blueprintCandidates": {
           "description": "Ordered list of candidate blueprint paths to try when blueprintPath/name is absent.",
@@ -5298,13 +5207,6 @@
         "buttonClass": {
           "description": "add_common_button: concrete UCommonButtonBase subclass path.",
           "type": "string"
-        },
-        "candidates": {
-          "description": "Legacy alias of blueprintCandidates: ordered candidate blueprint paths to try.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
         },
         "category": {
           "description": "add_variable: editor category for the variable (default none).",
@@ -5357,14 +5259,6 @@
         "compile": {
           "description": "Compile the blueprint(s) after the operation.",
           "type": "boolean"
-        },
-        "component_class": {
-          "description": "snake_case alias of componentClass.",
-          "type": "string"
-        },
-        "component_name": {
-          "description": "snake_case alias of componentName.",
-          "type": "string"
         },
         "componentClass": {
           "description": "add_scs_component: UActorComponent subclass to add (short name or class path, e.g. StaticMeshComponent).",
@@ -5595,10 +5489,6 @@
           "description": "set_animation_loop: loop count (0 = infinite).",
           "type": "integer"
         },
-        "material_path": {
-          "description": "snake_case alias of materialPath.",
-          "type": "string"
-        },
         "materialPath": {
           "description": "Material asset path.",
           "type": "string"
@@ -5621,10 +5511,6 @@
         },
         "memberName": {
           "description": "create_node: UFUNCTION name for a CallFunction node; without memberClass only the blueprint's class, KismetSystemLibrary, GameplayStatics and KismetMathLibrary are searched.",
-          "type": "string"
-        },
-        "mesh_path": {
-          "description": "snake_case alias of meshPath.",
           "type": "string"
         },
         "meshPath": {
@@ -5669,10 +5555,6 @@
         },
         "namespace": {
           "description": "set_localization_key: localization namespace (default \"Game\").",
-          "type": "string"
-        },
-        "new_parent": {
-          "description": "snake_case alias of newParent.",
           "type": "string"
         },
         "newName": {
@@ -5792,10 +5674,6 @@
           },
           "type": "array"
         },
-        "parent_component": {
-          "description": "snake_case alias of parentComponent.",
-          "type": "string"
-        },
         "parentClass": {
           "description": "Path or name of the parent class.",
           "type": "string"
@@ -5862,10 +5740,6 @@
         },
         "property": {
           "description": "set_widget_binding: property name to bind (NOT_IMPLEMENTED — validated only).",
-          "type": "string"
-        },
-        "property_name": {
-          "description": "snake_case alias of propertyName.",
           "type": "string"
         },
         "propertyName": {
@@ -6076,10 +5950,6 @@
         },
         "targetClass": {
           "description": "create_node: class for a Cast node's TargetType (required for Cast/DynamicCast) or for a ConstructObjectFromClass node's Class pin (SpawnActorFromClass, CreateWidget, ...).",
-          "type": "string"
-        },
-        "targetFunction": {
-          "description": "bind_on_clicked/bind_on_hovered: self UFUNCTION to call (alias functionName).",
           "type": "string"
         },
         "targetNodeId": {
@@ -10288,16 +10158,12 @@
           "type": "array"
         },
         "additionalArgs": {
-          "description": "run_ubt: extra UBT command-line arguments (alias: arguments).",
+          "description": "run_ubt: extra UBT command-line arguments.",
           "type": "string"
         },
         "allowModalApis": {
           "description": "execute_python: opt out of the modal-API guard (reload_packages / *_with_dialog / EditorDialog are blocked by default — a modal dialog permanently freezes a headless editor). Only pass true when the exact call cannot prompt.",
           "type": "boolean"
-        },
-        "arguments": {
-          "description": "run_ubt: alias of additionalArgs, read when additionalArgs is absent.",
-          "type": "string"
         },
         "boostPlayerLocation": {
           "description": "configure_texture_streaming: boost streaming around the active camera location.",
@@ -10420,16 +10286,12 @@
           "type": "boolean"
         },
         "outputPath": {
-          "description": "generate_test_stub: .cpp path to write (default: the bridge plugin's GeneratedTests dir).",
+          "description": "merge_actors: destination package path for the merged static mesh (default: /Game/MCPTest/MergedActors/SM_Merged_<guid>).",
           "type": "string"
         },
         "overwrite": {
           "description": "generate_test_stub: replace the file if it already exists (default false).",
           "type": "boolean"
-        },
-        "packageName": {
-          "description": "merge_actors: destination package path for the merged static mesh (alias: outputPath).",
-          "type": "string"
         },
         "platform": {
           "description": "run_ubt: build platform — Win64|Mac|Linux|LinuxArm64|Android|IOS|TVOS|HoloLens|VisionOS (default: host platform).",
@@ -10477,10 +10339,6 @@
         },
         "target": {
           "description": "run_ubt: build target (e.g. MyProjectEditor). Non-blocking: returns a buildId immediately; poll get_build_status.",
-          "type": "string"
-        },
-        "test": {
-          "description": "Exact/partial test name to run (run_tests; alias for filter).",
           "type": "string"
         },
         "testName": {
