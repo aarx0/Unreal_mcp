@@ -92,6 +92,8 @@ bool HandleAiSetBlackboardValue(UMcpAutomationBridgeSubsystem& S, const FString&
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAiGetBlackboardValue(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
+bool HandleAiGetAgentState(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
+        const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAiRunBehaviorTree(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,
         const TSharedPtr<FJsonObject>& Payload, FMcpResponseHandle RequestingSocket);
 bool HandleAiStopBehaviorTree(UMcpAutomationBridgeSubsystem& S, const FString& RequestId,

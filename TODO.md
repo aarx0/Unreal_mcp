@@ -1511,14 +1511,22 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
-### [ ] 2026-07-21 — runtime BT/blackboard observability gap (Aaron's correction on the closed readback entry, promoted so it isn't lost)
-Static BT readback shipped (`btNodes`/`treePretty`, entry below), but the RUNTIME half is a
-real gap: `get_blackboard_value` accepts only {blackboardPath, keyName} — asset-shaped — and
-returns key METADATA with no value; there is no way to address a running agent's
-UBlackboardComponent (wants an actorName/controller param), and nothing reports a running
-agent's active BT node path. Together those would replace the gameplay debugger for remote
-PIE verification. Feature-sized; scope with Aaron before building (agent addressing design:
-actorName → possessed pawn → AIController → BrainComponent/BlackboardComponent).
+### [x] 2026-07-21 — runtime BT/blackboard observability gap (Aaron's correction on the closed readback entry, promoted so it isn't lost)
+SHIPPED same day (Aaron's go): new `manage_ai get_agent_state` — PIE-only, addresses the
+agent by pawn label/name OR controller name, omit actorName when exactly one agent runs a
+BT (several → AMBIGUOUS_TARGET listing candidates). Returns controller/pawn identity,
+behaviorTree + blackboardAsset paths, isRunning/isPaused, activeNode + activePath
+(root→leaf with graph-GUID crosslinks), activeTasksDescription, and `blackboard`: every
+key across the asset parent chain with its live typed VALUE (unset vectors/null objects
+render as null, unknown key types report `unsupportedType` instead of guessing).
+GUID resolution gotcha baked into the handler: PIE runtime nodes are COPIES of the asset
+templates AND template execution indices don't share the runtime numbering — the join
+walks the runtime and template trees in parallel (structure mirrors 1:1) and maps by
+position; a first exec-index-keyed attempt actively mislabeled nodes. Live-verified on
+BP_Volcano in LavaMap: idle state = active Wait[8] via Selector, both GUIDs matching the
+static btNodes dump; live BB showed TargetActor=the PIE player, PlayerInRange=true,
+TargetLocation honestly null. get_blackboard_value's description now states it is
+design-time metadata and points here. Original report:
 
 ### [x] 2026-07-21 — `manage_ai get_info` BT readback can't reconstruct the tree (volcano BT authoring session)
 FIXED same night, all three gaps: get_info now emits `btNodes` — one entry per

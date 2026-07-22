@@ -578,9 +578,14 @@ static void S_SetBlackboardValue(FMcpSchemaBuilder& B)
 
 static void S_GetBlackboardValue(FMcpSchemaBuilder& B)
 {
-	B.String(TEXT("blackboardPath"), TEXT("Path to blackboard asset. On 'create'/'create_behavior_tree' it is assigned to the new Behavior Tree (omit = unassigned)."))
+	B.String(TEXT("blackboardPath"), TEXT("Path to the BlackboardData ASSET. get_blackboard_value is design-time: it returns the key's type/metadata, never a live value — for a running agent's actual values use get_agent_state."))
 	 .String(TEXT("keyName"), TEXT("Name of the key."))
 	 .Required({TEXT("blackboardPath"), TEXT("keyName")});
+}
+
+static void S_GetAgentState(FMcpSchemaBuilder& B)
+{
+	B.String(TEXT("actorName"), TEXT("get_agent_state: the running agent — pawn label/name or AIController name (PIE only). Omit when exactly one agent is running a behavior tree; several running → AMBIGUOUS_TARGET listing them. Returns activeNode + activePath (root→leaf, graph-GUID crosslinked), activeTasksDescription, behaviorTree/blackboardAsset paths, and blackboard: every key's live typed VALUE."));
 }
 
 static void S_RunBehaviorTree(FMcpSchemaBuilder& B)
@@ -927,6 +932,7 @@ MCP_AI_CALL(SetFocus, "set_focus", McpHandlers::Ai::HandleAiSetFocus, EMcpCallFl
 MCP_AI_CALL(ClearFocus, "clear_focus", McpHandlers::Ai::HandleAiClearFocus, EMcpCallFlags::Mutating)
 MCP_AI_CALL(SetBlackboardValue, "set_blackboard_value", McpHandlers::Ai::HandleAiSetBlackboardValue, EMcpCallFlags::Mutating)
 MCP_AI_CALL(GetBlackboardValue, "get_blackboard_value", McpHandlers::Ai::HandleAiGetBlackboardValue, EMcpCallFlags::None)
+MCP_AI_CALL(GetAgentState, "get_agent_state", McpHandlers::Ai::HandleAiGetAgentState, EMcpCallFlags::None)
 MCP_AI_CALL(RunBehaviorTree, "run_behavior_tree", McpHandlers::Ai::HandleAiRunBehaviorTree, EMcpCallFlags::Mutating)
 MCP_AI_CALL(StopBehaviorTree, "stop_behavior_tree", McpHandlers::Ai::HandleAiStopBehaviorTree, EMcpCallFlags::Mutating)
 
@@ -1000,6 +1006,7 @@ void McpRegisterManageAiCalls()
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_ClearFocus>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_SetBlackboardValue>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_GetBlackboardValue>());
+	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_GetAgentState>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_RunBehaviorTree>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_StopBehaviorTree>());
 	Registry.RegisterCall(MakeUnique<FMcpCall_ManageAi_Create>());

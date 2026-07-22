@@ -2412,6 +2412,7 @@
             "clear_focus",
             "set_blackboard_value",
             "get_blackboard_value",
+            "get_agent_state",
             "run_behavior_tree",
             "stop_behavior_tree",
             "create",

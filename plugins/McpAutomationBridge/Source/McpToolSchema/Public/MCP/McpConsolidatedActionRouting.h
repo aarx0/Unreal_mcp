@@ -627,6 +627,7 @@ inline const TArray<FString>& ManageAICore()
 		TEXT("setup_perception"),
 		TEXT("create_nav_link_proxy"), TEXT("set_focus"), TEXT("clear_focus"),
 		TEXT("set_blackboard_value"), TEXT("get_blackboard_value"),
+		TEXT("get_agent_state"),
 		TEXT("run_behavior_tree"), TEXT("stop_behavior_tree"),
 		TEXT("create"), TEXT("add_node"), TEXT("connect_nodes"),
 		TEXT("remove_node"), TEXT("break_connections"),

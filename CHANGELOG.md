@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Runtime agent observability: manage_ai get_agent_state (2026-07-21)
+
+- **New `manage_ai get_agent_state`** — the runtime half of BT observability
+  (the remote replacement for the gameplay debugger's BT category). PIE-only;
+  targets a running agent by pawn label/name or AIController name, or omit
+  `actorName` when exactly one agent is running a tree (several →
+  AMBIGUOUS_TARGET listing candidates). Returns controller/pawn identity, the
+  running behaviorTree + blackboardAsset, isRunning/isPaused, `activeNode` +
+  `activePath` (root→leaf, crosslinked to the graph GUIDs get_info/add_node
+  speak — resolved by a parallel runtime/template tree walk, since PIE nodes
+  are copies and template execution indices don't share runtime numbering),
+  `activeTasksDescription`, and `blackboard`: every key's live typed value
+  (unset vector/null object → null; unknown key types report
+  `unsupportedType` honestly).
+- `get_blackboard_value`'s description now states it is design-time key
+  metadata and points at get_agent_state for live values.
+
 ### Alias cull + fail-loud fixes + BT readback (2026-07-21)
 
 - **~33 journal-evidenced dead aliases deleted** (never sent in 10 days of

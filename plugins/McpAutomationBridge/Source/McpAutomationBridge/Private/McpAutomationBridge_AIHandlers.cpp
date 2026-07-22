@@ -111,6 +111,10 @@
 #include "BehaviorTree/Decorators/BTDecorator_Blackboard.h"
 #include "BehaviorTree/Decorators/BTDecorator_Cooldown.h"
 #include "BehaviorTree/Decorators/BTDecorator_Loop.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "BrainComponent.h"
+#include "EngineUtils.h"
 
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 #include "AIGraphNode.h"
@@ -4700,6 +4704,361 @@ bool McpHandlers::Ai::HandleAiGetBlackboardValue(
     GetResult->SetStringField(TEXT("keyType"), KeyType);
     GetResult->SetBoolField(TEXT("instanceSynced"), bInstanceSynced);
     S.SendAutomationResponse(RequestingSocket, RequestId, true, TEXT("Blackboard value retrieved"), GetResult);
+    return true;
+#endif
+}
+
+// get_agent_state - live PIE agent observability: active BT node path + full
+// blackboard VALUE dump. The asset-shaped readbacks (get_info /
+// get_blackboard_value) can't answer "what is this running agent doing";
+// this is the remote replacement for the gameplay debugger's BT category.
+bool McpHandlers::Ai::HandleAiGetAgentState(
+    UMcpAutomationBridgeSubsystem& S,
+    const FString& RequestId, const TSharedPtr<FJsonObject>& Payload,
+    FMcpResponseHandle RequestingSocket)
+{
+#if !WITH_EDITOR
+    S.SendAutomationError(RequestingSocket, RequestId,
+                        TEXT("AI management is only available in editor builds"),
+                        TEXT("EDITOR_ONLY"));
+    return true;
+#else
+    bool bIsPieWorld = false;
+    UWorld* World = McpHandlerUtils::GetActorLookupWorld(&bIsPieWorld);
+    if (!World || !bIsPieWorld)
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+            TEXT("get_agent_state reads a RUNNING agent; start PIE first."),
+            TEXT("NOT_IN_PIE"));
+        return true;
+    }
+
+    // Resolve the agent: actorName may name the pawn or the controller.
+    // Omitted entirely = the only running BT agent (the single-boss gym case);
+    // several running = AMBIGUOUS_TARGET listing them.
+    const FString ActorName = GetJsonStringField(Payload, TEXT("actorName"));
+    AAIController* Controller = nullptr;
+    if (!ActorName.IsEmpty())
+    {
+        AActor* Found = S.FindActorByName(ActorName);
+        if (!Found)
+        {
+            S.SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("Actor not found: %s"), *ActorName),
+                TEXT("ACTOR_NOT_FOUND"));
+            return true;
+        }
+        Controller = Cast<AAIController>(Found);
+        if (!Controller)
+        {
+            if (APawn* Pawn = Cast<APawn>(Found))
+            {
+                Controller = Cast<AAIController>(Pawn->GetController());
+            }
+        }
+        if (!Controller)
+        {
+            S.SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("'%s' is neither an AIController nor a pawn possessed by one."), *ActorName),
+                TEXT("NOT_AN_AGENT"));
+            return true;
+        }
+    }
+    else
+    {
+        TArray<AAIController*> Running;
+        for (TActorIterator<AAIController> It(World); It; ++It)
+        {
+            if (Cast<UBehaviorTreeComponent>(It->GetBrainComponent()))
+            {
+                Running.Add(*It);
+            }
+        }
+        if (Running.Num() == 0)
+        {
+            S.SendAutomationError(RequestingSocket, RequestId,
+                TEXT("No AIController with a running behavior tree found in the PIE world."),
+                TEXT("ACTOR_NOT_FOUND"));
+            return true;
+        }
+        if (Running.Num() > 1)
+        {
+            TArray<FString> Names;
+            for (AAIController* C : Running)
+            {
+                Names.Add(FString::Printf(TEXT("%s (pawn: %s)"), *C->GetName(),
+                    C->GetPawn() ? *C->GetPawn()->GetActorLabel() : TEXT("none")));
+            }
+            S.SendAutomationError(RequestingSocket, RequestId,
+                FString::Printf(TEXT("%d agents running — pass actorName. Candidates: %s"),
+                    Running.Num(), *FString::Join(Names, TEXT("; "))),
+                TEXT("AMBIGUOUS_TARGET"));
+            return true;
+        }
+        Controller = Running[0];
+    }
+
+    UBehaviorTreeComponent* BTC = Cast<UBehaviorTreeComponent>(Controller->GetBrainComponent());
+    if (!BTC)
+    {
+        S.SendAutomationError(RequestingSocket, RequestId,
+            FString::Printf(TEXT("%s has no BehaviorTreeComponent (brain: %s)."),
+                *Controller->GetName(), *GetNameSafe(Controller->GetBrainComponent())),
+            TEXT("NO_BEHAVIOR_TREE"));
+        return true;
+    }
+
+    TSharedPtr<FJsonObject> Result = McpHandlerUtils::CreateResultObject();
+    Result->SetStringField(TEXT("controllerName"), Controller->GetName());
+    Result->SetStringField(TEXT("controllerClass"), Controller->GetClass()->GetName());
+    if (APawn* Pawn = Controller->GetPawn())
+    {
+        Result->SetStringField(TEXT("pawnName"), Pawn->GetActorLabel());
+        Result->SetStringField(TEXT("pawnClass"), Pawn->GetClass()->GetName());
+    }
+    Result->SetBoolField(TEXT("isRunning"), BTC->IsRunning());
+    Result->SetBoolField(TEXT("isPaused"), BTC->IsPaused());
+
+    UBehaviorTree* CurrentTree = BTC->GetCurrentTree();
+    if (CurrentTree)
+    {
+        Result->SetStringField(TEXT("behaviorTree"), CurrentTree->GetPathName());
+    }
+
+    // Graph GUIDs for the active chain: non-instanced runtime nodes ARE the
+    // asset's template objects, so a pointer map against the asset graph
+    // resolves them to the ids get_info/add_node speak.
+    TMap<UObject*, FString> InstanceToGuid;
+#if MCP_AI_HAS_BEHAVIOR_TREE_GRAPH
+    if (CurrentTree)
+    {
+        if (UBehaviorTreeGraph* BTGraph = Cast<UBehaviorTreeGraph>(CurrentTree->BTGraph))
+        {
+            for (UEdGraphNode* GraphNode : BTGraph->Nodes)
+            {
+                if (UAIGraphNode* AINode = Cast<UAIGraphNode>(GraphNode))
+                {
+                    if (AINode->NodeInstance)
+                    {
+                        InstanceToGuid.Add(AINode->NodeInstance, GraphNode->NodeGuid.ToString());
+                    }
+                    for (UAIGraphNode* SubNode : AINode->SubNodes)
+                    {
+                        if (SubNode && SubNode->NodeInstance)
+                        {
+                            InstanceToGuid.Add(SubNode->NodeInstance, SubNode->NodeGuid.ToString());
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+    // PIE runtime nodes are copies of the asset templates (the editor graph's
+    // NodeInstances), so pointer matching misses for a live agent — and
+    // template execution indices do NOT share the runtime numbering, so they
+    // can't be the join key either. The copies mirror the asset structure
+    // 1:1: walk both trees in parallel and map each runtime node to its
+    // positional template's graph GUID.
+    TMap<const UBTNode*, FString> RuntimeToGuid;
+    {
+        const UBTNode* ChainTop = nullptr;
+        for (const UBTNode* Node = BTC->GetActiveNode(); Node; Node = Node->GetParentNode())
+        {
+            ChainTop = Node;
+        }
+        UBTCompositeNode* RuntimeRoot =
+            const_cast<UBTCompositeNode*>(Cast<const UBTCompositeNode>(ChainTop));
+        if (RuntimeRoot && CurrentTree && CurrentTree->RootNode)
+        {
+            auto MapPair = [&InstanceToGuid, &RuntimeToGuid](const UBTNode* Runtime, UBTNode* Template)
+            {
+                if (Runtime && Template)
+                {
+                    if (const FString* Guid = InstanceToGuid.Find(Template))
+                    {
+                        RuntimeToGuid.Add(Runtime, *Guid);
+                    }
+                }
+            };
+            TFunction<void(UBTCompositeNode*, UBTCompositeNode*)> Pair =
+                [&](UBTCompositeNode* RT, UBTCompositeNode* TPL)
+            {
+                MapPair(RT, TPL);
+                const int32 SvcNum = FMath::Min(RT->Services.Num(), TPL->Services.Num());
+                for (int32 SvcIdx = 0; SvcIdx < SvcNum; ++SvcIdx)
+                {
+                    MapPair(RT->Services[SvcIdx], TPL->Services[SvcIdx]);
+                }
+                const int32 ChildNum = FMath::Min(RT->Children.Num(), TPL->Children.Num());
+                for (int32 i = 0; i < ChildNum; ++i)
+                {
+                    const FBTCompositeChild& RC = RT->Children[i];
+                    const FBTCompositeChild& TC = TPL->Children[i];
+                    const int32 DecNum = FMath::Min(RC.Decorators.Num(), TC.Decorators.Num());
+                    for (int32 DecIdx = 0; DecIdx < DecNum; ++DecIdx)
+                    {
+                        MapPair(RC.Decorators[DecIdx], TC.Decorators[DecIdx]);
+                    }
+                    if (RC.ChildComposite && TC.ChildComposite)
+                    {
+                        Pair(RC.ChildComposite, TC.ChildComposite);
+                    }
+                    else if (RC.ChildTask && TC.ChildTask)
+                    {
+                        MapPair(RC.ChildTask, TC.ChildTask);
+                        const int32 TaskSvcNum =
+                            FMath::Min(RC.ChildTask->Services.Num(), TC.ChildTask->Services.Num());
+                        for (int32 SvcIdx = 0; SvcIdx < TaskSvcNum; ++SvcIdx)
+                        {
+                            MapPair(RC.ChildTask->Services[SvcIdx], TC.ChildTask->Services[SvcIdx]);
+                        }
+                    }
+                }
+            };
+            Pair(RuntimeRoot, CurrentTree->RootNode);
+        }
+    }
+
+    auto DescribeChainNode = [&InstanceToGuid, &RuntimeToGuid](const UBTNode* Node) -> TSharedPtr<FJsonObject>
+    {
+        TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
+        NodeObj->SetStringField(TEXT("className"), Node->GetClass()->GetName());
+        NodeObj->SetStringField(TEXT("nodeName"), Node->GetNodeName());
+        NodeObj->SetNumberField(TEXT("executionIndex"), Node->GetExecutionIndex());
+        const FString* Guid = InstanceToGuid.Find(const_cast<UBTNode*>(Node));
+        if (!Guid)
+        {
+            Guid = RuntimeToGuid.Find(Node);
+        }
+        if (Guid)
+        {
+            NodeObj->SetStringField(TEXT("nodeId"), *Guid);
+        }
+        return NodeObj;
+    };
+
+    if (const UBTNode* Active = BTC->GetActiveNode())
+    {
+        Result->SetObjectField(TEXT("activeNode"), DescribeChainNode(Active));
+        // Root-first ancestor chain: the branch the agent is currently inside.
+        TArray<const UBTNode*> Chain;
+        for (const UBTNode* Node = Active; Node; Node = Node->GetParentNode())
+        {
+            Chain.Insert(Node, 0);
+        }
+        TArray<TSharedPtr<FJsonValue>> ChainJson;
+        for (const UBTNode* Node : Chain)
+        {
+            ChainJson.Add(MakeShared<FJsonValueObject>(DescribeChainNode(Node)));
+        }
+        Result->SetArrayField(TEXT("activePath"), ChainJson);
+    }
+    Result->SetStringField(TEXT("activeTasksDescription"), BTC->DescribeActiveTasks());
+
+    // Live blackboard VALUES — every key across the asset's parent chain,
+    // typed via the key-type class (the half get_blackboard_value cannot do:
+    // it is asset-shaped and returns key metadata only).
+    if (UBlackboardComponent* BB = Controller->GetBlackboardComponent())
+    {
+        if (UBlackboardData* BBAsset = BB->GetBlackboardAsset())
+        {
+            Result->SetStringField(TEXT("blackboardAsset"), BBAsset->GetPathName());
+        }
+        TSharedPtr<FJsonObject> BBJson = MakeShared<FJsonObject>();
+        for (UBlackboardData* Data = BB->GetBlackboardAsset(); Data; Data = Data->Parent)
+        {
+            for (const FBlackboardEntry& Key : Data->Keys)
+            {
+                const FName KeyName = Key.EntryName;
+                if (BBJson->HasField(KeyName.ToString()) || !Key.KeyType)
+                {
+                    continue;
+                }
+                TSharedPtr<FJsonObject> KeyObj = MakeShared<FJsonObject>();
+                const UClass* TypeClass = Key.KeyType->GetClass();
+                FString TypeName = TypeClass->GetName();
+                TypeName.RemoveFromStart(TEXT("BlackboardKeyType_"));
+                KeyObj->SetStringField(TEXT("type"), TypeName);
+                if (TypeClass == UBlackboardKeyType_Bool::StaticClass())
+                {
+                    KeyObj->SetBoolField(TEXT("value"), BB->GetValueAsBool(KeyName));
+                }
+                else if (TypeClass == UBlackboardKeyType_Int::StaticClass())
+                {
+                    KeyObj->SetNumberField(TEXT("value"), BB->GetValueAsInt(KeyName));
+                }
+                else if (TypeClass == UBlackboardKeyType_Float::StaticClass())
+                {
+                    KeyObj->SetNumberField(TEXT("value"), BB->GetValueAsFloat(KeyName));
+                }
+                else if (TypeClass == UBlackboardKeyType_Vector::StaticClass())
+                {
+                    if (BB->IsVectorValueSet(KeyName))
+                    {
+                        KeyObj->SetStringField(TEXT("value"), BB->GetValueAsVector(KeyName).ToString());
+                    }
+                    else
+                    {
+                        KeyObj->SetField(TEXT("value"), MakeShared<FJsonValueNull>());
+                    }
+                }
+                else if (TypeClass == UBlackboardKeyType_Rotator::StaticClass())
+                {
+                    KeyObj->SetStringField(TEXT("value"), BB->GetValueAsRotator(KeyName).ToString());
+                }
+                else if (TypeClass == UBlackboardKeyType_Object::StaticClass())
+                {
+                    UObject* Obj = BB->GetValueAsObject(KeyName);
+                    if (Obj)
+                    {
+                        KeyObj->SetStringField(TEXT("value"), Obj->GetPathName());
+                    }
+                    else
+                    {
+                        KeyObj->SetField(TEXT("value"), MakeShared<FJsonValueNull>());
+                    }
+                }
+                else if (TypeClass == UBlackboardKeyType_Class::StaticClass())
+                {
+                    UClass* Cls = BB->GetValueAsClass(KeyName);
+                    if (Cls)
+                    {
+                        KeyObj->SetStringField(TEXT("value"), Cls->GetPathName());
+                    }
+                    else
+                    {
+                        KeyObj->SetField(TEXT("value"), MakeShared<FJsonValueNull>());
+                    }
+                }
+                else if (TypeClass == UBlackboardKeyType_Enum::StaticClass())
+                {
+                    KeyObj->SetNumberField(TEXT("value"), BB->GetValueAsEnum(KeyName));
+                }
+                else if (TypeClass == UBlackboardKeyType_Name::StaticClass())
+                {
+                    KeyObj->SetStringField(TEXT("value"), BB->GetValueAsName(KeyName).ToString());
+                }
+                else if (TypeClass == UBlackboardKeyType_String::StaticClass())
+                {
+                    KeyObj->SetStringField(TEXT("value"), BB->GetValueAsString(KeyName));
+                }
+                else
+                {
+                    // Unknown key type: report the type honestly with no value
+                    // rather than guessing a getter.
+                    KeyObj->SetField(TEXT("value"), MakeShared<FJsonValueNull>());
+                    KeyObj->SetBoolField(TEXT("unsupportedType"), true);
+                }
+                BBJson->SetObjectField(KeyName.ToString(), KeyObj);
+            }
+        }
+        Result->SetObjectField(TEXT("blackboard"), BBJson);
+    }
+
+    S.SendAutomationResponse(RequestingSocket, RequestId, true,
+                             TEXT("Agent state retrieved"), Result);
     return true;
 #endif
 }
