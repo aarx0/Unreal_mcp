@@ -1488,6 +1488,22 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-21 — `manage_ai get_info` BT readback can't reconstruct the tree (volcano BT authoring session)
+Used live to verify a hand-authored behavior tree; three gaps made it a partial witness:
+(a) HIERARCHY/ORDER MISSING for the main spine — only aux nodes (decorators/services) carry `parentNodeId`;
+composites and tasks float parentless and childless, so composite child ORDER (the actual semantics of a BT —
+selector priority, sequence order) is unrecoverable. Want: recursive dump, children in execution order.
+(b) KEY BINDINGS LOSSY — each aux node reports ONE `selectedBlackboardKey` (appears to be the first
+FBlackboardKeySelector property found; same service reported different keys before/after binding). Nodes can have
+several selectors (VolcanoSense has 3) and TASK nodes' selectors aren't reported at all. Want: enumerate all
+selector properties per node by property name → bound key.
+(c) NODE CONFIG INVISIBLE — no decorator abort mode (observer aborts), no Wait duration, no custom task
+UPROPERTYs (BombCount etc.), no FValueOrBBKey literal-vs-key state. Want: per-node property bag like
+inspect_cdo does for classes.
+Follow-on once (a)-(c) exist: a runtime flavor (active node path + blackboard values for a running PIE agent)
+would replace the gameplay debugger for remote verification; manage_ai get_blackboard_value already covers the
+value half at runtime.
+
 ### [ ] 2026-07-19 — `manage_blueprint get_default` returns an empty envelope (no value, no error) on SCS component properties
 Repro (volcano session): `get_default {blueprintPath:'/Game/Blueprints/Attacks/BP_LavaBomb', propertyName:'StaticMesh.StaticMesh'}`
 (also `StaticMesh.LDMaxDrawDistance`) → response is just `{propertyName, blueprintPath}` — no `value`, no `propertyType`,
