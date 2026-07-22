@@ -1511,6 +1511,15 @@ a shipping game: **SaveGame / persistence authoring** (Phase 31) — promote if 
 
 ## Bugs (found while using the bridge — track, fix when convenient)
 
+### [ ] 2026-07-21 — runtime BT/blackboard observability gap (Aaron's correction on the closed readback entry, promoted so it isn't lost)
+Static BT readback shipped (`btNodes`/`treePretty`, entry below), but the RUNTIME half is a
+real gap: `get_blackboard_value` accepts only {blackboardPath, keyName} — asset-shaped — and
+returns key METADATA with no value; there is no way to address a running agent's
+UBlackboardComponent (wants an actorName/controller param), and nothing reports a running
+agent's active BT node path. Together those would replace the gameplay debugger for remote
+PIE verification. Feature-sized; scope with Aaron before building (agent addressing design:
+actorName → possessed pawn → AIController → BrainComponent/BlackboardComponent).
+
 ### [x] 2026-07-21 — `manage_ai get_info` BT readback can't reconstruct the tree (volcano BT authoring session)
 FIXED same night, all three gaps: get_info now emits `btNodes` — one entry per
 composite/task/decorator/service from a recursive runtime-tree walk with `kind`, `path`
