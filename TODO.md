@@ -8,6 +8,21 @@ as they land.
 > Origin: surfaced during the 2026-06 audio/options-menu work (verifying the asset
 > read/write actions on `manage_asset`).
 
+> **[ ] 2026-07-21 — journal-evidenced alias kills + 2 ergonomic gaps (AWAITING AARON'S GO;
+> full analysis in `docs/journal-analysis-2026-07-21.md`).** 10 days of journal (1,463 calls,
+> 11.7% fail): of ~130 declared alias params only 9 were ever sent. Proposal: (1) delete the
+> ~30 never-sent aliases in the six exercised tools (control_actor snake_case tier + class/
+> actorClass; manage_blueprint snake_case tier + candidates + graph-action assetPath +
+> oldName/targetFunction; inspect class/propertyPath; control_editor inputAction/inputType;
+> manage_asset data-table/LOD/texture alias pile; system_control arguments/packageName/test) —
+> schema+handler together, golden re-pin; (2) leave the no-data tiers (manage_gas/audio/ai/
+> build_environment/geometry/... saw ≤3 calls) for the confusing-names pass; (3) fix the two
+> gaps clients keep hitting: `get_actor_bounds` ignores the tool-wide `name` alias (3 rejects),
+> `create_node` callers send `location:{x,y}` (6 rejects — accept it or hint x/y in the
+> reject). Failure hotspots all dispositioned in the doc: open_level/set_component_property/
+> arrange_graph already fixed; execute_command EXEC_FAILEDs are deliberate probes;
+> connect_pins is 17× ENGINE_ERROR link-refusals (real schema rejections, watch).
+
 > **[x] Found 2026-07-18 (totem-dummy bNeverDie, live repro): CDO writes don't propagate to
 > loaded archetype instances — a later level save fossilizes the stale value as a per-instance
 > override.** FIXED same day: `McpPropertyReflection::CaptureArchetypeInstances` /
