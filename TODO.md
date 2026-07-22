@@ -1516,8 +1516,10 @@ selector properties per node by property name → bound key.
 UPROPERTYs (BombCount etc.), no FValueOrBBKey literal-vs-key state. Want: per-node property bag like
 inspect_cdo does for classes.
 Follow-on once (a)-(c) exist: a runtime flavor (active node path + blackboard values for a running PIE agent)
-would replace the gameplay debugger for remote verification; manage_ai get_blackboard_value already covers the
-value half at runtime.
+would replace the gameplay debugger for remote verification. CORRECTION (same day, tried it live):
+`get_blackboard_value` does NOT cover the runtime half — it accepts only {blackboardPath, keyName} (asset-shaped),
+resolves the key on the BlackboardData asset and returns key METADATA with no value; there is no way to address a
+running agent's UBlackboardComponent (wants an actorName/controller param). Runtime BB reads are a real gap.
 
 ### [ ] 2026-07-19 — `manage_blueprint get_default` returns an empty envelope (no value, no error) on SCS component properties
 Repro (volcano session): `get_default {blueprintPath:'/Game/Blueprints/Attacks/BP_LavaBomb', propertyName:'StaticMesh.StaticMesh'}`
