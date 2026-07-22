@@ -60,6 +60,7 @@
 #include "McpAutomationBridge_AIHandlers.h"
 #include "McpAutomationBridge_BehaviorTreeHandlers.h"
 #include "McpHandlerUtils.h"
+#include "McpPropertyReflection.h"
 #include "Modules/ModuleManager.h"  // Required for FModuleManager::IsModuleLoaded() runtime checks
 
 // JSON
@@ -3939,6 +3940,11 @@ bool McpHandlers::Ai::HandleAiGetAiInfo(
                 }
             }
 
+            // Graph-instance -> GUID crosslink for the runtime dump below: the
+            // graph editor nodes wrap the same UBTNode instances the runtime
+            // tree holds, and their GUIDs are the ids add_node/connect_nodes/
+            // set_node_properties speak.
+            TMap<UObject*, FString> InstanceToGuid;
 #if MCP_AI_HAS_BEHAVIOR_TREE_GRAPH
             if (UBehaviorTreeGraph* BTGraph = Cast<UBehaviorTreeGraph>(BT->BTGraph))
             {
@@ -3955,7 +3961,7 @@ bool McpHandlers::Ai::HandleAiGetAiInfo(
                 // Graph node listing: these ids are what add_node/add_subnode
                 // return and connect_nodes/remove_node/set_node_properties take.
                 TArray<TSharedPtr<FJsonValue>> GraphNodes;
-                auto AppendGraphNode = [&GraphNodes](UEdGraphNode* GraphNode, const FString& ParentId)
+                auto AppendGraphNode = [&GraphNodes, &InstanceToGuid](UEdGraphNode* GraphNode, const FString& ParentId)
                 {
                     if (!GraphNode)
                     {
@@ -3969,6 +3975,7 @@ bool McpHandlers::Ai::HandleAiGetAiInfo(
                         if (AINode->NodeInstance)
                         {
                             NodeClassName = AINode->NodeInstance->GetClass()->GetName();
+                            InstanceToGuid.Add(AINode->NodeInstance, GraphNode->NodeGuid.ToString());
                         }
                     }
                     NodeObj->SetStringField(TEXT("nodeClass"), NodeClassName);
@@ -4044,6 +4051,173 @@ bool McpHandlers::Ai::HandleAiGetAiInfo(
                 AIInfo->SetNumberField(TEXT("btNodeCount"), NodeCount);
                 AIInfo->SetArrayField(TEXT("childDecorators"), ChildDecorators);
                 AIInfo->SetArrayField(TEXT("services"), Services);
+            }
+
+            // Full-fidelity recursive dump. The flat arrays above can't
+            // reconstruct the tree: composites/tasks float parentless, and
+            // child ORDER — selector priority, sequence order — is the actual
+            // semantics of a BT. One entry per composite/task/decorator/
+            // service, children in execution order, every FBlackboardKeySelector
+            // property by name, and the node's CPF_Edit config as a property
+            // bag. `nodeId` crosslinks to the graph GUIDs the authoring
+            // actions speak (absent when no graph node wraps the instance).
+            if (BT->RootNode)
+            {
+                TArray<TSharedPtr<FJsonValue>> BtNodes;
+                FString TreePretty;
+
+                auto MakeBtNodeJson = [&InstanceToGuid](UBTNode* Node, const TCHAR* Kind,
+                    const FString& Path, const FString& ParentPath, int32 ChildIndex,
+                    int32 Depth) -> TSharedPtr<FJsonObject>
+                {
+                    TSharedPtr<FJsonObject> NodeObj = McpHandlerUtils::CreateResultObject();
+                    NodeObj->SetStringField(TEXT("kind"), Kind);
+                    NodeObj->SetStringField(TEXT("path"), Path);
+                    if (!ParentPath.IsEmpty())
+                    {
+                        NodeObj->SetStringField(TEXT("parentPath"), ParentPath);
+                    }
+                    NodeObj->SetNumberField(TEXT("childIndex"), ChildIndex);
+                    NodeObj->SetNumberField(TEXT("depth"), Depth);
+                    NodeObj->SetStringField(TEXT("className"), Node->GetClass()->GetName());
+                    NodeObj->SetStringField(TEXT("nodeName"), Node->GetNodeName());
+                    if (const FString* Guid = InstanceToGuid.Find(Node))
+                    {
+                        NodeObj->SetStringField(TEXT("nodeId"), *Guid);
+                    }
+
+                    TSharedPtr<FJsonObject> Keys = MakeShared<FJsonObject>();
+                    TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+                    for (TFieldIterator<FProperty> PropIt(Node->GetClass()); PropIt; ++PropIt)
+                    {
+                        FProperty* Prop = *PropIt;
+                        if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+                        {
+                            if (StructProp->Struct == FBlackboardKeySelector::StaticStruct())
+                            {
+                                const FBlackboardKeySelector* Selector =
+                                    StructProp->ContainerPtrToValuePtr<FBlackboardKeySelector>(Node);
+                                Keys->SetStringField(Prop->GetName(),
+                                    Selector ? Selector->SelectedKeyName.ToString() : FString());
+                                continue;
+                            }
+                        }
+                        if (!Prop->HasAnyPropertyFlags(CPF_Edit))
+                        {
+                            continue;
+                        }
+                        if (Prop->GetFName() == TEXT("NodeName"))
+                        {
+                            continue;
+                        }
+                        Props->SetField(Prop->GetName(),
+                            McpPropertyReflection::ExportPropertyToJsonValue(Node, Prop));
+                    }
+                    if (Keys->Values.Num() > 0)
+                    {
+                        NodeObj->SetObjectField(TEXT("blackboardKeys"), Keys);
+                    }
+                    if (Props->Values.Num() > 0)
+                    {
+                        NodeObj->SetObjectField(TEXT("properties"), Props);
+                    }
+                    return NodeObj;
+                };
+
+                auto PrettyLine = [&TreePretty](int32 Depth, const TCHAR* Marker, UBTNode* Node)
+                {
+                    TreePretty += FString::ChrN(Depth * 2, TEXT(' '));
+                    if (Marker && *Marker)
+                    {
+                        TreePretty += Marker;
+                        TreePretty += TEXT(" ");
+                    }
+                    TreePretty += Node->GetNodeName();
+                    const FString ClassName = Node->GetClass()->GetName();
+                    if (Node->GetNodeName() != ClassName)
+                    {
+                        TreePretty += FString::Printf(TEXT("  (%s)"), *ClassName);
+                    }
+                    TreePretty += TEXT("\n");
+                };
+
+                TFunction<void(UBTCompositeNode*, const FString&, const FString&, int32, int32)> Walk =
+                    [&](UBTCompositeNode* Composite, const FString& Path, const FString& ParentPath,
+                        int32 ChildIndex, int32 Depth)
+                {
+                    BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                        Composite, TEXT("composite"), Path, ParentPath, ChildIndex, Depth)));
+                    PrettyLine(Depth, TEXT(""), Composite);
+                    for (int32 SvcIdx = 0; SvcIdx < Composite->Services.Num(); ++SvcIdx)
+                    {
+                        UBTService* Service = Composite->Services[SvcIdx];
+                        if (!Service)
+                        {
+                            continue;
+                        }
+                        BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                            Service, TEXT("service"),
+                            FString::Printf(TEXT("%s.svc%d"), *Path, SvcIdx), Path, SvcIdx, Depth + 1)));
+                        PrettyLine(Depth + 1, TEXT("[svc]"), Service);
+                    }
+                    for (int32 i = 0; i < Composite->Children.Num(); ++i)
+                    {
+                        const FBTCompositeChild& Child = Composite->Children[i];
+                        const FString ChildPath = FString::Printf(TEXT("%s.%d"), *Path, i);
+                        for (int32 DecIdx = 0; DecIdx < Child.Decorators.Num(); ++DecIdx)
+                        {
+                            UBTDecorator* Decorator = Child.Decorators[DecIdx];
+                            if (!Decorator)
+                            {
+                                continue;
+                            }
+                            BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                                Decorator, TEXT("decorator"),
+                                FString::Printf(TEXT("%s.dec%d"), *ChildPath, DecIdx), ChildPath, i, Depth + 1)));
+                            PrettyLine(Depth + 1, TEXT("[dec]"), Decorator);
+                        }
+                        if (Child.ChildComposite)
+                        {
+                            Walk(Child.ChildComposite, ChildPath, Path, i, Depth + 1);
+                        }
+                        else if (Child.ChildTask)
+                        {
+                            BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                                Child.ChildTask, TEXT("task"), ChildPath, Path, i, Depth + 1)));
+                            PrettyLine(Depth + 1, TEXT(""), Child.ChildTask);
+                            for (int32 TSvcIdx = 0; TSvcIdx < Child.ChildTask->Services.Num(); ++TSvcIdx)
+                            {
+                                UBTService* Service = Child.ChildTask->Services[TSvcIdx];
+                                if (!Service)
+                                {
+                                    continue;
+                                }
+                                BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                                    Service, TEXT("service"),
+                                    FString::Printf(TEXT("%s.svc%d"), *ChildPath, TSvcIdx), ChildPath, TSvcIdx, Depth + 2)));
+                                PrettyLine(Depth + 2, TEXT("[svc]"), Service);
+                            }
+                        }
+                    }
+                };
+                Walk(BT->RootNode, TEXT("0"), FString(), 0, 0);
+
+                // Root-level decorators (subtree usage; the editor attaches none
+                // to Root directly, but a BT run as a subtree can carry them).
+                for (int32 RDecIdx = 0; RDecIdx < BT->RootDecorators.Num(); ++RDecIdx)
+                {
+                    UBTDecorator* Decorator = BT->RootDecorators[RDecIdx];
+                    if (!Decorator)
+                    {
+                        continue;
+                    }
+                    BtNodes.Add(MakeShared<FJsonValueObject>(MakeBtNodeJson(
+                        Decorator, TEXT("decorator"),
+                        FString::Printf(TEXT("0.rdec%d"), RDecIdx), TEXT("0"), 0, 1)));
+                }
+
+                AIInfo->SetArrayField(TEXT("btNodes"), BtNodes);
+                AIInfo->SetStringField(TEXT("treePretty"), TreePretty.TrimEnd());
             }
         }
     }
