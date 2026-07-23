@@ -3277,6 +3277,51 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
     if (PropertyName.Contains(TEXT("."))) {
       Property = ResolveNestedPropertyPath(CDO, PropertyName, TargetContainer,
                                            ResolveError, &PropOwner, &PropRoot);
+      // SCS components aren't reachable through the CDO (their generated
+      // object property stays null until construction runs), so the resolve
+      // above fails for paths get_default's template fallback reads fine.
+      // Mirror it: resolve the SCS component TEMPLATE — walking the parent
+      // chain so inherited SCS components resolve too — and re-run the
+      // remaining path against it.
+      if (!Property) {
+        FString CompName, NestedPath;
+        PropertyName.Split(TEXT("."), &CompName, &NestedPath);
+        for (UClass *C = Blueprint->GeneratedClass; C && !Property;
+             C = C->GetSuperClass()) {
+          UBlueprintGeneratedClass *BPGC = Cast<UBlueprintGeneratedClass>(C);
+          if (!BPGC || !BPGC->SimpleConstructionScript) {
+            continue;
+          }
+          for (USCS_Node *Node :
+               BPGC->SimpleConstructionScript->GetAllNodes()) {
+            if (Node && Node->ComponentTemplate &&
+                Node->GetVariableName() == FName(*CompName)) {
+              if (NestedPath.Contains(TEXT("."))) {
+                Property = ResolveNestedPropertyPath(
+                    Node->ComponentTemplate, NestedPath, TargetContainer,
+                    ResolveError, &PropOwner, &PropRoot);
+              } else {
+                Property =
+                    Node->ComponentTemplate->GetClass()->FindPropertyByName(
+                        *NestedPath);
+                if (Property) {
+                  TargetContainer = Node->ComponentTemplate;
+                  PropOwner = Node->ComponentTemplate;
+                  PropRoot = Property;
+                  ResolveError.Empty();
+                } else {
+                  ResolveError = FString::Printf(
+                      TEXT("Property '%s' not found on SCS component '%s' "
+                           "(%s)"),
+                      *NestedPath, *CompName,
+                      *Node->ComponentTemplate->GetClass()->GetName());
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
     } else {
       TargetContainer = CDO;
       Property = CDO->GetClass()->FindPropertyByName(*PropertyName);
@@ -3297,6 +3342,11 @@ bool McpHandlers::Blueprint::HandleBlueprintSetDefault(
 
     Blueprint->Modify();
     CDO->Modify();
+    if (PropOwner && PropOwner != CDO) {
+      // Template writes (SCS/native component defaults) dirty the template
+      // object, not the CDO.
+      PropOwner->Modify();
+    }
 
     McpPropertyReflection::FMcpDefaultPropagation Propagation =
         McpPropertyReflection::CaptureArchetypeInstances(PropOwner, PropRoot);
